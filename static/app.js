@@ -4850,7 +4850,7 @@ if (relayDiagBtn) {
           ['tenant_id',     cfg.tenant_id || '(none)'],
         ];
         cfgEl.innerHTML = rows.map(([k, v]) =>
-          `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v ?? ''))}</td></tr>`
+          `<dt>${escHtml(k)}</dt><dd>${escHtml(String(v ?? ''))}</dd>`
         ).join('');
       }
 

@@ -1889,25 +1889,24 @@ body.mode-spoke .hub-only  { display: none !important; }
   cursor: text;
   user-select: all;
 }
-.diag-table {
-  width: 100%;
-  border-collapse: collapse;
+.diag-kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 3px 20px;
+  margin: 0;
 }
-.diag-table td {
-  padding: 3px 0;
-  vertical-align: top;
-}
-.diag-table td:first-child {
+.diag-kv dt {
   font-weight: 500;
   color: var(--text-secondary);
-  padding-right: 20px;
   white-space: nowrap;
-  width: 1%;
+  font-size: 0.83rem;
 }
-.diag-table td:last-child {
+.diag-kv dd {
   font-family: monospace;
+  font-size: 0.83rem;
   color: var(--text-primary);
   word-break: break-all;
+  margin: 0;
 }
 .diag-log {
   max-height: 220px;

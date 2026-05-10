@@ -4864,21 +4864,23 @@ const serviceLogsCountEl = document.getElementById('service-logs-count');
 const serviceLogsOutputEl = document.getElementById('service-logs-output');
 
 async function loadSetupServiceLogs(lines = 50) {
+  const requestedLines = Number.parseInt(lines, 10) || 50;
   if (serviceLogsRefreshBtn) serviceLogsRefreshBtn.disabled = true;
   if (serviceLogsOutputEl) serviceLogsOutputEl.textContent = 'Loading service logs…';
   try {
-    const data = await requestJson(`/api/logs/service?lines=${encodeURIComponent(lines)}`);
+    const data = await requestJson(`/api/logs/service?lines=${encodeURIComponent(requestedLines)}`);
     const logLines = Array.isArray(data?.lines) ? data.lines : [];
-    const count = Number.isFinite(data?.count) ? data.count : logLines.length;
+    const returnedCount = Number.isFinite(data?.count) ? data.count : logLines.length;
     if (serviceLogsCountEl) {
-      serviceLogsCountEl.textContent = `Last ${count} ${count === 1 ? 'line' : 'lines'}`;
+      serviceLogsCountEl.textContent = `Last ${requestedLines} ${requestedLines === 1 ? 'line' : 'lines'}`;
+      serviceLogsCountEl.title = `${returnedCount} ${returnedCount === 1 ? 'line' : 'lines'} returned`;
     }
     if (serviceLogsOutputEl) {
       serviceLogsOutputEl.textContent = logLines.length ? logLines.join('\n') : '(no service logs available)';
       serviceLogsOutputEl.scrollTop = serviceLogsOutputEl.scrollHeight;
     }
   } catch (err) {
-    if (serviceLogsCountEl) serviceLogsCountEl.textContent = 'Last 0 lines';
+    if (serviceLogsCountEl) serviceLogsCountEl.textContent = `Last ${requestedLines} ${requestedLines === 1 ? 'line' : 'lines'}`;
     if (serviceLogsOutputEl) serviceLogsOutputEl.textContent = `Error fetching service logs: ${err}`;
   } finally {
     if (serviceLogsRefreshBtn) serviceLogsRefreshBtn.disabled = false;

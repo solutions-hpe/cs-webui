@@ -1525,14 +1525,18 @@
                 <div style="margin-top:14px;">
                   <button id="relay-diag-btn" class="btn btn-secondary btn-small" type="button">🔍 Run Registration Diagnostics</button>
                 </div>
-                <div id="relay-diag-panel" class="hidden" style="margin-top:12px;">
-                  <div class="setup-status-grid" style="background:var(--bg-secondary);border-radius:6px;padding:12px;font-size:0.8rem;">
-                    <div style="font-weight:600;margin-bottom:8px;color:var(--text-primary);">Hub Reachability</div>
-                    <div id="relay-diag-reach" style="margin-bottom:12px;font-family:monospace;white-space:pre-wrap;color:var(--text-secondary);"></div>
-                    <div style="font-weight:600;margin-bottom:8px;color:var(--text-primary);">Config Check</div>
-                    <div id="relay-diag-config" style="margin-bottom:12px;font-family:monospace;white-space:pre-wrap;color:var(--text-secondary);"></div>
-                    <div style="font-weight:600;margin-bottom:8px;color:var(--text-primary);">Registration Log <span id="relay-diag-log-count" class="badge-count">0</span></div>
-                    <div id="relay-diag-log" style="font-family:monospace;font-size:0.75rem;white-space:pre-wrap;max-height:220px;overflow-y:auto;color:var(--text-secondary);"></div>
+                <div id="relay-diag-panel" class="hidden diag-panel">
+                  <div class="diag-section">
+                    <div class="diag-section-title">Hub Reachability</div>
+                    <div id="relay-diag-reach"></div>
+                  </div>
+                  <div class="diag-section">
+                    <div class="diag-section-title">Config Check</div>
+                    <table id="relay-diag-config" class="diag-table"></table>
+                  </div>
+                  <div class="diag-section" style="border-bottom:none;">
+                    <div class="diag-section-title">Registration Log <span id="relay-diag-log-count" class="badge-count">0</span></div>
+                    <div id="relay-diag-log" class="diag-log"></div>
                   </div>
                 </div>
               </div>

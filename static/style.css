@@ -1840,3 +1840,100 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 /* ── Mode gating ─────────────────────────────────────── */
 body.mode-hub .spoke-only  { display: none !important; }
 body.mode-spoke .hub-only  { display: none !important; }
+
+/* ── Diagnostics Panel ───────────────────────────────── */
+.diag-panel {
+  margin-top: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 14px;
+  font-size: 0.83rem;
+}
+.diag-section {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.diag-section-title {
+  font-weight: 600;
+  font-size: 0.73rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.diag-reach-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.diag-reach-url {
+  font-family: monospace;
+  font-size: 0.83rem;
+  word-break: break-all;
+}
+.diag-code {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  overflow-x: auto;
+  overflow-y: auto;
+  white-space: pre;
+  max-height: 130px;
+  margin: 4px 0 0 0;
+  cursor: text;
+  user-select: all;
+}
+.diag-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.diag-table td {
+  padding: 3px 0;
+  vertical-align: top;
+}
+.diag-table td:first-child {
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding-right: 20px;
+  white-space: nowrap;
+  width: 1%;
+}
+.diag-table td:last-child {
+  font-family: monospace;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+.diag-log {
+  max-height: 220px;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: 0.78rem;
+}
+.diag-log-entry {
+  display: flex;
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+.diag-log-entry:last-child { border-bottom: none; }
+.diag-log-ts {
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.diag-log-event {
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.diag-log-attrs { color: var(--text-secondary); word-break: break-all; }
+.diag-log-entry.is-error .diag-log-event { color: var(--error, #ef4444); }
+.diag-log-entry.is-ok .diag-log-event { color: var(--success, #22c55e); }

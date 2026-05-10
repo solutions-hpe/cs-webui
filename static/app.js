@@ -4838,25 +4838,42 @@ if (relayDiagBtn) {
 
       // Config check
       const cfg = d.config || {};
-      const cfgLines = [
-        `relay_enabled : ${cfg.relay_enabled}`,
-        `server_url    : ${cfg.server_url}`,
-        `spoke_name    : ${cfg.spoke_name}`,
-        `hostname      : ${cfg.hostname}`,
-        `spoke_id     : ${cfg.spoke_id}`,
-        `api_key       : ${cfg.api_key_configured ? '✅ set' : '❌ not set'}`,
-        `tenant_id     : ${cfg.tenant_id}`,
-      ].join('\n');
       const cfgEl = document.getElementById('relay-diag-config');
-      if (cfgEl) cfgEl.textContent = cfgLines;
+      if (cfgEl) {
+        const rows = [
+          ['relay_enabled', cfg.relay_enabled],
+          ['server_url',    cfg.server_url],
+          ['spoke_name',    cfg.spoke_name],
+          ['hostname',      cfg.hostname],
+          ['spoke_id',      cfg.spoke_id],
+          ['api_key',       cfg.api_key_configured ? '✅ set' : '❌ not set'],
+          ['tenant_id',     cfg.tenant_id || '(none)'],
+        ];
+        cfgEl.innerHTML = rows.map(([k, v]) =>
+          `<tr><td>${escHtml(k)}</td><td>${escHtml(String(v ?? ''))}</td></tr>`
+        ).join('');
+      }
 
       // Reachability
       const reach = d.reachability || {};
       const reachEl = document.getElementById('relay-diag-reach');
       if (reachEl) {
         const icon = reach.ok ? '✅' : '❌';
-        reachEl.textContent = `${icon} ${reach.tested_url}\n${reach.detail || ''}`;
-        reachEl.style.color = reach.ok ? 'var(--success,#22c55e)' : 'var(--error,#ef4444)';
+        const urlColor = reach.ok ? 'var(--success,#22c55e)' : 'var(--error,#ef4444)';
+        let bodyHtml = '';
+        if (reach.detail) {
+          try {
+            const pretty = JSON.stringify(JSON.parse(reach.detail), null, 2);
+            bodyHtml = `<pre class="diag-code">${escHtml(pretty)}</pre>`;
+          } catch {
+            bodyHtml = `<pre class="diag-code">${escHtml(reach.detail)}</pre>`;
+          }
+        }
+        reachEl.innerHTML =
+          `<div class="diag-reach-row">
+             <span>${icon}</span>
+             <span class="diag-reach-url" style="color:${urlColor}">${escHtml(reach.tested_url || '')}</span>
+           </div>${bodyHtml}`;
       }
 
       // Log
@@ -4866,13 +4883,21 @@ if (relayDiagBtn) {
       const logEl = document.getElementById('relay-diag-log');
       if (logEl) {
         if (!log.length) {
-          logEl.textContent = '(no registration attempts recorded yet — relay may not have been enabled or synced)';
+          logEl.innerHTML = `<div class="diag-log-entry"><span class="diag-log-attrs">(no registration attempts recorded yet)</span></div>`;
         } else {
-          logEl.textContent = log.map(e => {
-            const rest = Object.entries(e).filter(([k]) => k !== 'ts' && k !== 'event')
-              .map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(' ');
-            return `[${e.ts}] ${e.event}  ${rest}`;
-          }).join('\n');
+          logEl.innerHTML = log.map(e => {
+            const attrs = Object.entries(e)
+              .filter(([k]) => k !== 'ts' && k !== 'event')
+              .map(([k, v]) => `${escHtml(k)}=${escHtml(JSON.stringify(v))}`)
+              .join(' &nbsp;');
+            const ev = e.event || '';
+            const cls = /error|fail/i.test(ev) ? 'is-error' : /ok|approved|received/i.test(ev) ? 'is-ok' : '';
+            return `<div class="diag-log-entry ${cls}">
+              <span class="diag-log-ts">[${escHtml(e.ts || '')}]</span>
+              <span class="diag-log-event">${escHtml(ev)}</span>
+              ${attrs ? `<span class="diag-log-attrs">${attrs}</span>` : ''}
+            </div>`;
+          }).join('');
         }
       }
     } catch (err) {

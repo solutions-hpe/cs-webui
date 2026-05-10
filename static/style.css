@@ -1727,10 +1727,15 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   white-space: nowrap;
 }
 .auto-refresh-countdown {
-  min-width: 28px;
+  min-width: 52px;
   text-align: right;
   font-variant-numeric: tabular-nums;
   opacity: 0.7;
+}
+.auto-refresh-countdown.paused {
+  opacity: 1;
+  color: var(--hpe-orange);
+  font-weight: 600;
 }
 .spoke-toggle { font-size: 12px; color: var(--text-muted); transition: transform 0.15s; }
 .spoke-toggle.open { transform: rotate(90deg); }

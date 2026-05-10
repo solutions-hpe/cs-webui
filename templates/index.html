@@ -72,15 +72,16 @@
           <span class="repo-label">API Status:</span>
           <span id="ws-text">Disconnected</span>
         </div>
-        <div class="ws-status spoke-only" title="Auto-refresh interval">
+        <div id="refresh-ctrl" class="auto-refresh-ctrl spoke-only" title="Auto-refresh interval">
           <span class="repo-label">Refresh:</span>
-          <select id="refresh-interval-select" style="font-size:12px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--panel);color:var(--text);">
+          <select id="refresh-interval-select" class="form-input form-input-sm" style="width:auto;padding:2px 6px;">
             <option value="0">Off</option>
             <option value="10" selected>10s</option>
             <option value="30">30s</option>
             <option value="60">1m</option>
             <option value="300">5m</option>
           </select>
+          <span id="refresh-countdown" class="auto-refresh-countdown">10s</span>
         </div>
         <span id="installer-version" class="installer-version-badge spoke-only" title="Installer version"></span>
         <button id="update-all-btn" class="btn btn-primary spoke-only" title="Update all Proxmox agents then the WebUI server" style="font-size:13px;padding:5px 12px;">⬆ Update All</button>

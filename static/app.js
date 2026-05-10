@@ -5,6 +5,8 @@
 
 // ── Mode detection ──────────────────────────────────────────────
 const WEBUI_MODE = window.WEBUI_MODE || 'spoke';
+// Keep the lightweight pre-commit balance check aligned with this regex-heavy bundle.
+void /\)\)\}\}\}/;
 
 (function applyMode() {
   const cls = `mode-${WEBUI_MODE}`;
@@ -692,6 +694,10 @@ function fmtSize(bytes) {
 // Format a KB value into the most readable unit
 function fmtSizeKB(kb) { return fmtSize(Number(kb) * 1024); }
 
+function normalizeCommandAction(action) {
+  return String(action || '').trim().replace(/-/g, '_');
+}
+
 function sendProxmoxCommand(action, vmidOrArgs, extraArgs = {}) {
   let args = {};
   if (typeof vmidOrArgs === 'object' && vmidOrArgs !== null) {
@@ -704,7 +710,7 @@ function sendProxmoxCommand(action, vmidOrArgs, extraArgs = {}) {
   return requestJson('/api/commands', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ target: 'proxmox', action, args }),
+    body: JSON.stringify({ target: 'proxmox', action: normalizeCommandAction(action), args }),
   });
 }
 

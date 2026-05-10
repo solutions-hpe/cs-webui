@@ -103,7 +103,8 @@
       <button class="tab active" role="tab" aria-selected="true" data-tab="simulations" type="button">Simulations</button>
       <button class="tab" role="tab" aria-selected="false" data-tab="dashboard" type="button">Clients</button>
       <button class="tab" role="tab" aria-selected="false" data-tab="central" type="button">Central</button>
-      <button class="tab tab-btn" id="tab-server-btn" role="tab" aria-selected="false" data-tab="server" style="display:none;" type="button">Server</button>
+      <button class="tab tab-btn" id="tab-server-btn" role="tab" aria-selected="false" data-tab="server" style="display:none;" type="button">VM Server</button>
+      <button class="tab tab-btn" id="tab-api-server-btn" role="tab" aria-selected="false" data-tab="api-server" type="button">API Server</button>
       <span class="tab-nav-sep" aria-hidden="true"></span>
       <button class="tab tab-nav-right" role="tab" aria-selected="false" data-tab="config" type="button">⚙ Config</button>
       <button class="tab" role="tab" aria-selected="false" data-tab="setup" type="button">⚙ Setup</button>
@@ -572,7 +573,6 @@
           <button class="setup-subtab server-subtab active" data-subtab="server-vms" role="tab">VMs</button>
           <button class="setup-subtab server-subtab" data-subtab="server-usb" role="tab">USB</button>
           <button class="setup-subtab server-subtab" data-subtab="server-commands" role="tab">Command Queue</button>
-          <button class="setup-subtab server-subtab" data-subtab="server-services" role="tab">Services</button>
           <button class="setup-subtab server-subtab" data-subtab="server-node" role="tab">Details</button>
         </nav>
 
@@ -805,31 +805,7 @@
           </div>
         </div>
 
-        <!-- Services sub-tab -->
-        <div id="server-services" class="setup-subpanel hidden">
-          <div class="tile">
-            <h3>Background Services</h3>
-            <div class="tile-scroll">
-              <table id="services-table" class="data-table">
-                <thead>
-                  <tr>
-                    <th>Service</th>
-                    <th>Status</th>
-                    <th>Last Run</th>
-                    <th>Run Count</th>
-                    <th>Errors</th>
-                    <th>Last Error</th>
-                  </tr>
-                </thead>
-                <tbody id="services-tbody">
-                  <tr><td colspan="6" class="empty-msg">Loading…</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <!-- Details sub-tab -->
+                <!-- Details sub-tab -->
         <div id="server-node" class="setup-subpanel">
           <div class="setup-card setup-section-gap">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
@@ -842,14 +818,14 @@
               </div>
               <div style="display:flex;flex-direction:column;align-items:stretch;gap:4px;flex-shrink:0;min-width:130px;">
                 <button id="agent-approve-btn" class="btn btn-secondary" style="display:none;"></button>
-                <button id="agent-update-btn" class="btn btn-secondary" title="Pull latest agent script from GitHub and restart">⬆ Update Agent</button>
+                <button id="agent-update-btn" class="btn btn-secondary" type="button" title="Reinstall the Proxmox host agent from GitHub and restart it">⬆ Update Agent</button>
                 <span class="server-last-seen" style="font-size:11px;">Last seen: <span id="server-last-seen">—</span></span>
               </div>
             </div>
           </div>
 
           <div id="proxmox-extra-pending" class="setup-card setup-section-gap hidden" style="padding:10px 16px;">
-            <span style="font-size:13px;font-weight:600;">⚠ Pending agents: </span><span id="proxmox-extra-pending-list" style="font-size:13px;"></span>
+            <span style="font-size:13px;font-weight:600;">⚠ Pending agents <span id="proxmox-extra-pending-count" class="badge-count">0</span>: </span><span id="proxmox-extra-pending-list" style="font-size:13px;"></span>
           </div>
 
           <div class="setup-card setup-section-gap" style="padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;">
@@ -908,6 +884,31 @@
         </div>
 
         <!-- Agent Log sub-tab -->
+      </main>
+
+      <!-- ── API Server tab ── -->
+      <main id="tab-api-server" class="page tab-content hidden">
+        <div class="page-toolbar"><span class="server-node-name">API Server</span></div>
+        <div class="tile">
+          <h3>Background Services</h3>
+          <div class="tile-scroll">
+            <table id="services-table" class="data-table">
+              <thead>
+                <tr>
+                  <th>Service</th>
+                  <th>Status</th>
+                  <th>Last Run</th>
+                  <th>Run Count</th>
+                  <th>Errors</th>
+                  <th>Last Error</th>
+                </tr>
+              </thead>
+              <tbody id="services-tbody">
+                <tr><td colspan="6" class="empty-msg">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </main>
       <main id="tab-simulations" class="page tab-content">
         <nav class="setup-subnav" role="tablist">

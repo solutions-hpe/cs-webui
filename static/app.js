@@ -121,7 +121,7 @@ let refreshPaused = false;
 let refreshCountdownTimer = null;
 let refreshSecondsLeft = 10;
 let refreshIntervalSeconds = 10;
-const refreshActiveTabs = new Set(['dashboard']);
+const refreshActiveTabs = new Set(['dashboard', 'api-server']);
 const refreshActiveServerSubtabs = new Set(['server-vms', 'server-commands']);
 
 // ── Tab navigation ────────────────────────────────────────────────
@@ -139,6 +139,7 @@ document.querySelectorAll('.tab').forEach((tab) => {
     document.getElementById(`tab-${tab.dataset.tab}`).classList.remove('hidden');
     if (tab.dataset.tab === 'setup') activateSetupSubtab('setup-github');
     if (tab.dataset.tab === 'server') { activateServerSubtab('server-vms'); loadProxmoxApproved().catch(() => {}); }
+    if (tab.dataset.tab === 'api-server') { renderServiceStatus().catch(() => {}); }
     if (tab.dataset.tab === 'central') { activateCentralSubtab('central-sites-panel'); }
     if (tab.dataset.tab === 'simulations') { activateSimTopTab('simtop-checks'); }
     resetTabDrilldowns(tab.dataset.tab);
@@ -195,16 +196,13 @@ function activateServerSubtab(subtabId = 'server-vms') {
   document.querySelectorAll('.server-subtab').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.subtab === subtabId);
   });
-  ['server-node', 'server-vms', 'server-usb', 'server-commands', 'server-services'].forEach((id) => {
+  ['server-node', 'server-vms', 'server-usb', 'server-commands'].forEach((id) => {
     const panel = document.getElementById(id);
     if (!panel) return;
     const isActive = id === subtabId;
     panel.classList.toggle('active', isActive);
     panel.classList.toggle('hidden', !isActive);
   });
-  if (subtabId === 'server-services') {
-    renderServiceStatus().catch(() => {});
-  }
   updateRefreshPausedState();
 }
 
@@ -441,7 +439,7 @@ const configTabButton = document.querySelector('.tab[data-tab="config"]');
 const simTabButton = document.querySelector('.tab[data-tab="simulations"]');
 const setupTabButton = document.querySelector('.tab[data-tab="setup"]');
 const setupSubtabButtons = document.querySelectorAll('.setup-subtab:not(.server-subtab):not(.sim-subtab):not(.central-subtab):not(.simtop-subtab)');
-const setupSubpanels = document.querySelectorAll('.setup-subpanel:not(#server-vms):not(#server-usb):not(#server-node):not(#server-commands):not(#server-services)');
+const setupSubpanels = document.querySelectorAll('.setup-subpanel:not(#server-vms):not(#server-usb):not(#server-node):not(#server-commands)');
 const centralOverview = document.getElementById('central-overview');
 const centralSitesGrid = document.getElementById('central-sites-table');
 const centralEmpty = document.getElementById('central-empty');
@@ -694,8 +692,15 @@ function fmtSize(bytes) {
 // Format a KB value into the most readable unit
 function fmtSizeKB(kb) { return fmtSize(Number(kb) * 1024); }
 
-function sendProxmoxCommand(action, vmid) {
-  const args = vmid ? { vmid: parseInt(vmid, 10) } : {};
+function sendProxmoxCommand(action, vmidOrArgs, extraArgs = {}) {
+  let args = {};
+  if (typeof vmidOrArgs === 'object' && vmidOrArgs !== null) {
+    args = { ...vmidOrArgs };
+  } else if (vmidOrArgs != null && vmidOrArgs !== '') {
+    args = { vmid: parseInt(vmidOrArgs, 10), ...extraArgs };
+  } else {
+    args = { ...extraArgs };
+  }
   return requestJson('/api/commands', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -730,19 +735,44 @@ function scheduleProxmoxRefresh(delayMs = 4000) {
   }, delayMs);
 }
 
+function syncAgentUpdateButtonState(data = latestProxmoxData) {
+  const btn = document.getElementById('agent-update-btn');
+  if (!btn || btn.dataset.busy === 'true') return;
+  const host = String(data?.node?.hostname || '').trim();
+  const approved = Array.isArray(data?.approved_proxmox) ? data.approved_proxmox : [];
+  const ready = Boolean(host) && approved.some((entry) => String(entry?.hostname || '').trim() === host);
+  btn.disabled = !ready;
+  btn.title = ready
+    ? 'Reinstall the Proxmox host agent from GitHub and restart it'
+    : 'Approve and connect the Proxmox host before updating the agent';
+}
+
 async function triggerAgentUpdate() {
   const btn = document.getElementById('agent-update-btn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Updating…'; }
+  if (btn) {
+    btn.disabled = true;
+    btn.dataset.busy = 'true';
+    btn.textContent = '⏳ Updating…';
+  }
   try {
-    await sendProxmoxCommand('update_agent');
+    const result = await requestJson('/api/proxmox/update-agent', { method: 'POST' });
     if (btn) { btn.textContent = '✓ Queued'; }
+    showToast(`Queued agent update for ${result.target || 'Proxmox host'} (${result.branch || 'current branch'})`, 'info');
   } catch (e) {
     showToast('Failed to queue agent update: ' + e.message, 'error');
-    if (btn) { btn.textContent = '⬆ Update Agent'; btn.disabled = false; }
+    if (btn) {
+      btn.textContent = '⬆ Update Agent';
+      delete btn.dataset.busy;
+    }
+    syncAgentUpdateButtonState();
     return;
   }
   setTimeout(() => {
-    if (btn) { btn.textContent = '⬆ Update Agent'; btn.disabled = false; }
+    if (btn) {
+      btn.textContent = '⬆ Update Agent';
+      delete btn.dataset.busy;
+    }
+    syncAgentUpdateButtonState();
   }, 5000);
 }
 
@@ -811,6 +841,7 @@ function renderServerTab(data) {
     updateBtn.addEventListener('click', triggerAgentUpdate);
     updateBtn._bound = true;
   }
+  syncAgentUpdateButtonState(latestProxmoxData);
 
   const node = latestProxmoxData.node || {};
   const setEl = (id, value) => {
@@ -950,9 +981,18 @@ function renderServerTab(data) {
         ? ' <span class="badge badge-grey" title="This is the container running the dashboard — cannot be deleted">🔒 webui</span>'
         : '';
 
+      const recloneSupported = vm.reclone_supported !== false && !isWebui;
+      const recloneReason = isWebui
+        ? 'Cannot reclone the container running this service'
+        : (vm.reclone_reason || 'This guest cannot be recloned from the current configuration');
       const actionBtns = VM_ACTIONS.map((a) => {
-        const disabled = (a.action === 'delete_vm' && isWebui) ? ' disabled title="Cannot delete the container running this service"' : ` title="${a.title}"`;
-        return `<button class="btn-icon vm-action-btn" data-action="${a.action}" data-vmid="${vm.vmid}"${disabled}>${a.label}</button>`;
+        if (a.action === 'delete_vm' && isWebui) {
+          return `<button class="btn-icon vm-action-btn" data-action="${a.action}" data-vmid="${vm.vmid}" disabled title="Cannot delete the container running this service">${a.label}</button>`;
+        }
+        if (a.action === 'reclone_vm' && !recloneSupported) {
+          return `<button class="btn-icon vm-action-btn" data-action="${a.action}" data-vmid="${vm.vmid}" disabled title="${escHtml(recloneReason)}">${a.label}</button>`;
+        }
+        return `<button class="btn-icon vm-action-btn" data-action="${a.action}" data-vmid="${vm.vmid}" title="${a.title}">${a.label}</button>`;
       }).join(' ');
 
       const tr = document.createElement('tr');
@@ -960,8 +1000,11 @@ function renderServerTab(data) {
       tr.dataset.status = baseStatusText;
       tr.dataset.vmName = vm.name || '';
       tr.dataset.vmType = vm.type || 'qemu';
+      tr.dataset.recloneSupported = recloneSupported ? 'true' : 'false';
+      tr.dataset.recloneReason = recloneReason;
+      tr.dataset.recloneSourceVmid = vm.reclone_source_vmid != null ? String(vm.reclone_source_vmid) : '';
       tr.innerHTML = `
-        <td><input type="checkbox" class="vm-check" data-vmid="${vm.vmid}" data-vm-name="${escHtml(vm.name || '')}" data-vm-type="${vm.type || 'qemu'}"${isWebui ? ' disabled' : ''}></td>
+        <td><input type="checkbox" class="vm-check" data-vmid="${vm.vmid}" data-vm-name="${escHtml(vm.name || '')}" data-vm-type="${vm.type || 'qemu'}" data-reclone-supported="${recloneSupported ? 'true' : 'false'}" data-reclone-reason="${escHtml(recloneReason)}" data-reclone-source-vmid="${vm.reclone_source_vmid != null ? escHtml(String(vm.reclone_source_vmid)) : ''}"${isWebui ? ' disabled' : ''}></td>
         <td class="vm-status-cell">${statusLabel}</td>
         <td>${vm.vmid}</td>
         <td>${escHtml(vm.name || '—')}${recoveryBadge}${webuiBadge}</td>
@@ -988,8 +1031,11 @@ function renderServerTab(data) {
             scheduleProxmoxRefresh();
             return;
           }
-          await sendProxmoxCommand(btn.dataset.action, btn.dataset.vmid);
-          showNotification(`${btn.title} command sent for VM ${btn.dataset.vmid}`, 'info');
+          await sendProxmoxCommand(btn.dataset.action, btn.dataset.vmid, {
+            type: row?.dataset.vmType || 'qemu',
+            source_vmid: row?.dataset.recloneSourceVmid ? parseInt(row.dataset.recloneSourceVmid, 10) : undefined,
+          });
+          showNotification(`${btn.title} command sent for ${describeProxmoxGuest(entry)}`, 'info');
         } catch (err) {
           showNotification(`Error: ${err.message}`, 'error');
         }
@@ -1020,6 +1066,7 @@ function renderProxmoxApproveState(pending, approved) {
   const btn = document.getElementById('agent-approve-btn');
   const extraCard = document.getElementById('proxmox-extra-pending');
   const extraList = document.getElementById('proxmox-extra-pending-list');
+  const extraCount = document.getElementById('proxmox-extra-pending-count');
   if (!btn) return;
 
   const currentHostname = (document.getElementById('server-node-name') || {}).textContent || '';
@@ -1068,6 +1115,7 @@ function renderProxmoxApproveState(pending, approved) {
   }
 
   // Show strip for any other pending agents
+  if (extraCount) extraCount.textContent = String(pending.length);
   if (extraCard && extraList) {
     if (otherPending.length) {
       extraCard.classList.remove('hidden');
@@ -1077,7 +1125,8 @@ function renderProxmoxApproveState(pending, approved) {
           + `<button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;" onclick="approveProxmoxAgent(decodeURIComponent('${enc}'))">Approve</button> `;
       }).join(' &nbsp; ');
     } else {
-      extraCard.classList.add('hidden');
+      extraCard.classList.toggle('hidden', pending.length === 0);
+      extraList.innerHTML = pending.length ? '<span class="muted">Waiting for the connected host to be approved.</span>' : '';
     }
   }
 }
@@ -2045,11 +2094,12 @@ function renderRecloneStatus(recloneState = latestRecloneState || {}) {
     recloneVmLog.innerHTML = `<div class="muted" style="padding:8px 0;font-size:13px;">No VMs processed yet.</div>`;
   } else {
     recloneVmLog.innerHTML = logEntries.map((entry) => `
-      <div class="log-entry">
+      <div class="log-entry" title="${escHtml(entry.message || '')}">
         <span>${iconMap[entry.status] || '•'}</span>
         <span>${entry.name || `VM ${entry.vmid}`}</span>
         <span class="muted">${entry.status}</span>
         <span class="muted">${formatUiDate(entry.timestamp)}</span>
+        ${entry.message ? `<span class="muted">${escHtml(entry.message)}</span>` : ''}
       </div>
     `).join('');
   }
@@ -3816,7 +3866,7 @@ async function renderServiceStatus() {
 }
 
 function handleMessage(message) {
-  if (document.getElementById('server-services')?.classList.contains('active')) {
+  if (document.getElementById('tab-api-server')?.classList.contains('active')) {
     renderServiceStatus().catch(() => {});
   }
 
@@ -3850,7 +3900,11 @@ function handleMessage(message) {
   }
 
   if (message.type === 'reclone_update') {
+    const previousStatus = latestRecloneState?.status;
     renderRecloneStatus(message);
+    if (previousStatus === 'running' && message.status && message.status !== 'running') {
+      scheduleProxmoxRefresh(1000);
+    }
     return;
   }
 
@@ -5677,6 +5731,8 @@ document.getElementById('server-select-all')?.addEventListener('change', (e) => 
       vmid: cb.dataset.vmid,
       name: cb.dataset.vmName || '',
       vmType: cb.dataset.vmType || 'qemu',
+      recloneSupported: cb.dataset.recloneSupported === 'true',
+      sourceVmid: cb.dataset.recloneSourceVmid || '',
     }));
     if (!selected.length) return;
 
@@ -5697,8 +5753,19 @@ document.getElementById('server-select-all')?.addEventListener('change', (e) => 
       }
 
       const action = op === 'reclone' ? 'reclone_vm' : `${op}_vm`;
-      await Promise.all(selected.map((entry) => sendProxmoxCommand(action, entry.vmid)));
-      showNotification(`${op} sent for ${selected.length} VM(s)`, 'info');
+      const eligible = op === 'reclone'
+        ? selected.filter((entry) => entry.recloneSupported)
+        : selected;
+      if (!eligible.length) {
+        showNotification('No selected guests can be recloned with the current configuration.', 'warning');
+        return;
+      }
+      await Promise.all(eligible.map((entry) => sendProxmoxCommand(action, entry.vmid, {
+        type: entry.vmType || 'qemu',
+        source_vmid: entry.sourceVmid ? parseInt(entry.sourceVmid, 10) : undefined,
+      })));
+      const skipped = selected.length - eligible.length;
+      showNotification(`${op} sent for ${eligible.length} VM(s)${skipped ? ` (${skipped} skipped)` : ''}`, 'info');
     } catch (err) {
       showNotification(`Error: ${err.message}`, 'error');
     }
@@ -7572,6 +7639,18 @@ function renderUserRoles(user) {
   `).join("") : "—";
 }
 
+function renderUserRoleAssignForm(user, tenants) {
+  if (user.is_superadmin) return '—';
+  const options = tenants.map(t => `<option value="${escHtml(t.id)}">${escHtml(t.name)}</option>`).join('');
+  return `<div class="inline-form-row">` +
+    `<select class="form-input form-input-sm user-tenant-select" data-user-id="${escHtml(user.id)}">${options}</select>` +
+    `<select class="form-input form-input-sm user-role-select" data-user-id="${escHtml(user.id)}">` +
+    `<option value="admin">Admin</option><option value="operator">Operator</option></select>` +
+    `<button class="btn btn-secondary btn-small" data-assign-role="${escHtml(user.id)}" type="button">Assign</button>` +
+    `<button class="btn btn-danger btn-small" data-delete-user="${escHtml(user.id)}" type="button">Delete</button>` +
+    `</div>`;
+}
+
 function renderSuperadminUsers(users) {
   $("#sa-users-count") && ($("#sa-users-count").textContent = String(users.length));
   const tbody = $("#sa-users-tbody");
@@ -7581,21 +7660,7 @@ function renderSuperadminUsers(users) {
       <td>${escHtml(user.username)}</td>
       <td>${user.is_superadmin ? "superadmin" : "tenant-scoped"}</td>
       <td><div class="tenant-role-list">${renderUserRoles(user)}</div></td>
-      <td>
-        ${user.is_superadmin ? "—" : `
-          <div class="inline-form-row">
-            <select class="form-input form-input-sm user-tenant-select" data-user-id="${escHtml(user.id)}">
-              ${tenants.map(tenant => `<option value="${escHtml(tenant.id)}">${escHtml(tenant.name)}</option>`).join("")}
-            </select>
-            <select class="form-input form-input-sm user-role-select" data-user-id="${escHtml(user.id)}">
-              <option value="admin">Admin</option>
-              <option value="operator">Operator</option>
-            </select>
-            <button class="btn btn-secondary btn-small" data-assign-role="${escHtml(user.id)}" type="button">Assign</button>
-            <button class="btn btn-danger btn-small" data-delete-user="${escHtml(user.id)}" type="button">Delete</button>
-          </div>
-        `}
-      </td>
+      <td>${renderUserRoleAssignForm(user, tenants)}</td>
     </tr>
   `).join("") : '<tr><td colspan="4" class="empty-state">No users found.</td></tr>';
 }

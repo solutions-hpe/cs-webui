@@ -570,6 +570,13 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   margin: 0;
   background: none;
 }
+/* hub-only / spoke-only nav wrappers must be flex so tab-nav-sep works */
+.tab-nav .hub-only,
+.tab-nav .spoke-only {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+}
 
 .tab {
   background: none;

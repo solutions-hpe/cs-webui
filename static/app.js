@@ -5799,6 +5799,7 @@ let activeTab = "dashboard";
 let autoRefreshTimer = null;
 let autoRefreshCountdownTimer = null;
 let autoRefreshSecondsLeft = 10;
+let tenantDetailState = { open: false, tenantId: null, activeTab: "dashboard", data: {} };
 
 const PROCESSING_FEATURES = ["aruba_polling", "teams_webhook", "email", "heartbeat", "gkill", "schedules", "repo_sync"];
 const spokeUiState = { expandedByTenant: {}, search: "" };
@@ -5899,6 +5900,106 @@ function currentRoleForTenant(tenantId = currentTenantId) {
 function canManageTenant(tenantId = currentTenantId) {
   if (!currentUser || !tenantId) return false;
   return currentUser.is_superadmin || currentRoleForTenant(tenantId) === "admin";
+}
+
+function getTenantMeta(tenantId) {
+  return tenants.find(item => item.id === tenantId) || { id: tenantId, name: tenantId };
+}
+
+function hasMeaningfulValue(value) {
+  if (value === null || value === undefined || value === "") return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return true;
+}
+
+function formatInlineValue(value) {
+  if (!hasMeaningfulValue(value)) return "—";
+  if (Array.isArray(value)) return value.map(item => formatInlineValue(item)).join(", ");
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function uniqueValues(values = []) {
+  const seen = new Set();
+  return values.filter(value => {
+    const key = JSON.stringify(value);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function getSpokeClients(spoke) {
+  return Array.isArray(spoke?.telemetry?.clients) ? spoke.telemetry.clients : [];
+}
+
+function getSpokeProxmoxSummary(spoke) {
+  const telemetry = spoke?.telemetry || {};
+  return telemetry.proxmox || telemetry.proxmox_summary || telemetry.proxmox_status || telemetry.server || {};
+}
+
+function getSpokeVmCount(spoke) {
+  const proxmox = getSpokeProxmoxSummary(spoke);
+  const vmCount = Number(proxmox.vm_count);
+  if (Number.isFinite(vmCount)) return vmCount;
+  return Array.isArray(proxmox.vms) ? proxmox.vms.length : 0;
+}
+
+function getSpokeRunningVmCount(spoke) {
+  const proxmox = getSpokeProxmoxSummary(spoke);
+  const runningCount = Number(proxmox.running_count);
+  if (Number.isFinite(runningCount)) return runningCount;
+  return Array.isArray(proxmox.vms) ? proxmox.vms.filter(vm => vm.status === "running").length : 0;
+}
+
+function getSpokeUsbCount(spoke) {
+  const proxmox = getSpokeProxmoxSummary(spoke);
+  const usbCount = Number(proxmox.usb_count);
+  if (Number.isFinite(usbCount)) return usbCount;
+  return Array.isArray(proxmox.usb_state) ? proxmox.usb_state.length : 0;
+}
+
+function summarizeTenantSpokes(spokes = []) {
+  const approved = spokes.filter(spoke => spoke.status === "approved");
+  const onlineCount = approved.filter(spoke => isOnline(spoke.last_seen)).length;
+  const lastSeenTimes = approved
+    .map(spoke => new Date(spoke.last_seen).getTime())
+    .filter(value => Number.isFinite(value));
+  return {
+    totalCount: spokes.length,
+    approvedCount: approved.length,
+    pendingCount: Math.max(0, spokes.length - approved.length),
+    onlineCount,
+    offlineCount: Math.max(0, approved.length - onlineCount),
+    clientCount: approved.reduce((sum, spoke) => sum + getSpokeClients(spoke).length, 0),
+    vmCount: approved.reduce((sum, spoke) => sum + getSpokeVmCount(spoke), 0),
+    runningVmCount: approved.reduce((sum, spoke) => sum + getSpokeRunningVmCount(spoke), 0),
+    usbCount: approved.reduce((sum, spoke) => sum + getSpokeUsbCount(spoke), 0),
+    lastSync: lastSeenTimes.length ? new Date(Math.max(...lastSeenTimes)).toISOString() : null,
+  };
+}
+
+function renderTenantSummaryPills(summary) {
+  return `
+    <span class="stat-pill">${summary.approvedCount} spokes</span>
+    <span class="stat-pill">${summary.onlineCount} online</span>
+    <span class="stat-pill">${summary.clientCount} clients</span>
+    <span class="stat-pill">${summary.vmCount} VMs</span>
+    <span class="stat-pill">${summary.runningVmCount} running</span>
+  `;
+}
+
+function setTenantDetailVisible(open) {
+  $("#hub-dashboard-overview")?.classList.toggle("hidden", open);
+  $("#hub-tenant-detail")?.classList.toggle("hidden", !open);
+}
+
+function resetTenantDetail() {
+  tenantDetailState.open = false;
+  tenantDetailState.tenantId = null;
+  tenantDetailState.activeTab = "dashboard";
+  setTenantDetailVisible(false);
 }
 
 function scheduleReload(key, callback, delay = 250) {
@@ -6012,6 +6113,8 @@ function applyAuthUI() {
     currentTenantId = null;
     tenants = [];
     spokeCache = {};
+    tenantDetailState.data = {};
+    resetTenantDetail();
     clearDynamicTenantTabs();
     $("#tenant-selector")?.classList.add("hidden");
     $(".tab[data-tab='spokes']")?.classList.remove("hidden");
@@ -6096,6 +6199,8 @@ function logout(showMessage = true) {
   currentTenantId = null;
   tenants = [];
   spokeCache = {};
+  tenantDetailState.data = {};
+  resetTenantDetail();
   activeSpokeModal = null;
   localStorage.removeItem("hub_token");
   applyAuthUI();
@@ -6161,7 +6266,392 @@ function updateSpokeStatPills(spokes) {
   $("#spokes-clients-pill") && ($("#spokes-clients-pill").textContent = `${clientCount} clients`);
 }
 
-async function loadDashboard() {
+async function ensureTenantSpokesFor(tenantId, force = false) {
+  if (!tenantId) return [];
+  if (!force && spokeCache[tenantId]) return spokeCache[tenantId];
+  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes`);
+  if (!res || !res.ok) return spokeCache[tenantId] || [];
+  const spokes = await res.json();
+  spokeCache[tenantId] = spokes;
+  if (tenantId === currentTenantId) populateCommandSpokeSelect();
+  return spokes;
+}
+
+function summarizeConfigField(spokes, key, formatter = formatInlineValue) {
+  const approved = spokes.filter(spoke => spoke.status === "approved");
+  const populated = approved
+    .map(spoke => spoke.config?.[key] ?? spoke.seed_config?.[key])
+    .filter(hasMeaningfulValue);
+  const values = uniqueValues(populated);
+  return {
+    value: values.length === 1 ? formatter(values[0]) : values.length ? `${values.length} values` : "—",
+    detail: values.length > 1
+      ? values.map(item => formatter(item)).join(" • ")
+      : `${populated.length}/${approved.length || 0} spokes`,
+  };
+}
+
+function renderConfigSummaryRow(label, summary) {
+  return `
+    <tr>
+      <td>${escHtml(label)}</td>
+      <td>${escHtml(summary.value)}</td>
+      <td>${escHtml(summary.detail)}</td>
+    </tr>
+  `;
+}
+
+async function loadTenantDetailData(force = false) {
+  const tenantId = tenantDetailState.tenantId;
+  if (!tenantId || !currentUser) return null;
+  if (!force && tenantDetailState.data[tenantId]) return tenantDetailState.data[tenantId];
+
+  const [spokesRes, commandsRes, processingRes, settingsRes] = await Promise.all([
+    apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes`),
+    apiFetch(`/api/${encodeURIComponent(tenantId)}/commands`),
+    apiFetch(`/api/${encodeURIComponent(tenantId)}/processing-summary`),
+    canManageTenant(tenantId) ? apiFetch(`/api/${encodeURIComponent(tenantId)}/settings`) : Promise.resolve(null),
+  ]);
+
+  const data = {
+    tenantId,
+    spokes: [],
+    commands: [],
+    processing: null,
+    settings: null,
+    settingsError: canManageTenant(tenantId) ? null : "Admin access required to view tenant setup settings.",
+  };
+
+  if (spokesRes?.ok) {
+    data.spokes = await spokesRes.json();
+    spokeCache[tenantId] = data.spokes;
+  }
+  if (commandsRes?.ok) data.commands = await commandsRes.json();
+  if (processingRes?.ok) data.processing = await processingRes.json();
+  if (settingsRes) {
+    if (settingsRes.ok) {
+      data.settings = await settingsRes.json();
+      data.settingsError = null;
+    } else {
+      const err = await readJson(settingsRes);
+      data.settingsError = err?.detail || `Unable to load tenant settings (${settingsRes.status}).`;
+    }
+  }
+
+  tenantDetailState.data[tenantId] = data;
+  return data;
+}
+
+function renderTenantDashboardPanel(data, summary) {
+  const healthRows = data.spokes
+    .filter(spoke => spoke.status === "approved")
+    .sort((a, b) => String(a.hostname || "").localeCompare(String(b.hostname || "")))
+    .map(spoke => `
+      <tr>
+        <td><strong>${escHtml(spoke.hostname || spoke.id)}</strong><div class="muted">${escHtml(spoke.label || "—")}</div></td>
+        <td><span class="tenant-status-badge ${isOnline(spoke.last_seen) ? "online" : "offline"}">${isOnline(spoke.last_seen) ? "Online" : "Offline"}</span></td>
+        <td>${getSpokeClients(spoke).length}</td>
+        <td>${getSpokeVmCount(spoke)}</td>
+        <td>${getSpokeRunningVmCount(spoke)}</td>
+        <td title="${escHtml(fmtDate(spoke.last_seen))}">${escHtml(relativeTime(spoke.last_seen))}</td>
+      </tr>
+    `)
+    .join("");
+  const recentCommands = [...(data.commands || [])]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 8)
+    .map(command => {
+      const spoke = data.spokes.find(item => item.id === command.spoke_id);
+      return `
+        <tr>
+          <td>${escHtml(fmtDate(command.created_at))}</td>
+          <td>${escHtml(spoke?.hostname || command.spoke_id)}</td>
+          <td>${escHtml(command.type)}</td>
+          <td><span class="badge cmd-status-${escHtml(command.status)}">${escHtml(command.status)}</span></td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  return `
+    <div class="tenant-metrics-grid">
+      <article class="tenant-metric-card"><span class="tenant-metric-label">Approved Spokes</span><strong class="tenant-metric-value">${summary.approvedCount}</strong><span class="tenant-metric-hint">${summary.pendingCount} pending</span></article>
+      <article class="tenant-metric-card"><span class="tenant-metric-label">Online / Offline</span><strong class="tenant-metric-value">${summary.onlineCount} / ${summary.offlineCount}</strong><span class="tenant-metric-hint">Based on 120s heartbeat</span></article>
+      <article class="tenant-metric-card"><span class="tenant-metric-label">Sim Clients</span><strong class="tenant-metric-value">${summary.clientCount}</strong><span class="tenant-metric-hint">Across approved spokes</span></article>
+      <article class="tenant-metric-card"><span class="tenant-metric-label">VM Footprint</span><strong class="tenant-metric-value">${summary.vmCount}</strong><span class="tenant-metric-hint">${summary.runningVmCount} running · ${summary.usbCount} USB devices</span></article>
+    </div>
+    <div class="tenant-detail-grid">
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>Spoke Health</h2><p>Aggregated view of each spoke in this tenant.</p></div>
+        <table class="data-table">
+          <thead><tr><th>Spoke</th><th>Status</th><th>Clients</th><th>VMs</th><th>Running</th><th>Last Sync</th></tr></thead>
+          <tbody>${healthRows || '<tr><td colspan="6" class="empty-state">No approved spokes in this tenant.</td></tr>'}</tbody>
+        </table>
+      </section>
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>Recent Commands</h2><p>Latest tenant-wide commands sent from the hub.</p></div>
+        <table class="data-table">
+          <thead><tr><th>Created</th><th>Spoke</th><th>Command</th><th>Status</th></tr></thead>
+          <tbody>${recentCommands || '<tr><td colspan="4" class="empty-state">No commands recorded for this tenant.</td></tr>'}</tbody>
+        </table>
+      </section>
+    </div>
+  `;
+}
+
+function renderTenantSpokesPanel(data) {
+  const rows = [...data.spokes]
+    .sort((a, b) => String(a.hostname || "").localeCompare(String(b.hostname || "")))
+    .map(spoke => `
+      <tr>
+        <td><strong>${escHtml(spoke.hostname || spoke.id)}</strong><div class="muted">${escHtml(spoke.label || "—")}</div></td>
+        <td><span class="tenant-status-badge ${spoke.status === "approved" && isOnline(spoke.last_seen) ? "online" : "offline"}">${escHtml(spoke.status === "approved" ? (isOnline(spoke.last_seen) ? "online" : "offline") : spoke.status)}</span></td>
+        <td><code>${escHtml(spoke.id)}</code></td>
+        <td title="${escHtml(fmtDate(spoke.last_seen))}">${escHtml(relativeTime(spoke.last_seen))}</td>
+        <td>${getSpokeClients(spoke).length}</td>
+        <td>${getSpokeVmCount(spoke)}</td>
+        <td>${spoke.status === "approved" ? `<button class="btn btn-secondary btn-small" data-open-spoke-modal="${escHtml(spoke.id)}" type="button">Open Detail</button>` : '<span class="muted">—</span>'}</td>
+      </tr>
+    `)
+    .join("");
+
+  return `
+    <section class="setup-card">
+      <div class="setup-card-header"><h2>Tenant Spokes</h2><p>Status, heartbeat, and telemetry summary for every spoke assigned to this tenant.</p></div>
+      <table class="data-table">
+        <thead><tr><th>Spoke</th><th>Status</th><th>Spoke ID</th><th>Last Sync</th><th>Clients</th><th>VMs</th><th></th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="7" class="empty-state">No spokes assigned to this tenant.</td></tr>'}</tbody>
+      </table>
+    </section>
+  `;
+}
+
+function renderTenantCommandsPanel(data) {
+  const commands = [...(data.commands || [])].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const queuedCount = commands.filter(command => command.status === "queued").length;
+  const rows = commands.slice(0, 50).map(command => {
+    const spoke = data.spokes.find(item => item.id === command.spoke_id);
+    return `
+      <tr>
+        <td>${escHtml(fmtDate(command.created_at))}</td>
+        <td>${escHtml(spoke?.hostname || command.spoke_id)}</td>
+        <td>${escHtml(command.type)}</td>
+        <td><span class="badge cmd-status-${escHtml(command.status)}">${escHtml(command.status)}</span></td>
+        <td>${escHtml(fmtDate(command.expires_at))}</td>
+      </tr>
+    `;
+  }).join("");
+
+  return `
+    <div class="tenant-detail-inline-stats">
+      <span class="stat-pill">${queuedCount} queued</span>
+      <span class="stat-pill">${commands.length} recent commands</span>
+      <span class="stat-pill">${data.spokes.filter(spoke => spoke.status === "approved").length} targetable spokes</span>
+    </div>
+    <section class="setup-card">
+      <div class="setup-card-header"><h2>Recent Tenant Commands</h2><p>Hub command history across all spokes in this tenant.</p></div>
+      <table class="data-table">
+        <thead><tr><th>Created</th><th>Spoke</th><th>Command</th><th>Status</th><th>Expires</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="5" class="empty-state">No commands recorded for this tenant.</td></tr>'}</tbody>
+      </table>
+    </section>
+  `;
+}
+
+function renderTenantSetupPanel(data) {
+  const tenantId = data.tenantId;
+  const tenant = data.settings?.tenant || getTenantMeta(tenantId);
+  const aruba = data.settings?.aruba || {};
+  const notifications = data.settings?.notifications || {};
+  const apiBase = `${window.location.origin}/api/${tenantId}/spokes/{spoke_id}`;
+  const accessNote = data.settingsError ? `<div class="tenant-detail-note">${escHtml(data.settingsError)}</div>` : "";
+
+  return `
+    ${accessNote}
+    <div class="tenant-detail-grid">
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>Tenant Setup</h2><p>Hub-managed settings for this tenant.</p></div>
+        <div class="setup-status-grid">
+          <div class="setup-status-item"><span class="setup-status-label">Tenant Name</span><span class="setup-status-value">${escHtml(tenant.name || tenantId)}</span></div>
+          <div class="setup-status-item"><span class="setup-status-label">Tenant ID</span><span class="setup-status-value"><code>${escHtml(tenant.id || tenantId)}</code></span></div>
+          <div class="setup-status-item"><span class="setup-status-label">Aruba CID</span><span class="setup-status-value">${escHtml(tenant.aruba_cid || "—")}</span></div>
+          <div class="setup-status-item"><span class="setup-status-label">Created</span><span class="setup-status-value">${escHtml(fmtDate(tenant.created_at))}</span></div>
+        </div>
+      </section>
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>Relay API</h2><p>Endpoints used by spokes in this tenant.</p></div>
+        <div class="setup-status-grid">
+          <div class="setup-status-item"><span class="setup-status-label">Registration</span><span class="setup-status-value">${escHtml(`${window.location.origin}/api/spokes/register`)}</span></div>
+          <div class="setup-status-item"><span class="setup-status-label">Telemetry</span><span class="setup-status-value">${escHtml(`POST ${apiBase}/telemetry`)}</span></div>
+          <div class="setup-status-item"><span class="setup-status-label">Inbox</span><span class="setup-status-value">${escHtml(`GET ${apiBase}/inbox`)}</span></div>
+          <div class="setup-status-item"><span class="setup-status-label">Ack</span><span class="setup-status-value">${escHtml(`POST ${apiBase}/ack`)}</span></div>
+        </div>
+      </section>
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>Aruba Central</h2></div>
+        <table class="data-table">
+          <tbody>
+            <tr><td>Configured</td><td>${escHtml(aruba.configured ? "Yes" : "No")}</td></tr>
+            <tr><td>Cluster URL</td><td>${escHtml(aruba.cluster_url || "—")}</td></tr>
+            <tr><td>Client ID</td><td>${escHtml(aruba.client_id || "—")}</td></tr>
+            <tr><td>Customer ID</td><td>${escHtml(aruba.customer_id || tenant.aruba_cid || "—")}</td></tr>
+            <tr><td>API Version</td><td>${escHtml(aruba.api_version || "—")}</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>Notifications</h2></div>
+        <table class="data-table">
+          <tbody>
+            <tr><td>Enabled</td><td>${escHtml(notifications.enabled ? "Yes" : "No")}</td></tr>
+            <tr><td>Teams Webhook</td><td>${escHtml(notifications.teams_webhook_configured ? "Configured" : "Not configured")}</td></tr>
+            <tr><td>SMTP Host</td><td>${escHtml(notifications.smtp_host || "—")}</td></tr>
+            <tr><td>SMTP User</td><td>${escHtml(notifications.smtp_user || "—")}</td></tr>
+            <tr><td>Recipients</td><td>${escHtml((notifications.to_emails || []).join(", ") || "—")}</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  `;
+}
+
+function renderTenantConfigPanel(data) {
+  const spokes = data.spokes || [];
+  const approved = spokes.filter(spoke => spoke.status === "approved");
+  const siteMappings = uniqueValues(approved.map(spoke => Object.keys(spoke.config?.site_mappings || {})).flat());
+  const relayRows = [
+    renderConfigSummaryRow("Relay Enabled", summarizeConfigField(spokes, "relay_enabled")),
+    renderConfigSummaryRow("Relay Server URL", summarizeConfigField(spokes, "relay_server_url")),
+    renderConfigSummaryRow("Relay Poll Interval", summarizeConfigField(spokes, "relay_poll_interval")),
+    renderConfigSummaryRow("Relay Tenant Hint", summarizeConfigField(spokes, "relay_tenant_hint")),
+    renderConfigSummaryRow("Repo URL", summarizeConfigField(spokes, "repo_url")),
+    renderConfigSummaryRow("Repo Branch", summarizeConfigField(spokes, "repo_branch")),
+    renderConfigSummaryRow("Site Mappings", { value: siteMappings.length ? `${siteMappings.length} mapped sites` : "—", detail: `${approved.filter(spoke => Object.keys(spoke.config?.site_mappings || {}).length > 0).length}/${approved.length || 0} spokes` }),
+  ].join("");
+
+  const processingRows = data.processing?.islands?.length ? PROCESSING_FEATURES.map(feature => {
+    const counts = data.processing.islands.reduce((acc, item) => {
+      const mode = item.effective_modes?.[feature] || item.global_mode || data.processing.default_mode || "centralized";
+      acc[mode] = (acc[mode] || 0) + 1;
+      return acc;
+    }, {});
+    return `
+      <tr>
+        <td>${escHtml(feature.replace(/_/g, " "))}</td>
+        <td>${escHtml(data.processing.default_mode || "centralized")}</td>
+        <td>${escHtml(Object.entries(counts).map(([mode, count]) => `${mode}:${count}`).join(" • "))}</td>
+      </tr>
+    `;
+  }).join("") : '<tr><td colspan="3" class="empty-state">No processing summary available.</td></tr>';
+
+  return `
+    <div class="tenant-detail-grid">
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>Aggregated Spoke Config</h2><p>Common runtime configuration across spokes in this tenant.</p></div>
+        <table class="data-table">
+          <thead><tr><th>Setting</th><th>Observed Value</th><th>Coverage</th></tr></thead>
+          <tbody>${relayRows}</tbody>
+        </table>
+      </section>
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>Processing Defaults</h2><p>Tenant default mode plus effective spoke distribution per feature.</p></div>
+        <table class="data-table">
+          <thead><tr><th>Feature</th><th>Tenant Default</th><th>Effective Modes</th></tr></thead>
+          <tbody>${processingRows}</tbody>
+        </table>
+      </section>
+    </div>
+  `;
+}
+
+function renderTenantDetail(data = tenantDetailState.data[tenantDetailState.tenantId]) {
+  if (!tenantDetailState.open || !tenantDetailState.tenantId || !data) return;
+  const summary = summarizeTenantSpokes(data.spokes || []);
+  const meta = getTenantMeta(tenantDetailState.tenantId);
+
+  $("#tenant-detail-title") && ($("#tenant-detail-title").textContent = meta.name || tenantDetailState.tenantId);
+  $("#tenant-detail-subtitle") && ($("#tenant-detail-subtitle").textContent = `Tenant ID: ${tenantDetailState.tenantId} · Last sync ${relativeTime(summary.lastSync)}`);
+  $("#tenant-detail-pills") && ($("#tenant-detail-pills").innerHTML = renderTenantSummaryPills(summary));
+
+  $("#tenant-detail-dashboard-panel") && ($("#tenant-detail-dashboard-panel").innerHTML = renderTenantDashboardPanel(data, summary));
+  $("#tenant-detail-spokes-panel") && ($("#tenant-detail-spokes-panel").innerHTML = renderTenantSpokesPanel(data));
+  $("#tenant-detail-commands-panel") && ($("#tenant-detail-commands-panel").innerHTML = renderTenantCommandsPanel(data));
+  $("#tenant-detail-setup-panel") && ($("#tenant-detail-setup-panel").innerHTML = renderTenantSetupPanel(data));
+  $("#tenant-detail-config-panel") && ($("#tenant-detail-config-panel").innerHTML = renderTenantConfigPanel(data));
+
+  ["dashboard", "spokes", "commands", "setup", "config"].forEach(tabId => {
+    $(`.tenant-detail-tab[data-tenant-detail-tab="${tabId}"]`)?.classList.toggle("active", tenantDetailState.activeTab === tabId);
+    $("#tenant-detail-" + tabId + "-panel")?.classList.toggle("hidden", tenantDetailState.activeTab !== tabId);
+  });
+  setTenantDetailVisible(true);
+}
+
+async function openTenantDetail(tenantId, tabId = "dashboard", force = false) {
+  if (!tenantId || !currentUser) return;
+  await setCurrentTenant(tenantId, false);
+  tenantDetailState.open = true;
+  tenantDetailState.tenantId = tenantId;
+  tenantDetailState.activeTab = tabId;
+  setTenantDetailVisible(true);
+  ["dashboard", "spokes", "commands", "setup", "config"].forEach(panelId => {
+    const panel = $("#tenant-detail-" + panelId + "-panel");
+    if (panel) panel.innerHTML = '<div class="empty-state">Loading…</div>';
+  });
+  const data = await loadTenantDetailData(force);
+  if (!tenantDetailState.open || tenantDetailState.tenantId !== tenantId) return;
+  renderTenantDetail(data);
+}
+
+async function loadDashboard(force = false) {
+  if (tenantDetailState.open && tenantDetailState.tenantId && currentUser) {
+    const data = await loadTenantDetailData(true);
+    renderTenantDetail(data);
+    return;
+  }
+
+  if (currentUser && tenants.length) {
+    await Promise.all(tenants.map(tenant => ensureTenantSpokesFor(tenant.id, true)));
+    const summaries = tenants.map(tenant => ({
+      tenant,
+      summary: summarizeTenantSpokes(spokeCache[tenant.id] || []),
+    }));
+    const grid = $("#dashboard-grid");
+    const empty = $("#dashboard-empty");
+    const totalSpokes = summaries.reduce((sum, item) => sum + item.summary.approvedCount, 0);
+    const totalClients = summaries.reduce((sum, item) => sum + item.summary.clientCount, 0);
+    const totalOnline = summaries.reduce((sum, item) => sum + item.summary.onlineCount, 0);
+    $("#dash-spokes-pill") && ($("#dash-spokes-pill").textContent = `${summaries.length} tenant${summaries.length === 1 ? "" : "s"}`);
+    $("#dash-clients-pill") && ($("#dash-clients-pill").textContent = `${totalClients} clients`);
+    $("#dash-online-pill") && ($("#dash-online-pill").textContent = `${totalOnline}/${totalSpokes} online`);
+    empty && (empty.textContent = "No tenants available.");
+    empty?.classList.toggle("hidden", summaries.length > 0);
+    if (!grid) return;
+    renderInBatches("dashboard", grid, summaries, item => {
+      const card = document.createElement("article");
+      card.className = "spoke-card compact-card tenant-card";
+      card.dataset.openTenant = item.tenant.id;
+      card.innerHTML = `
+        <div class="spoke-card-header-row">
+          <div class="spoke-card-title-wrap">
+            <div class="spoke-card-title">${escHtml(item.tenant.name || item.tenant.id)}</div>
+            <div class="spoke-card-subtitle"><code>${escHtml(item.tenant.id)}</code></div>
+          </div>
+          <div class="tenant-card-chevron">→</div>
+        </div>
+        <div class="spoke-card-meta">
+          <span class="stat-pill">${item.summary.approvedCount} spokes</span>
+          <span class="stat-pill">${item.summary.onlineCount} online</span>
+          <span class="stat-pill">${item.summary.clientCount} clients</span>
+          <span class="stat-pill">${item.summary.vmCount} VMs</span>
+        </div>
+        <div class="spoke-card-footer">Last sync ${escHtml(relativeTime(item.summary.lastSync))}</div>
+      `;
+      return card;
+    }, 60);
+    setTenantDetailVisible(false);
+    return;
+  }
+
   const res = await fetch("/api/sites").catch(() => null);
   if (!res || !res.ok) return;
   const sites = (await res.json()).filter(site => site.status === "approved");
@@ -6172,6 +6662,7 @@ async function loadDashboard() {
   $("#dash-spokes-pill") && ($("#dash-spokes-pill").textContent = spokeLabel(sites.length));
   $("#dash-clients-pill") && ($("#dash-clients-pill").textContent = `${clientCount} clients`);
   $("#dash-online-pill") && ($("#dash-online-pill").textContent = `${onlineCount} online`);
+  empty && (empty.textContent = "No spokes registered yet.");
   empty?.classList.toggle("hidden", sites.length > 0);
   if (!grid) return;
   renderInBatches("dashboard", grid, sites, site => {
@@ -6197,17 +6688,12 @@ async function loadDashboard() {
     `;
     return card;
   }, 60);
+  setTenantDetailVisible(false);
 }
 
 async function ensureSpokes(force = false) {
   if (!currentTenantId) return [];
-  if (!force && spokeCache[currentTenantId]) return spokeCache[currentTenantId];
-  const res = await apiFetch(`/api/${encodeURIComponent(currentTenantId)}/spokes`);
-  if (!res || !res.ok) return [];
-  const spokes = await res.json();
-  spokeCache[currentTenantId] = spokes;
-  populateCommandSpokeSelect();
-  return spokes;
+  return ensureTenantSpokesFor(currentTenantId, force);
 }
 
 function renderClientRows(clients = []) {
@@ -6351,7 +6837,7 @@ function populateCommandSpokeSelect() {
 async function sendCommandToSpoke(tenantId, spokeId, type) {
   const response = await apiFetch("/api/commands", {
     method: "POST",
-    body: { tenant_id: tenantId, island_id: spokeId, type, target: "spoke", payload: {} },
+    body: { tenant_id: tenantId, spoke_id: spokeId, type, target: "spoke", payload: {} },
   });
   if (!response || !response.ok) {
     const err = await readJson(response);
@@ -6421,7 +6907,7 @@ function renderSpokeClientsTab() {
 async function loadSpokeCommands() {
   if (!activeSpokeModal) return;
   const { tenant_id: tenantId, spoke } = activeSpokeModal;
-  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/commands?island_id=${encodeURIComponent(spoke.id)}`);
+  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/commands?spoke_id=${encodeURIComponent(spoke.id)}`);
   if (!res || !res.ok) return;
   const commands = await res.json();
   const tbody = $("#spoke-cmds-tbody");
@@ -6877,7 +7363,7 @@ function renderSuperadminTenants(items) {
     const spokeCount = Object.values(spokeCache).reduce((sum, arr) => sum + arr.filter(spoke => spoke.tenant_id === item.id).length, 0);
     return `
       <tr>
-        <td>${escHtml(item.name)}</td>
+        <td><button class="btn btn-link tenant-link-btn" data-open-tenant="${escHtml(item.id)}" type="button">${escHtml(item.name)}</button></td>
         <td>${escHtml(item.id)}</td>
         <td>${item.has_aruba_config ? "Yes" : "No"}</td>
         <td>${spokeCount}</td>
@@ -7155,11 +7641,38 @@ function bindEvents() {
       return;
     }
 
+    const openTenantButton = event.target.closest("[data-open-tenant]");
+    if (openTenantButton) {
+      showTab("dashboard");
+      openTenantDetail(openTenantButton.dataset.openTenant, "dashboard", true);
+      return;
+    }
+
+    const tenantDetailTab = event.target.closest(".tenant-detail-tab");
+    if (tenantDetailTab) {
+      tenantDetailState.activeTab = tenantDetailTab.dataset.tenantDetailTab;
+      renderTenantDetail();
+      return;
+    }
+
+    if (event.target.closest("#tenant-detail-back-btn")) {
+      resetTenantDetail();
+      loadDashboard(true);
+      return;
+    }
+
+    const detailSpokeButton = event.target.closest("[data-open-spoke-modal]");
+    if (detailSpokeButton) {
+      const spoke = getSpokeFromCache(tenantDetailState.tenantId, detailSpokeButton.dataset.openSpokeModal);
+      if (spoke) openSpokeModal(spoke, tenantDetailState.tenantId, "spoke-clients");
+      return;
+    }
+
     const setupButton = event.target.closest(".settings-subtab");
     if (setupButton) {
       const subtab = setupButton.dataset.subtab;
       $$(".settings-subtab").forEach(button => button.classList.toggle("active", button.dataset.subtab === subtab));
-      ["settings-account", "settings-aruba", "settings-notifications", "settings-api", "settings-tls"].forEach(panelId => {
+      ["settings-account", "settings-aruba", "settings-notifications", "settings-api", "settings-tls", "settings-pending-spokes"].forEach(panelId => {
         document.getElementById(panelId)?.classList.toggle("hidden", panelId !== subtab);
       });
       return;
@@ -7192,14 +7705,21 @@ function bindEvents() {
     }
   });
 
-  $("#tenant-select")?.addEventListener("change", event => setCurrentTenant(event.target.value));
+  $("#tenant-select")?.addEventListener("change", event => {
+    const tenantId = event.target.value;
+    if (tenantDetailState.open) {
+      openTenantDetail(tenantId, tenantDetailState.activeTab, true);
+    } else {
+      setCurrentTenant(tenantId);
+    }
+  });
   $("#login-btn")?.addEventListener("click", openLoginModal);
   $("#logout-btn")?.addEventListener("click", () => logout(true));
   $("#login-submit-btn")?.addEventListener("click", submitLogin);
   $("#login-cancel-btn")?.addEventListener("click", closeLoginModal);
   $("#login-modal")?.addEventListener("click", event => { if (event.target === event.currentTarget) closeLoginModal(); });
   $("#login-password")?.addEventListener("keydown", event => { if (event.key === "Enter") submitLogin(); });
-  $("#refresh-dashboard-btn")?.addEventListener("click", loadDashboard);
+  $("#refresh-dashboard-btn")?.addEventListener("click", () => loadDashboard(true));
   $("#refresh-spokes-btn")?.addEventListener("click", () => loadSpokes(true));
   $("#refresh-commands-btn")?.addEventListener("click", loadCommands);
   $("#auto-refresh-toggle")?.addEventListener("change", startAutoRefresh);

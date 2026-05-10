@@ -112,18 +112,43 @@
   <div id="hub-root" class="hub-only">
     <!-- ── Dashboard (public) ── -->
       <main id="tab-dashboard" class="page tab-content">
-        <div class="page-toolbar">
-          <div class="toolbar-stats">
-            <span class="stat-pill" id="dash-spokes-pill">— spokes</span>
-            <span class="stat-pill" id="dash-clients-pill">— clients</span>
-            <span class="stat-pill" id="dash-online-pill">— online</span>
+        <div id="hub-dashboard-overview">
+          <div class="page-toolbar">
+            <div class="toolbar-stats">
+              <span class="stat-pill" id="dash-spokes-pill">— spokes</span>
+              <span class="stat-pill" id="dash-clients-pill">— clients</span>
+              <span class="stat-pill" id="dash-online-pill">— online</span>
+            </div>
+            <div class="toolbar-actions">
+              <button id="refresh-dashboard-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+            </div>
           </div>
-          <div class="toolbar-actions">
-            <button id="refresh-dashboard-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
-          </div>
+          <div id="dashboard-grid" class="spoke-grid"></div>
+          <div id="dashboard-empty" class="empty-state hidden">No spokes registered yet.</div>
         </div>
-        <div id="dashboard-grid" class="spoke-grid"></div>
-        <div id="dashboard-empty" class="empty-state hidden">No spokes registered yet.</div>
+
+        <div id="hub-tenant-detail" class="tenant-detail-view hidden">
+          <div class="tenant-detail-header-row">
+            <button id="tenant-detail-back-btn" class="btn btn-secondary btn-small" type="button">← Back to Tenants</button>
+            <div class="tenant-detail-heading">
+              <h2 id="tenant-detail-title">Tenant</h2>
+              <p id="tenant-detail-subtitle" class="muted">—</p>
+            </div>
+            <div id="tenant-detail-pills" class="tenant-detail-inline-stats"></div>
+          </div>
+          <nav class="setup-subnav tenant-detail-subnav">
+            <button class="setup-subtab tenant-detail-tab active" data-tenant-detail-tab="dashboard" type="button">Dashboard</button>
+            <button class="setup-subtab tenant-detail-tab" data-tenant-detail-tab="spokes" type="button">Spokes</button>
+            <button class="setup-subtab tenant-detail-tab" data-tenant-detail-tab="commands" type="button">Commands</button>
+            <button class="setup-subtab tenant-detail-tab" data-tenant-detail-tab="setup" type="button">Setup</button>
+            <button class="setup-subtab tenant-detail-tab" data-tenant-detail-tab="config" type="button">Config</button>
+          </nav>
+          <section id="tenant-detail-dashboard-panel" class="tenant-detail-panel"></section>
+          <section id="tenant-detail-spokes-panel" class="tenant-detail-panel hidden"></section>
+          <section id="tenant-detail-commands-panel" class="tenant-detail-panel hidden"></section>
+          <section id="tenant-detail-setup-panel" class="tenant-detail-panel hidden"></section>
+          <section id="tenant-detail-config-panel" class="tenant-detail-panel hidden"></section>
+        </div>
       </main>
 
       <!-- ── Islands tab (auth required) ── -->

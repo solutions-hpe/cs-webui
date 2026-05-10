@@ -1785,6 +1785,28 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 .spoke-card-subtitle { margin-top: 2px; font-size: 0.78rem; color: var(--muted); }
 .spoke-card-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .spoke-card-footer { margin-top: 12px; font-size: 0.8rem; color: var(--muted); }
+.tenant-card { cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.tenant-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,0.12); }
+.tenant-card-chevron { font-size: 1.2rem; color: var(--hpe-green); font-weight: 700; }
+.tenant-link-btn { padding: 0; border: none; background: none; color: var(--hpe-green-dark); font: inherit; font-weight: 600; cursor: pointer; }
+.tenant-link-btn:hover { text-decoration: underline; }
+.tenant-detail-view { margin-top: 16px; }
+.tenant-detail-header-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.tenant-detail-heading { display: flex; flex-direction: column; gap: 4px; }
+.tenant-detail-heading h2 { margin: 0; color: var(--hpe-navy); }
+.tenant-detail-subnav { margin-bottom: 16px; }
+.tenant-detail-panel { margin-bottom: 16px; }
+.tenant-detail-inline-stats { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.tenant-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.tenant-metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.tenant-metric-card { border: 1px solid var(--border); border-radius: 8px; background: var(--panel); padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.tenant-metric-label { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.tenant-metric-value { font-size: 1.5rem; color: var(--hpe-navy); }
+.tenant-metric-hint { font-size: 0.82rem; color: var(--muted); }
+.tenant-status-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 78px; border-radius: 999px; padding: 3px 10px; font-size: 0.78rem; font-weight: 600; text-transform: capitalize; }
+.tenant-status-badge.online { background: rgba(1,169,130,0.12); color: var(--hpe-green-dark); }
+.tenant-status-badge.offline { background: rgba(192,57,43,0.12); color: #b03a2e; }
+.tenant-detail-note { margin-bottom: 16px; padding: 12px 14px; border-radius: 8px; border: 1px solid rgba(1,169,130,0.2); background: rgba(1,169,130,0.08); color: var(--hpe-navy); }
 
 .workspace-group { margin-top: 16px; padding: 20px 24px; }
 .workspace-header { margin-bottom: 12px; }

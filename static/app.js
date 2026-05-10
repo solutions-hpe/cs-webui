@@ -696,14 +696,38 @@ function fmtSizeKB(kb) { return fmtSize(Number(kb) * 1024); }
 
 function sendProxmoxCommand(action, vmid) {
   const args = vmid ? { vmid: parseInt(vmid, 10) } : {};
-  return fetch('/api/commands', {
+  return requestJson('/api/commands', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ target: 'proxmox', action, args }),
-  }).then((r) => r.json().then((data) => {
-    if (!r.ok) throw new Error(data.detail || `HTTP ${r.status}`);
-    return data;
-  }));
+  });
+}
+
+function describeProxmoxGuest(entry = {}) {
+  const vmid = entry.vmid ?? '—';
+  const vmType = String(entry.vmType || entry.vm_type || 'qemu').toLowerCase();
+  const kind = vmType === 'lxc' ? 'container' : 'VM';
+  const name = String(entry.name || '').trim();
+  return name ? `${kind} ${name} (${vmid})` : `${kind} ${vmid}`;
+}
+
+function confirmVmDelete(entries) {
+  const list = entries.slice(0, 8).map((entry) => `• ${describeProxmoxGuest(entry)}`).join('\n');
+  const remainder = entries.length > 8 ? `\n• …and ${entries.length - 8} more` : '';
+  const lead = entries.length === 1
+    ? `Delete ${describeProxmoxGuest(entries[0])}?`
+    : `Delete ${entries.length} selected guests?`;
+  return confirm(`${lead}\n\n${list}${remainder}\n\nThis permanently destroys the guest in Proxmox and cannot be undone.`);
+}
+
+function deleteProxmoxVm(vmid) {
+  return requestJson(`/api/proxmox/vms/${encodeURIComponent(vmid)}`, { method: 'DELETE' });
+}
+
+function scheduleProxmoxRefresh(delayMs = 4000) {
+  window.setTimeout(() => {
+    requestJson('/api/proxmox/status').then(renderServerTab).catch(() => {});
+  }, delayMs);
 }
 
 async function triggerAgentUpdate() {
@@ -934,8 +958,10 @@ function renderServerTab(data) {
       const tr = document.createElement('tr');
       tr.dataset.vmid = vm.vmid;
       tr.dataset.status = baseStatusText;
+      tr.dataset.vmName = vm.name || '';
+      tr.dataset.vmType = vm.type || 'qemu';
       tr.innerHTML = `
-        <td><input type="checkbox" class="vm-check" data-vmid="${vm.vmid}"${isWebui ? ' disabled' : ''}></td>
+        <td><input type="checkbox" class="vm-check" data-vmid="${vm.vmid}" data-vm-name="${escHtml(vm.name || '')}" data-vm-type="${vm.type || 'qemu'}"${isWebui ? ' disabled' : ''}></td>
         <td class="vm-status-cell">${statusLabel}</td>
         <td>${vm.vmid}</td>
         <td>${escHtml(vm.name || '—')}${recoveryBadge}${webuiBadge}</td>
@@ -947,10 +973,26 @@ function renderServerTab(data) {
     });
 
     tbody.querySelectorAll('.vm-action-btn:not([disabled])').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        sendProxmoxCommand(btn.dataset.action, btn.dataset.vmid)
-          .then(() => showNotification(`${btn.title} command sent for VM ${btn.dataset.vmid}`, 'info'))
-          .catch((err) => showNotification(`Error: ${err.message}`, 'error'));
+      btn.addEventListener('click', async () => {
+        const row = btn.closest('tr');
+        const entry = {
+          vmid: btn.dataset.vmid,
+          name: row?.dataset.vmName || '',
+          vmType: row?.dataset.vmType || 'qemu',
+        };
+        try {
+          if (btn.dataset.action === 'delete_vm') {
+            if (!confirmVmDelete([entry])) return;
+            await deleteProxmoxVm(btn.dataset.vmid);
+            showNotification(`Delete queued for ${describeProxmoxGuest(entry)}`, 'info');
+            scheduleProxmoxRefresh();
+            return;
+          }
+          await sendProxmoxCommand(btn.dataset.action, btn.dataset.vmid);
+          showNotification(`${btn.title} command sent for VM ${btn.dataset.vmid}`, 'info');
+        } catch (err) {
+          showNotification(`Error: ${err.message}`, 'error');
+        }
       });
     });
 
@@ -5627,15 +5669,39 @@ document.getElementById('server-select-all')?.addEventListener('change', (e) => 
 });
 
 ['start', 'stop', 'reclone', 'delete'].forEach((op) => {
-  document.getElementById(`server-bulk-${op}`)?.addEventListener('click', () => {
+  document.getElementById(`server-bulk-${op}`)?.addEventListener('click', async () => {
     if (activeVmCat === 'templates') return; // no bulk ops on templates
     const panel = document.getElementById(`vm-cat-panel-${activeVmCat}`);
     if (!panel) return;
-    const vmids = [...panel.querySelectorAll('.vm-check:checked')].map((cb) => cb.dataset.vmid);
-    if (!vmids.length) return;
-    const action = op === 'reclone' ? 'reclone_vm' : op === 'delete' ? 'delete_vm' : `${op}_vm`;
-    vmids.forEach((vmid) => sendProxmoxCommand(action, vmid));
-    showNotification(`${op} sent for ${vmids.length} VM(s)`, 'info');
+    const selected = [...panel.querySelectorAll('.vm-check:checked')].map((cb) => ({
+      vmid: cb.dataset.vmid,
+      name: cb.dataset.vmName || '',
+      vmType: cb.dataset.vmType || 'qemu',
+    }));
+    if (!selected.length) return;
+
+    try {
+      if (op === 'delete') {
+        if (!confirmVmDelete(selected)) return;
+        const results = await Promise.allSettled(selected.map((entry) => deleteProxmoxVm(entry.vmid)));
+        const failed = results.filter((result) => result.status === 'rejected');
+        const successCount = results.length - failed.length;
+        if (successCount) {
+          showNotification(`Delete queued for ${successCount} guest(s)`, 'info');
+          scheduleProxmoxRefresh();
+        }
+        if (failed.length) {
+          throw new Error(failed[0].reason?.message || 'One or more deletes failed');
+        }
+        return;
+      }
+
+      const action = op === 'reclone' ? 'reclone_vm' : `${op}_vm`;
+      await Promise.all(selected.map((entry) => sendProxmoxCommand(action, entry.vmid)));
+      showNotification(`${op} sent for ${selected.length} VM(s)`, 'info');
+    } catch (err) {
+      showNotification(`Error: ${err.message}`, 'error');
+    }
   });
 });
 

@@ -1028,6 +1028,22 @@ function renderProxmoxApproveState(pending, approved) {
   }
 }
 
+function renderProxmoxPending(pending) {
+  latestProxmoxData.pending_proxmox = pending;
+  renderProxmoxApproveState(
+    pending,
+    Array.isArray(latestProxmoxData.approved_proxmox) ? latestProxmoxData.approved_proxmox : []
+  );
+}
+
+function renderProxmoxApproved(approved) {
+  latestProxmoxData.approved_proxmox = approved;
+  renderProxmoxApproveState(
+    Array.isArray(latestProxmoxData.pending_proxmox) ? latestProxmoxData.pending_proxmox : [],
+    approved
+  );
+}
+
 async function approveProxmoxAgent(hostname) {
   await requestJson(`/api/proxmox/approve/${encodeURIComponent(hostname)}`, { method: 'POST' });
 }
@@ -3884,6 +3900,10 @@ function connectWebSocket() {
       reconnectTimer = null;
     }
     setWsStatus(true, 'Connected');
+    // Fetch initial repo status via HTTP in case WS message races or was missed
+    requestJson('/api/repo/status').then(d => {
+      setRepoStatus(d.synced, d.error, d.last_sync, d.repo_version);
+    }).catch(() => {});
     // If we showed "restarting" during an update, confirm success on reconnect
     if (updateMsg && updateMsg.textContent.includes('restarting')) {
       updateMsg.textContent = '✅ Update complete — service restarted successfully.';
@@ -4827,14 +4847,50 @@ if (relayEnabledSelect) relayEnabledSelect.addEventListener('change', _autoSaveR
 // Registration diagnostics button
 const relayDiagBtn = document.getElementById('relay-diag-btn');
 const relayDiagPanel = document.getElementById('relay-diag-panel');
+const serviceLogsRefreshBtn = document.getElementById('service-logs-refresh');
+const serviceLogsCountEl = document.getElementById('service-logs-count');
+const serviceLogsOutputEl = document.getElementById('service-logs-output');
+
+async function loadSetupServiceLogs(lines = 50) {
+  if (serviceLogsRefreshBtn) serviceLogsRefreshBtn.disabled = true;
+  if (serviceLogsOutputEl) serviceLogsOutputEl.textContent = 'Loading service logs…';
+  try {
+    const data = await requestJson(`/api/logs/service?lines=${encodeURIComponent(lines)}`);
+    const logLines = Array.isArray(data?.lines) ? data.lines : [];
+    const count = Number.isFinite(data?.count) ? data.count : logLines.length;
+    if (serviceLogsCountEl) {
+      serviceLogsCountEl.textContent = `Last ${count} ${count === 1 ? 'line' : 'lines'}`;
+    }
+    if (serviceLogsOutputEl) {
+      serviceLogsOutputEl.textContent = logLines.length ? logLines.join('\n') : '(no service logs available)';
+      serviceLogsOutputEl.scrollTop = serviceLogsOutputEl.scrollHeight;
+    }
+  } catch (err) {
+    if (serviceLogsCountEl) serviceLogsCountEl.textContent = 'Last 0 lines';
+    if (serviceLogsOutputEl) serviceLogsOutputEl.textContent = `Error fetching service logs: ${err}`;
+  } finally {
+    if (serviceLogsRefreshBtn) serviceLogsRefreshBtn.disabled = false;
+  }
+}
+
+if (serviceLogsRefreshBtn) {
+  serviceLogsRefreshBtn.addEventListener('click', () => {
+    loadSetupServiceLogs();
+  });
+}
+
 if (relayDiagBtn) {
   relayDiagBtn.addEventListener('click', async () => {
     relayDiagBtn.disabled = true;
     relayDiagBtn.textContent = '⏳ Running…';
+    if (relayDiagPanel) relayDiagPanel.classList.remove('hidden');
     try {
-      const d = await requestJson('/api/relay/diag');
-      if (!relayDiagPanel) return;
-      relayDiagPanel.classList.remove('hidden');
+      const [diagResult] = await Promise.allSettled([
+        requestJson('/api/relay/diag'),
+        loadSetupServiceLogs(),
+      ]);
+      if (diagResult.status !== 'fulfilled') throw diagResult.reason;
+      const d = diagResult.value;
 
       // Config check
       const cfg = d.config || {};
@@ -4903,7 +4959,6 @@ if (relayDiagBtn) {
     } catch (err) {
       const logEl = document.getElementById('relay-diag-log');
       if (logEl) logEl.textContent = `Error fetching diagnostics: ${err}`;
-      if (relayDiagPanel) relayDiagPanel.classList.remove('hidden');
     } finally {
       relayDiagBtn.disabled = false;
       relayDiagBtn.textContent = '🔍 Run Registration Diagnostics';
@@ -5736,7 +5791,7 @@ let loadServiceLogs = () => {};
       const line = JSON.parse(e.data);
       if (line) appendLine(line);
     };
-    evtSource.onerror = () => appendLine('[stream disconnected — click Start Tail to reconnect]');
+    evtSource.onerror = () => { appendLine('[stream disconnected — click Start Tail to reconnect]'); stopTail(); };
     tailBtn.classList.add('hidden');
     stopBtn.classList.remove('hidden');
   }

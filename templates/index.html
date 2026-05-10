@@ -1559,9 +1559,16 @@
                     <div class="diag-section-title">Config Check</div>
                     <dl id="relay-diag-config" class="diag-kv"></dl>
                   </div>
-                  <div class="diag-section" style="border-bottom:none;">
+                  <div class="diag-section">
                     <div class="diag-section-title">Registration Log <span id="relay-diag-log-count" class="badge-count">0</span></div>
                     <div id="relay-diag-log" class="diag-log"></div>
+                  </div>
+                  <div class="diag-section" style="border-bottom:none;">
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px;">
+                      <div class="diag-section-title">Service Logs <span id="service-logs-count" class="badge-count">Last 0 lines</span></div>
+                      <button id="service-logs-refresh" class="btn btn-secondary btn-small" type="button">Refresh</button>
+                    </div>
+                    <pre id="service-logs-output" class="diag-code">(no service logs loaded)</pre>
                   </div>
                 </div>
               </div>

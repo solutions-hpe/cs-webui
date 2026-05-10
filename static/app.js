@@ -115,6 +115,14 @@ let latestRecloneState = null;
 let usbCountdownTimer = null;
 let activeVmCat = 'sim';   // 'sim' | 'other' | 'containers' | 'templates'
 let webuiVmid = null;      // VMID of the LXC container running this service (protected from delete)
+let activeSpokeTab = document.querySelector('.spoke-only .tab.active')?.dataset.tab || 'simulations';
+let activeServerSubtab = document.querySelector('.server-subtab.active')?.dataset.subtab || 'server-vms';
+let refreshPaused = false;
+let refreshCountdownTimer = null;
+let refreshSecondsLeft = 10;
+let refreshIntervalSeconds = 10;
+const refreshActiveTabs = new Set(['dashboard']);
+const refreshActiveServerSubtabs = new Set(['server-vms', 'server-commands']);
 
 // ── Tab navigation ────────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach((tab) => {
@@ -127,12 +135,14 @@ document.querySelectorAll('.tab').forEach((tab) => {
 
     tab.classList.add('active');
     tab.setAttribute('aria-selected', 'true');
+    activeSpokeTab = tab.dataset.tab;
     document.getElementById(`tab-${tab.dataset.tab}`).classList.remove('hidden');
     if (tab.dataset.tab === 'setup') activateSetupSubtab('setup-github');
     if (tab.dataset.tab === 'server') { activateServerSubtab('server-vms'); loadProxmoxApproved().catch(() => {}); }
     if (tab.dataset.tab === 'central') { activateCentralSubtab('central-sites-panel'); }
     if (tab.dataset.tab === 'simulations') { activateSimTopTab('simtop-checks'); }
     resetTabDrilldowns(tab.dataset.tab);
+    updateRefreshPausedState();
   });
 });
 
@@ -181,6 +191,7 @@ function activateConfigSubtab(subtabId = 'config-general') {
 }
 
 function activateServerSubtab(subtabId = 'server-vms') {
+  activeServerSubtab = subtabId;
   document.querySelectorAll('.server-subtab').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.subtab === subtabId);
   });
@@ -194,6 +205,7 @@ function activateServerSubtab(subtabId = 'server-vms') {
   if (subtabId === 'server-services') {
     renderServiceStatus().catch(() => {});
   }
+  updateRefreshPausedState();
 }
 
 // ── Agent Log Viewer ─────────────────────────────────────────────────────
@@ -5700,10 +5712,61 @@ async function refreshAll() {
   try { await loadSimulations(); } catch (_) { /* silent */ }
 }
 
-function applyRefreshInterval(seconds) {
+function updateRefreshCountdownDisplay(text, paused = false) {
+  const countdown = document.getElementById('refresh-countdown');
+  if (!countdown) return;
+  countdown.textContent = text;
+  countdown.classList.toggle('paused', paused);
+}
+
+function stopRefreshTimers() {
   if (_refreshTimer) { clearInterval(_refreshTimer); _refreshTimer = null; }
-  if (seconds > 0) _refreshTimer = setInterval(refreshAll, seconds * 1000);
-  localStorage.setItem('refreshInterval', String(seconds));
+  if (refreshCountdownTimer) { clearInterval(refreshCountdownTimer); refreshCountdownTimer = null; }
+}
+
+function computeRefreshPaused() {
+  if (activeSpokeTab === 'server') {
+    return !refreshActiveServerSubtabs.has(activeServerSubtab);
+  }
+  return !refreshActiveTabs.has(activeSpokeTab);
+}
+
+function restartRefreshTimer() {
+  stopRefreshTimers();
+  if (refreshIntervalSeconds <= 0) {
+    updateRefreshCountdownDisplay('Off');
+    return;
+  }
+  if (refreshPaused) {
+    updateRefreshCountdownDisplay('Paused', true);
+    return;
+  }
+  refreshSecondsLeft = refreshIntervalSeconds;
+  updateRefreshCountdownDisplay(String(refreshSecondsLeft) + 's');
+  refreshCountdownTimer = setInterval(() => {
+    refreshSecondsLeft = Math.max(0, refreshSecondsLeft - 1);
+    updateRefreshCountdownDisplay(String(refreshSecondsLeft) + 's');
+  }, 1000);
+  _refreshTimer = setInterval(async () => {
+    refreshSecondsLeft = refreshIntervalSeconds;
+    updateRefreshCountdownDisplay(String(refreshSecondsLeft) + 's');
+    await refreshAll();
+  }, refreshIntervalSeconds * 1000);
+}
+
+function updateRefreshPausedState() {
+  const wasPaused = refreshPaused;
+  refreshPaused = computeRefreshPaused();
+  restartRefreshTimer();
+  if (wasPaused && !refreshPaused) {
+    refreshAll().catch(() => {});
+  }
+}
+
+function applyRefreshInterval(seconds) {
+  refreshIntervalSeconds = Number.isFinite(seconds) ? seconds : 0;
+  localStorage.setItem('refreshInterval', String(refreshIntervalSeconds));
+  updateRefreshPausedState();
 }
 
 const refreshSelect = document.getElementById('refresh-interval-select');
@@ -5854,6 +5917,8 @@ let activeTab = "dashboard";
 let autoRefreshTimer = null;
 let autoRefreshCountdownTimer = null;
 let autoRefreshSecondsLeft = 10;
+let refreshPaused = false;
+const autoRefreshActiveTabs = new Set(["dashboard", "spokes", "commands"]);
 let tenantDetailState = { open: false, tenantId: null, activeTab: "dashboard", data: {} };
 
 const PROCESSING_FEATURES = ["aruba_polling", "teams_webhook", "email", "heartbeat", "gkill", "schedules", "repo_sync"];
@@ -6055,6 +6120,7 @@ function resetTenantDetail() {
   tenantDetailState.tenantId = null;
   tenantDetailState.activeTab = "dashboard";
   setTenantDetailVisible(false);
+  updateRefreshPausedState();
 }
 
 function scheduleReload(key, callback, delay = 250) {
@@ -6287,6 +6353,7 @@ function showTab(tabId, opts = {}) {
   } else {
     $(`#tab-nav .tab[data-tab="${tabId}"]`)?.classList.add("active");
   }
+  updateRefreshPausedState();
   refreshCurrentView();
 }
 
@@ -6639,6 +6706,7 @@ function renderTenantDetail(data = tenantDetailState.data[tenantDetailState.tena
     $("#tenant-detail-" + tabId + "-panel")?.classList.toggle("hidden", tenantDetailState.activeTab !== tabId);
   });
   setTenantDetailVisible(true);
+  updateRefreshPausedState();
 }
 
 async function openTenantDetail(tenantId, tabId = "dashboard", force = false) {
@@ -6648,6 +6716,7 @@ async function openTenantDetail(tenantId, tabId = "dashboard", force = false) {
   tenantDetailState.tenantId = tenantId;
   tenantDetailState.activeTab = tabId;
   setTenantDetailVisible(true);
+  updateRefreshPausedState();
   ["dashboard", "spokes", "commands", "setup", "config"].forEach(panelId => {
     const panel = $("#tenant-detail-" + panelId + "-panel");
     if (panel) panel.innerHTML = '<div class="empty-state">Loading…</div>';
@@ -7603,6 +7672,23 @@ function updateOnlineBadges(spokeOnline) {
   });
 }
 
+function updateAutoRefreshCountdownDisplay(text, paused = false) {
+  const countdown = $("#auto-refresh-countdown");
+  if (!countdown) return;
+  countdown.textContent = text;
+  countdown.classList.toggle("paused", paused);
+}
+
+function computeRefreshPaused() {
+  if (activeTab !== "dashboard") {
+    return !autoRefreshActiveTabs.has(activeTab);
+  }
+  if (tenantDetailState.open) {
+    return !autoRefreshActiveTabs.has(tenantDetailState.activeTab);
+  }
+  return false;
+}
+
 function stopAutoRefresh() {
   if (autoRefreshTimer) {
     clearInterval(autoRefreshTimer);
@@ -7614,27 +7700,47 @@ function stopAutoRefresh() {
   }
 }
 
-function startAutoRefresh() {
+function syncAutoRefreshState() {
   stopAutoRefresh();
   const toggle = $("#auto-refresh-toggle");
   const intervalSelect = $("#auto-refresh-interval");
-  const countdown = $("#auto-refresh-countdown");
   if (!toggle?.checked) {
-    if (countdown) countdown.textContent = "—";
+    updateAutoRefreshCountdownDisplay("Off");
     return;
   }
   const seconds = parseInt(intervalSelect?.value || "10", 10);
+  if (!(seconds > 0)) {
+    updateAutoRefreshCountdownDisplay("Off");
+    return;
+  }
+  if (refreshPaused) {
+    updateAutoRefreshCountdownDisplay("Paused", true);
+    return;
+  }
   autoRefreshSecondsLeft = seconds;
-  if (countdown) countdown.textContent = `${autoRefreshSecondsLeft}s`;
+  updateAutoRefreshCountdownDisplay(String(autoRefreshSecondsLeft) + 's');
   autoRefreshCountdownTimer = setInterval(() => {
     autoRefreshSecondsLeft = Math.max(0, autoRefreshSecondsLeft - 1);
-    if (countdown) countdown.textContent = `${autoRefreshSecondsLeft}s`;
+    updateAutoRefreshCountdownDisplay(String(autoRefreshSecondsLeft) + 's');
   }, 1000);
   autoRefreshTimer = setInterval(async () => {
     autoRefreshSecondsLeft = seconds;
-    if (countdown) countdown.textContent = `${autoRefreshSecondsLeft}s`;
+    updateAutoRefreshCountdownDisplay(String(autoRefreshSecondsLeft) + 's');
     await refreshCurrentView(false);
   }, seconds * 1000);
+}
+
+function updateRefreshPausedState() {
+  const wasPaused = refreshPaused;
+  refreshPaused = computeRefreshPaused();
+  syncAutoRefreshState();
+  if (wasPaused && !refreshPaused) {
+    refreshCurrentView(true).catch(() => {});
+  }
+}
+
+function startAutoRefresh() {
+  updateRefreshPausedState();
 }
 
 function connectWebSocket() {

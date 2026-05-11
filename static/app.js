@@ -435,12 +435,7 @@ async function loadAgentLogs() {
     const data = await requestJson('/api/proxmox/logs');
     agentLogLines = data.lines || [];
     if (!agentLogLines.length) {
-      // Check agent version to give a useful hint
-      const agentVer = document.getElementById('server-agent-version');
-      const ver = agentVer ? agentVer.textContent.trim() : '';
-      const hint = ver && parseFloat(ver) < 0.99
-        ? `Agent v${ver} detected — update to v0.99+ to enable log streaming (click ⬆ Update Agent)`
-        : 'No logs yet — logs arrive on the next agent telemetry poll (≤60s after activity).';
+      const hint = 'No logs yet — logs arrive on the next agent telemetry poll (≤60s after activity).';
       if (agentLogViewer) {
         agentLogViewer.textContent = '';
         const el = document.createElement('div');
@@ -1207,12 +1202,6 @@ function renderServerTab(data) {
   const ramTotal = node.mem_total_kb ? fmtSizeKB(node.mem_total_kb) : '—';
   setEl('server-ram', `${ramUsed} / ${ramTotal}`);
   setEl('server-last-seen', formatRelativeTime(latestProxmoxData.last_seen));
-
-  const agentVerPill = document.getElementById('server-agent-version-pill');
-  if (agentVerPill) {
-    agentVerPill.style.display = agentVer ? '' : 'none';
-    setEl('server-agent-version', agentVer || '—');
-  }
 
   const storagePills = document.getElementById('server-storage-pills');
   if (storagePills && Array.isArray(node.storage)) {

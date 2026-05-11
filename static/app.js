@@ -637,7 +637,6 @@ const syncNowBtn = document.getElementById('sync-now-btn');
 const syncNowMsg = document.getElementById('sync-now-message');
 const settingsMsg = document.getElementById('settings-message');
 const githubClearConfigBtn = document.getElementById('github-clear-config-btn');
-const checkUpdateBtn = document.getElementById('check-update-btn');
 const refreshWebuiBtn = document.getElementById('refresh-webui-btn');
 const updateMsg = document.getElementById('update-message');
 const versionCurrent = document.getElementById('version-current');
@@ -1716,10 +1715,6 @@ function applyVersionStatus(data) {
 
   const inProgress = !!data.update_in_progress;
   updateWasInProgress = inProgress;
-  if (checkUpdateBtn) {
-    checkUpdateBtn.disabled = inProgress;
-    checkUpdateBtn.textContent = inProgress ? '🔄 Updating…' : '🔄 Check & Update Now';
-  }
 
   if (!updateMsg) return;
 
@@ -1749,34 +1744,6 @@ function applyVersionStatus(data) {
     }
   }
 }
-
-checkUpdateBtn.addEventListener('click', async () => {
-  checkUpdateBtn.disabled = true;
-  checkUpdateBtn.textContent = '🔄 Checking…';
-  updateMsg.textContent = 'Checking for updates…';
-  updateMsg.className = 'settings-message success';
-  updateMsg.classList.remove('hidden');
-  clearTimeout(updateMsg._timer);
-  try {
-    const res = await fetch('/api/self-update', { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-    updateMsg.textContent = data.message;
-    updateMsg.className = data.message.includes('up to date') ? 'settings-message success' : 'settings-message success';
-    // If update started, applyVersionStatus via WS will drive state from here
-    if (!data.message.includes('started')) {
-      checkUpdateBtn.disabled = false;
-      checkUpdateBtn.textContent = '🔄 Check & Update Now';
-      updateMsg._timer = setTimeout(() => { updateMsg.className = 'settings-message hidden'; }, 8000);
-    }
-  } catch (err) {
-    updateMsg.textContent = `Error: ${err.message}`;
-    updateMsg.className = 'settings-message error';
-    checkUpdateBtn.disabled = false;
-    checkUpdateBtn.textContent = '🔄 Check & Update Now';
-    updateMsg._timer = setTimeout(() => { updateMsg.className = 'settings-message hidden'; }, 10000);
-  }
-});
 
 if (refreshWebuiBtn) {
   refreshWebuiBtn.addEventListener('click', async () => {
@@ -4679,10 +4646,6 @@ function connectWebSocket() {
       updateMsg.textContent = '🔄 Service restarting — reconnecting…';
       updateMsg.className = 'settings-message success';
       updateMsg.classList.remove('hidden');
-      if (checkUpdateBtn) {
-        checkUpdateBtn.disabled = false;
-        checkUpdateBtn.textContent = '🔄 Check & Update Now';
-      }
     }
     if (!reconnectTimer) {
       reconnectTimer = window.setTimeout(() => {

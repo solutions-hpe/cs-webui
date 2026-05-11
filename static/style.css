@@ -75,6 +75,8 @@ body.mode-spoke #spoke-root {
 
 /* Hub root is hidden until body.mode-hub is confirmed — prevents flash on spoke */
 #hub-root { display: none; }
+body.mode-hub.hub-logged-out #tab-nav { display: none; }
+body.mode-hub.hub-logged-out #hub-root > .tab-content { display: none !important; }
 
 a { color: var(--hpe-green); text-decoration: none; }
 a:hover { color: var(--hpe-green-dark); text-decoration: underline; }
@@ -1838,6 +1840,76 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   max-width: 400px;
 }
 
+#hub-login-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  z-index: 150;
+}
+
+#hub-login-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 40px 48px;
+  width: min(360px, calc(100vw - 32px));
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.hub-login-brand {
+  display: flex;
+  align-items: center;
+  color: var(--hpe-navy);
+}
+
+.hub-login-brand .hpe-logo-mark {
+  height: 28px;
+}
+
+.hub-login-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hub-login-eyebrow {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--hpe-green);
+}
+
+.hub-login-copy h2 {
+  margin: 0;
+  font-size: 1.6rem;
+  color: var(--text);
+}
+
+.hub-login-subtitle {
+  margin: 0;
+  color: var(--muted);
+}
+
+.hub-login-form {
+  gap: 16px;
+}
+
+.hub-login-actions {
+  margin-top: 4px;
+}
+
+.hub-login-actions .btn {
+  width: 100%;
+}
+
 .modal-title {
   margin: 0 0 24px;
   font-size: 1.2rem;
@@ -1859,6 +1931,15 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   gap: 10px;
   font-size: 0.85rem;
   color: rgba(255,255,255,0.85);
+}
+
+.topbar-user-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.75);
+  margin-left: auto;
 }
 
 .topbar-username {

@@ -7218,6 +7218,30 @@ function syncRoleBadge() {
   badge.textContent = currentUser.is_superadmin ? "SUPERADMIN" : (currentRoleForTenant() || "user").toUpperCase();
 }
 
+function setLoginOverlayVisible(visible) {
+  $("#hub-login-overlay")?.classList.toggle("hidden", !visible);
+  document.body.classList.toggle("hub-logged-out", visible);
+  document.body.classList.toggle("hub-logged-in", !visible);
+}
+
+function openLoginModal() {
+  setLoginOverlayVisible(true);
+  setFormMessage("login-error", "", false);
+  const password = $("#login-password");
+  if (password) password.value = "";
+  const username = $("#login-username");
+  if (username && !username.value.trim()) {
+    username.focus();
+  } else {
+    password?.focus();
+  }
+}
+
+function closeLoginModal() {
+  setLoginOverlayVisible(false);
+  setFormMessage("login-error", "", false);
+}
+
 function buildTenantSelector() {}
 
 function clearDynamicTenantTabs() {}
@@ -7266,12 +7290,13 @@ async function enterTenantContext(tenantId, tabId = "simulations", force = true)
 
 function applyAuthUI() {
   const loggedIn = Boolean(currentUser && authToken);
-  $("#login-btn")?.classList.toggle("hidden", loggedIn);
-  $("#topbar-user")?.classList.toggle("hidden", !loggedIn);
-  $("#topbar-username") && ($("#topbar-username").textContent = currentUser?.username || "");
+  const userPill = $("#hub-user-pill");
+  if (userPill) userPill.style.display = loggedIn ? "flex" : "none";
+  $("#hub-user-name") && ($("#hub-user-name").textContent = currentUser?.username || "—");
   $$(".auth-tab").forEach(tab => tab.classList.toggle("hidden", !loggedIn));
   $$(".superadmin-tab").forEach(tab => tab.classList.toggle("hidden", !(loggedIn && currentUser?.is_superadmin)));
   if (!loggedIn) {
+    openLoginModal();
     currentTenantId = null;
     tenantContextActive = false;
     tenants = [];
@@ -7291,6 +7316,7 @@ function applyAuthUI() {
     if (activeTab !== "dashboard") showTab("dashboard");
     return;
   }
+  closeLoginModal();
   syncRoleBadge();
   syncTenantContextChrome();
   syncHubPermissionUI();
@@ -7327,17 +7353,6 @@ async function loadUserContext() {
   populateCommandSpokeSelect();
 }
 
-function openLoginModal() {
-  $("#login-modal")?.classList.remove("hidden");
-  $("#login-error") && ($("#login-error").textContent = "");
-  $("#login-username")?.focus();
-}
-
-function closeLoginModal() {
-  $("#login-modal")?.classList.add("hidden");
-  setFormMessage("login-error", "", false);
-}
-
 async function submitLogin() {
   const username = $("#login-username")?.value.trim();
   const password = $("#login-password")?.value || "";
@@ -7359,11 +7374,24 @@ async function submitLogin() {
   const payload = await res.json();
   authToken = payload.access_token;
   localStorage.setItem("hub_token", authToken);
-  closeLoginModal();
   await loadUserContext();
   connectWebSocket();
   await refreshCurrentView(true);
   showToast("Signed in successfully.", "ok");
+}
+
+function disconnectWebSocket() {
+  if (wsReconnectTimer) {
+    clearTimeout(wsReconnectTimer);
+    wsReconnectTimer = null;
+  }
+  if (ws) {
+    const socket = ws;
+    ws = null;
+    socket.onclose = null;
+    socket.close();
+  }
+  updateApiStatus(false, "Disconnected");
 }
 
 function logout(showMessage = true) {
@@ -7384,6 +7412,7 @@ function logout(showMessage = true) {
   resetTenantDetail();
   activeSpokeModal = null;
   localStorage.removeItem("hub_token");
+  disconnectWebSocket();
   applyAuthUI();
   closeSpokeModal();
   if (showMessage) showToast("Signed out.", "ok");
@@ -7853,6 +7882,11 @@ async function openTenantDetail(tenantId, tabId = "dashboard", force = false) {
 async function loadDashboard(force = false) {
   const grid = $("#dashboard-grid");
   const empty = $("#dashboard-empty");
+  if (!currentUser) {
+    if (grid) grid.innerHTML = "";
+    if (empty) empty.innerHTML = "";
+    return;
+  }
   if (currentUser) {
     dashboardTenantRows = [];
     $("#dash-tenants-pill") && ($("#dash-tenants-pill").textContent = `${tenants.length} tenants`);
@@ -7894,44 +7928,6 @@ async function loadDashboard(force = false) {
     renderInBatches("dashboard", grid, rows, renderTenantCard, 24);
     return;
   }
-
-  const res = await fetch("/api/sites").catch(() => null);
-  if (!res || !res.ok) return;
-  const sites = (await res.json()).filter(site => site.status === "approved");
-  dashboardTenantRows = [];
-  $("#dash-tenants-pill") && ($("#dash-tenants-pill").textContent = 'Public dashboard');
-  const onlineCount = sites.filter(site => isOnline(site.last_seen)).length;
-  const clientCount = sites.reduce((sum, site) => sum + ((site.telemetry?.clients || []).length), 0);
-  $("#dash-spokes-pill") && ($("#dash-spokes-pill").textContent = spokeLabel(sites.length));
-  $("#dash-clients-pill") && ($("#dash-clients-pill").textContent = `${clientCount} clients`);
-  $("#dash-online-pill") && ($("#dash-online-pill").textContent = `${onlineCount} online`);
-  empty && (empty.textContent = "No spokes registered yet.");
-  empty?.classList.toggle("hidden", sites.length > 0);
-  if (!grid) return;
-  grid.classList.add("spoke-grid");
-  renderInBatches("dashboard", grid, sites, site => {
-    const online = isOnline(site.last_seen);
-    const clients = site.telemetry?.clients || [];
-    const card = document.createElement("article");
-    card.className = "spoke-card compact-card";
-    card.dataset.tenantId = site.workspace_id || site.tenant_id || "";
-    card.dataset.spokeId = site.id;
-    card.innerHTML = `
-      <div class="spoke-card-header-row">
-        <div class="spoke-card-title-wrap">
-          <div class="spoke-card-title">${escHtml(spokePrimaryLabel(site))}</div>
-          <div class="spoke-card-subtitle">${escHtml(spokeSecondaryLabel(site, site.workspace_id || "—"))}</div>
-        </div>
-        <div class="spoke-card-status" data-online-state>${statusDot(online)}</div>
-      </div>
-      <div class="spoke-card-meta">
-        <span class="stat-pill">${clients.length} clients</span>
-        <span class="stat-pill">${online ? "Online" : "Offline"}</span>
-      </div>
-      <div class="spoke-card-footer">Last seen ${escHtml(relativeTime(site.last_seen))}</div>
-    `;
-    return card;
-  }, 60);
 }
 
 async function loadSimulations(force = false) {
@@ -9376,6 +9372,7 @@ function updateAutoRefreshCountdownDisplay(text, paused = false) {
 }
 
 function computeRefreshPaused() {
+  if (!currentUser) return true;
   if (activeTab !== "dashboard") {
     return !autoRefreshActiveTabs.has(activeTab);
   }
@@ -9440,6 +9437,7 @@ function startAutoRefresh() {
 }
 
 function connectWebSocket() {
+  if (!authToken) return;
   if (ws && [WebSocket.OPEN, WebSocket.CONNECTING].includes(ws.readyState)) return;
   if (wsReconnectTimer) {
     clearTimeout(wsReconnectTimer);
@@ -9493,6 +9491,7 @@ function connectWebSocket() {
   ws.onclose = () => {
     updateApiStatus(false, "Disconnected");
     ws = null;
+    if (!authToken) return;
     wsReconnectTimer = window.setTimeout(connectWebSocket, 3000);
   };
   ws.onerror = () => {
@@ -9612,11 +9611,9 @@ function bindEvents() {
     }
   });
 
-  $("#login-btn")?.addEventListener("click", openLoginModal);
-  $("#logout-btn")?.addEventListener("click", () => logout(true));
+  $("#hub-logout-btn")?.addEventListener("click", () => logout(true));
   $("#login-submit-btn")?.addEventListener("click", submitLogin);
-  $("#login-cancel-btn")?.addEventListener("click", closeLoginModal);
-  $("#login-modal")?.addEventListener("click", event => { if (event.target === event.currentTarget) closeLoginModal(); });
+  $("#login-username")?.addEventListener("keydown", event => { if (event.key === "Enter") submitLogin(); });
   $("#login-password")?.addEventListener("keydown", event => { if (event.key === "Enter") submitLogin(); });
   $("#refresh-dashboard-btn")?.addEventListener("click", () => loadDashboard(true));
   $("#dashboard-add-tenant-btn")?.addEventListener("click", openSuperadminTenantForm);
@@ -9674,12 +9671,14 @@ function bindEvents() {
 (async function init() {
   bindEvents();
   await pingApi();
-  if (authToken) await loadUserContext();
-  connectWebSocket();
-  if (currentUser && currentTenantId) await ensureSpokes(true);
-  syncTenantContextChrome();
-  syncHubPermissionUI();
-  await loadDashboard();
+  await loadUserContext();
+  if (currentUser) {
+    connectWebSocket();
+    if (currentTenantId) await ensureSpokes(true);
+    syncTenantContextChrome();
+    syncHubPermissionUI();
+    await loadDashboard();
+  }
   startAutoRefresh();
 })();
 

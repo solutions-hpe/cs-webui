@@ -2738,16 +2738,9 @@ function renderAutoProvisionStatus() {
   logEl.innerHTML = run.items.map((item) => {
     const meta = autoProvisionStatusMeta(item.status);
     const vmName = item.vm_name || `VM ${item.vmid ?? '—'}`;
-    const detailBits = [];
-    if (item.vmid != null) detailBits.push(`VMID ${item.vmid}`);
-    if (item.usb_name) detailBits.push(item.usb_name);
-    if (item.vidpid) detailBits.push(item.vidpid);
     return `
       <div class="autoprov-live-item">
-        <div class="autoprov-live-item-main">
-          <div class="autoprov-live-item-name">${escHtml(vmName)}</div>
-          <div class="autoprov-live-item-meta">${escHtml(detailBits.join(' · ') || 'Provisioning')}</div>
-        </div>
+        <span class="autoprov-live-item-name">${escHtml(vmName)}</span>
         <span class="autoprov-phase ${meta.className}">${meta.label}</span>
       </div>
     `;

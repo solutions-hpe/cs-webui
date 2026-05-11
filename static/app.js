@@ -1707,8 +1707,9 @@ syncNowBtn.addEventListener('click', async () => {
 });
 
 function applyVersionStatus(data) {
-  if (versionCurrent) versionCurrent.textContent = data.current_version ?? '—';
-  if (versionAvailable) versionAvailable.textContent = data.available_version ?? '—';
+  // Show cs-webui frontend version (not client-sim installer version) in Setup tile
+  if (versionCurrent) versionCurrent.textContent = data.cswebui_current ?? data.current_version ?? '—';
+  if (versionAvailable) versionAvailable.textContent = data.cswebui_available ?? data.available_version ?? '—';
   if (versionLastChecked) versionLastChecked.textContent = data.last_checked ?? '—';
 
   const inProgress = !!data.update_in_progress;

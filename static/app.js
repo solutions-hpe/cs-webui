@@ -666,6 +666,8 @@ const centralSiteChecks = document.getElementById('central-site-checks');
 const centralSiteHistory = document.getElementById('central-site-history');
 const centralSiteAlerts = document.getElementById('central-site-alerts');
 const centralSiteAlertsCount = document.getElementById('central-site-alerts-count');
+const centralSiteDevices = document.getElementById('central-site-devices');
+const centralSiteDevicesCount = document.getElementById('central-site-devices-count');
 const centralClassicUrlInput = document.getElementById('central-classic-url');
 const centralClassicUsernameInput = document.getElementById('central-classic-username');
 const centralClassicPasswordInput = document.getElementById('central-classic-password');
@@ -3364,6 +3366,92 @@ function renderSiteAlerts(alerts, warning) {
 }
 
 
+async function loadSiteDevices(wsite) {
+  if (!centralSiteDevices) return;
+  const isCnx = (currentSettings.central_api?.mode === 'central') ||
+                (currentSettings.central_config?.api_version === 'new_central');
+  // Show/hide the devices section based on mode
+  document.querySelectorAll('.cnx-only').forEach((el) => {
+    el.classList.toggle('hidden', !isCnx);
+  });
+  if (!isCnx) return;
+
+  centralSiteDevices.textContent = 'Loading devices…';
+  if (centralSiteDevicesCount) centralSiteDevicesCount.textContent = '';
+  const centralSite = currentSettings.site_mappings?.[wsite] || wsite;
+  try {
+    const data = await requestJson(`/api/central/devices?site=${encodeURIComponent(centralSite)}`);
+    renderSiteDevices(data.devices || [], data.warning, data.count || 0);
+  } catch (err) {
+    centralSiteDevices.textContent = `Could not load devices: ${err.message}`;
+  }
+}
+
+function renderSiteDevices(devices, warning, total) {
+  if (!centralSiteDevices) return;
+  centralSiteDevices.textContent = '';
+  if (centralSiteDevicesCount) {
+    centralSiteDevicesCount.textContent = total ? `(${total})` : '';
+  }
+
+  if (warning && !devices.length) {
+    const msg = document.createElement('div');
+    msg.className = 'form-hint';
+    msg.textContent = warning;
+    centralSiteDevices.appendChild(msg);
+    return;
+  }
+  if (warning) {
+    const msg = document.createElement('div');
+    msg.className = 'form-hint';
+    msg.textContent = `⚠ ${warning}`;
+    centralSiteDevices.appendChild(msg);
+  }
+
+  const table = document.createElement('table');
+  table.className = 'history-table';
+  const thead = document.createElement('thead');
+  const headRow = document.createElement('tr');
+  ['Status', 'Name', 'Type', 'Model', 'IP', 'Version'].forEach((label) => {
+    const th = document.createElement('th');
+    th.textContent = label;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+
+  const tbody = document.createElement('tbody');
+  devices.forEach((dev) => {
+    const row = document.createElement('tr');
+    const statusUp = ['UP', 'ONLINE'].includes((dev.status || '').toUpperCase());
+    [
+      null,  // status dot handled separately
+      dev.name || '—',
+      (dev.type || '—').replace('_', ' '),
+      dev.model || '—',
+      dev.ip || '—',
+      dev.version || '—',
+    ].forEach((val, i) => {
+      const td = document.createElement('td');
+      if (i === 0) {
+        const dot = document.createElement('span');
+        dot.className = `status-dot ${statusUp ? 'online' : 'offline'}`;
+        dot.title = dev.status || 'Unknown';
+        td.appendChild(dot);
+        td.appendChild(document.createTextNode(' ' + (dev.status || '—')));
+        if (!statusUp) td.style.color = 'var(--color-error, #c0392b)';
+      } else {
+        td.textContent = val;
+      }
+      row.appendChild(td);
+    });
+    tbody.appendChild(row);
+  });
+
+  table.appendChild(thead);
+  table.appendChild(tbody);
+  centralSiteDevices.appendChild(table);
+}
+
 function openSiteDetail(wsite) {
   centralSiteDetailOpen = wsite;
   if (centralOverview) centralOverview.classList.add('hidden');
@@ -3376,6 +3464,7 @@ function openSiteDetail(wsite) {
   renderSiteChecks(wsite, centralStatusData[wsite] || {});
   loadSiteHistory(wsite);
   loadSiteAlerts(wsite);
+  loadSiteDevices(wsite);
 }
 
 function closeSiteDetail() {

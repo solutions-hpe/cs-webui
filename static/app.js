@@ -136,7 +136,8 @@ let usbCountdownTimer = null;
 let activeVmCat = 'sim';   // 'sim' | 'other' | 'containers' | 'templates'
 let webuiVmid = null;      // VMID of the LXC container running this service (protected from delete)
 const spokeRoot = document.getElementById('spoke-root');
-let activeSpokeTab = spokeRoot?.querySelector('.tab.active')?.dataset.tab || 'simulations';
+const spokeTabPanels = document.querySelectorAll('#spoke-root .tab-content');
+let activeSpokeTab = document.querySelector('#tab-nav .spoke-only .tab.active')?.dataset.tab || 'simulations';
 let activeServerSubtab = spokeRoot?.querySelector('.server-subtab.active')?.dataset.subtab || 'server-vms';
 let refreshPaused = false;
 let refreshCountdownTimer = null;
@@ -223,12 +224,12 @@ spokeNavTabs.forEach((tab) => {
       t.classList.remove('active');
       t.setAttribute('aria-selected', 'false');
     });
-    spokeRoot?.querySelectorAll('.tab-content').forEach((c) => c.classList.add('hidden'));
+    spokeTabPanels.forEach((panel) => panel.classList.add('hidden'));
 
     tab.classList.add('active');
     tab.setAttribute('aria-selected', 'true');
     activeSpokeTab = tab.dataset.tab;
-    spokeRoot?.querySelector(`#tab-${CSS.escape(tab.dataset.tab)}`)?.classList.remove('hidden');
+    document.getElementById(`tab-${tab.dataset.tab}`)?.classList.remove('hidden');
     if (tab.dataset.tab === 'setup') activateSetupSubtab('setup-github');
     if (tab.dataset.tab === 'server') { activateServerSubtab('server-vms'); loadProxmoxApproved().catch(() => {}); }
     if (tab.dataset.tab === 'api-server') { renderServiceStatus().catch(() => {}); }
@@ -261,28 +262,28 @@ function resetTabDrilldowns(tabName) {
   }
 }
 
-function hydrateSetupSubtab(subtabId) {
+async function hydrateSetupSubtab(subtabId) {
   if (!subtabId) return;
 
   if (subtabId === 'setup-troubleshoot') {
-    loadSystemHealth();
+    await loadSystemHealth();
     return;
   }
 
   if (subtabId === 'setup-tls') {
-    loadSpokeAcmeSettings().catch(() => {});
+    await loadSpokeAcmeSettings().catch(() => {});
     return;
   }
 
-  loadSettings().catch(() => {});
+  await loadSettings().catch(() => {});
 
   if (subtabId === 'setup-relay') {
-    requestJson('/api/relay/status').then(setRelayStatus).catch(() => {});
+    await requestJson('/api/relay/status').then(setRelayStatus).catch(() => {});
     return;
   }
 
   if (subtabId === 'setup-central') {
-    loadCentralStatus().catch(() => {});
+    await loadCentralStatus().catch(() => {});
   }
 }
 
@@ -295,7 +296,7 @@ function activateSetupSubtab(subtabId = 'setup-github') {
     panel.classList.toggle('active', isActive);
     panel.classList.toggle('hidden', !isActive);
   });
-  hydrateSetupSubtab(subtabId);
+  void hydrateSetupSubtab(subtabId);
 }
 
 function activateConfigSubtab(subtabId = 'config-general') {
@@ -553,11 +554,11 @@ const versionAvailable = document.getElementById('version-available');
 const versionLastChecked = document.getElementById('version-last-checked');
 const setupActiveBranch = document.getElementById('setup-active-branch');
 const repoUrlInput = document.getElementById('repo-url-input');
-const centralTabButton = document.querySelector('#tab-nav .spoke-only .tab[data-tab="central"]');
-const configTabButton = document.querySelector('#tab-nav .spoke-only .tab[data-tab="config"]');
-const simTabButton = document.querySelector('#tab-nav .spoke-only .tab[data-tab="simulations"]');
-const setupSubtabButtons = spokeRoot?.querySelectorAll('.setup-subtab:not(.server-subtab):not(.sim-subtab):not(.central-subtab):not(.simtop-subtab)') || [];
-const setupSubpanels = spokeRoot?.querySelectorAll('.setup-subpanel:not(#server-vms):not(#server-usb):not(#server-node):not(#server-commands)') || [];
+const centralTabButtons = document.querySelectorAll('#tab-nav .spoke-only .tab[data-tab="central"]');
+const configTabButtons = document.querySelectorAll('#tab-nav .spoke-only .tab[data-tab="config"]');
+const simTabButtons = document.querySelectorAll('#tab-nav .spoke-only .tab[data-tab="simulations"]');
+const setupSubtabButtons = document.querySelectorAll('#tab-setup .setup-subnav .setup-subtab');
+const setupSubpanels = document.querySelectorAll('#tab-setup .setup-subpanel');
 const centralOverview = document.getElementById('central-overview');
 const centralSitesGrid = document.getElementById('central-sites-table');
 const centralEmpty = document.getElementById('central-empty');
@@ -5070,11 +5071,11 @@ if (purgeHistoryBtn) {
   });
 }
 
-if (simTabButton) {
-  simTabButton.addEventListener('click', () => {
+simTabButtons.forEach((button) => {
+  button.addEventListener('click', () => {
     loadSimulations();
   });
-}
+});
 
 if (simRefreshBtn) {
   simRefreshBtn.addEventListener('click', async () => {
@@ -5094,21 +5095,21 @@ if (centralDetailBack) {
   centralDetailBack.addEventListener('click', closeSiteDetail);
 }
 
-if (centralTabButton) {
-  centralTabButton.addEventListener('click', () => {
+centralTabButtons.forEach((button) => {
+  button.addEventListener('click', () => {
     if (!centralStatusInitialized || !Object.keys(centralStatusData).length) {
-      loadCentralStatus();
+      loadCentralStatus().catch(() => {});
     } else {
       renderCentralOverview();
     }
   });
-}
+});
 
-if (configTabButton) {
-  configTabButton.addEventListener('click', () => {
+configTabButtons.forEach((button) => {
+  button.addEventListener('click', () => {
     loadConfigEditor().catch(() => {});
   });
-}
+});
 
 // configSimulationSaveBtn removed — each section now has its own per-section Save button
 

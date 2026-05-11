@@ -9441,6 +9441,13 @@ async function loadHubConfig() {
   if (!currentTenantId || !canManageTenant()) return;
   const tabBtn = document.getElementById("settings-spoke-config-tab-btn");
   if (tabBtn) tabBtn.style.display = "";
+  // Pre-seed toggle from cached tenant data (instant, no flicker)
+  const cached = tenants.find(t => t.id === currentTenantId);
+  if (cached?.raw?.hub_config_enabled !== undefined) {
+    const toggle = document.getElementById("hub-config-enabled-toggle");
+    if (toggle) toggle.checked = Boolean(cached.raw.hub_config_enabled);
+    document.getElementById("hub-config-fields")?.classList.toggle("hidden", !cached.raw.hub_config_enabled);
+  }
   try {
     const res = await fetch(`/api/tenant/${currentTenantId}/hub-config`,
       { headers: { Authorization: `Bearer ${authToken}` } });
@@ -9936,6 +9943,8 @@ function bindEvents() {
       // Row-1 back-nav buttons in tenant context exit tenant context first
       if (tabButton.classList.contains("tab-back") && tenantContextActive) {
         exitTenantContext();
+        showTab(tabButton.dataset.tab, { button: tabButton, source: "admin" });
+        return;
       }
       showTab(tabButton.dataset.tab, { button: tabButton, source: tabButton.closest("#tenant-context-nav .tenant-context-nav-row2") ? "tenant" : "admin" });
       return;

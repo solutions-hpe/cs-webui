@@ -1055,6 +1055,7 @@ async function triggerUpdateAll() {
 function renderServerTab(data) {
   latestProxmoxData = data || latestProxmoxData;
   if (data?.reclone_state) latestRecloneState = data.reclone_state;
+  if (clients.size) refreshClientWatchdogBadges();
   renderProxmoxApproveState(
     Array.isArray(latestProxmoxData.pending_proxmox) ? latestProxmoxData.pending_proxmox : [],
     Array.isArray(latestProxmoxData.approved_proxmox) ? latestProxmoxData.approved_proxmox : []
@@ -1667,6 +1668,29 @@ function formatLastSeen(value) {
   return date.toLocaleString();
 }
 
+function proxmoxVmForHostname(hostname) {
+  const normalized = String(hostname || '').trim().toLowerCase();
+  if (!normalized) return null;
+  const vms = Array.isArray(latestProxmoxData?.vms) ? latestProxmoxData.vms : [];
+  return vms.find((vm) => String(vm?.name || '').trim().toLowerCase() === normalized) || null;
+}
+
+function clientHasPendingCheckin(hostname) {
+  return Boolean(proxmoxVmForHostname(hostname)?.pending_checkin);
+}
+
+function renderClientHostname(cell, hostname) {
+  cell.textContent = '';
+  const label = document.createElement('span');
+  label.textContent = hostname || '—';
+  cell.appendChild(label);
+  if (!hostname || !clientHasPendingCheckin(hostname)) return;
+  const badge = document.createElement('span');
+  badge.className = 'badge bg-warning text-dark ms-1';
+  badge.textContent = 'Awaiting Check-in';
+  cell.appendChild(badge);
+}
+
 function impactSummary(activeSimulations = []) {
   const labels = [...new Set(activeSimulations.map((sim) => IMPACT_LABELS[sim]).filter(Boolean))];
   return labels.length ? labels.join(' · ') : '— Normal';
@@ -1844,6 +1868,10 @@ function renderBadges(container, activeSimulations) {
   });
 }
 
+function refreshClientWatchdogBadges() {
+  Array.from(clients.values()).forEach((client) => upsertClient(client));
+}
+
 function upsertClient(client) {
   const existing = clients.get(client.hostname) || {};
   const merged = {
@@ -1864,7 +1892,7 @@ function upsertClient(client) {
 
   refs.statusDot.className = `status-dot ${merged.online ? 'online' : 'offline'}`;
   refs.mainRow.classList.toggle('client-offline', !merged.online);
-  refs.hostnameCell.textContent = merged.hostname || '—';
+  renderClientHostname(refs.hostnameCell, merged.hostname);
   refs.platformCell.textContent = merged.platform || '—';
   refs.simIdCell.textContent = merged.simulation_id || '—';
   refs.ssidCell.textContent = merged.connected_ssid || '—';

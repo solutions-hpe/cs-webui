@@ -148,6 +148,7 @@ let currentSettings = {
   hardware_checks: [],
   relay_enabled: 'off',
   relay_server_url: '',
+  hub_tls_verify: 'off',
   relay_spoke_name: '',
   relay_tenant_hint: '',
   relay_tenant_id: '',
@@ -686,6 +687,7 @@ const centralNewFields = document.getElementById('central-new-fields');
 const relayEnabledSelect = document.getElementById('relay-enabled-select');
 const relaySpokeName = document.getElementById('relay-spoke-name-input');
 const relayServerUrlInput = document.getElementById('relay-server-url-input');
+const relayHubTlsVerifyInput = document.getElementById('relay-hub-tls-verify-input');
 const relayTenantIdInput = document.getElementById('relay-tenant-id-input');
 const relayMsg = document.getElementById('relay-message');
 const relayClearConfigBtn = document.getElementById('relay-clear-config-btn');
@@ -865,6 +867,7 @@ function mergeSettings(next = {}) {
       : (currentSettings.hardware_checks || []),
     relay_enabled: next.relay_enabled ?? currentSettings.relay_enabled ?? 'off',
     relay_server_url: next.relay_server_url ?? currentSettings.relay_server_url ?? '',
+    hub_tls_verify: next.hub_tls_verify ?? currentSettings.hub_tls_verify ?? 'off',
     relay_spoke_name: next.relay_spoke_name ?? currentSettings.relay_spoke_name ?? '',
     relay_tenant_hint: next.relay_tenant_hint ?? next.relay_tenant_id ?? currentSettings.relay_tenant_hint ?? currentSettings.relay_tenant_id ?? '',
     relay_tenant_id: next.relay_tenant_id ?? next.relay_tenant_hint ?? currentSettings.relay_tenant_id ?? currentSettings.relay_tenant_hint ?? '',
@@ -1551,6 +1554,7 @@ function applySettingsToUI(s) {
   if (csStatus) csStatus.textContent = centralApi.central.client_secret_configured ? '✓ Secret configured' : '';
   if (relayEnabledSelect && !relayEnabledSelect.matches(':focus')) relayEnabledSelect.value = settings.relay_enabled || 'off';
   setInputValueIfIdle(relayServerUrlInput, settings.relay_server_url || '');
+  if (relayHubTlsVerifyInput) relayHubTlsVerifyInput.checked = settings.hub_tls_verify === 'on';
   setInputValueIfIdle(relaySpokeName, settings.relay_spoke_name || '');
   setInputValueIfIdle(relayTenantIdInput, settings.relay_tenant_id || settings.relay_tenant_hint || '');
   const spokeIdDisplay = document.getElementById('relay-spoke-id-display');
@@ -5402,6 +5406,7 @@ async function _autoSaveRelay() {
   const payload = {
     relay_enabled: relayEnabledSelect?.value || 'off',
     relay_server_url: relayServerUrlInput?.value?.trim() || '',
+    hub_tls_verify: relayHubTlsVerifyInput?.checked ? 'on' : 'off',
     relay_spoke_name: relaySpokeName?.value?.trim() || '',
     relay_tenant_hint: tenantId,
     relay_tenant_id: tenantId,
@@ -5421,6 +5426,7 @@ async function _autoSaveRelay() {
 }
 
 if (relayEnabledSelect) relayEnabledSelect.addEventListener('change', _autoSaveRelay);
+if (relayHubTlsVerifyInput) relayHubTlsVerifyInput.addEventListener('change', _autoSaveRelay);
 [relayServerUrlInput, relaySpokeName, relayTenantIdInput].forEach((el) => {
   if (el) el.addEventListener('blur', _autoSaveRelay);
 });

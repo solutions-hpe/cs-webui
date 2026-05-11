@@ -1642,6 +1642,13 @@
                         <input id="relay-server-url-input" type="text" data-key="relay_server_url" placeholder="https://hub.example.com">
                       </div>
                     </div>
+                    <div class="toggle-grid" style="margin-bottom:12px;">
+                      <label class="toggle-label">
+                        <input type="checkbox" id="relay-hub-tls-verify-input">
+                        <span>Verify Hub TLS Certificate</span>
+                      </label>
+                    </div>
+                    <p class="form-hint" style="margin:0 0 12px;">Enable after provisioning the hub's ACME certificate.</p>
                     <div class="form-row">
                       <div class="form-group" style="flex:2;">
                         <label>Tenant ID <span class="form-hint-inline">(optional — pre-register with a specific tenant)</span></label>

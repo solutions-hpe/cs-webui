@@ -661,10 +661,10 @@
             </div>
           </div>
 
-          <!-- Right: Auto-Provisioning Live Status -->
+          <!-- Right: VM Auto-Provisioning Live Status -->
           <div id="autoprov-live-panel" class="setup-card vm-server-status-tile">
-            <div class="setup-card-header" style="margin-bottom:10px;">
-              <h2 style="font-size:1rem;margin:0;">⚡ Auto-Provisioning</h2>
+            <div class="setup-card-header" style="margin-bottom:8px;">
+              <h2 style="font-size:1rem;margin:0;">⚡ VM Auto-Provisioning</h2>
               <span id="autoprov-live-badge" class="badge badge-grey">Off</span>
             </div>
             <div id="autoprov-live-summary" class="autoprov-live-summary"></div>
@@ -1343,10 +1343,10 @@
         </div>
 
         <div id="setup-proxmox" class="setup-subpanel hidden">
-          <!-- USB Auto-Provisioning card -->
+          <!-- VM Auto-Provisioning card -->
           <div class="setup-card setup-section-gap">
             <div class="setup-card-header">
-              <h2>USB Auto-Provisioning</h2>
+              <h2>VM Auto-Provisioning</h2>
               <p>Configure certified USB dongles, provisioning behavior, and VM template assignments.</p>
             </div>
             <div class="setup-form">
@@ -2010,11 +2010,12 @@
 
     <div id="app-notification" class="app-notification settings-message hidden" aria-live="polite"></div>
 
-    <footer class="page-footer">
+  </div>
+
+  <footer class="page-footer">
     <span>© Hewlett Packard Enterprise · Client Simulator</span>
     <span id="footer-version">v0.1</span>
   </footer>
-  </div>
 
   <div id="toast-container" style="position:fixed;top:72px;right:24px;z-index:400;display:flex;flex-direction:column;gap:8px;"></div>
 </body>

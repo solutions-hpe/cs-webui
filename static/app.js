@@ -2361,7 +2361,7 @@ function renderAutoProvisionStatus() {
     if (!autoProv) {
       bar.classList.add('is-idle');
       if (iconEl) iconEl.textContent = '⏹';
-      if (textEl) textEl.textContent = 'Auto-Provisioning: Not Running';
+      if (textEl) textEl.textContent = 'VM Auto-Provisioning: Not Running';
     } else {
       const total = usbState.length;
       const provisioning = usbState.filter((e) => e.prov_status === 'provisioning');
@@ -2376,7 +2376,7 @@ function renderAutoProvisionStatus() {
       if (total === 0) {
         bar.classList.add('is-idle');
         if (iconEl) iconEl.textContent = '📋';
-        if (textEl) textEl.textContent = 'Auto-Provisioning: No USB devices tracked';
+        if (textEl) textEl.textContent = 'VM Auto-Provisioning: No USB devices tracked';
       } else if (provisioning.length > 0 || startingUp.length > 0) {
         bar.classList.add('is-active');
         if (iconEl) iconEl.textContent = '⏳';
@@ -2384,11 +2384,11 @@ function renderAutoProvisionStatus() {
         if (provisioning.length > 0) parts.push(`${provisioning.length} cloning`);
         if (startingUp.length > 0) parts.push(`${startingUp.length} starting up`);
         parts.push(`${fullyActive} / ${total} active`);
-        if (textEl) textEl.textContent = `Auto-Provisioning: ${parts.join(' · ')}`;
+        if (textEl) textEl.textContent = `VM Auto-Provisioning: ${parts.join(' · ')}`;
       } else {
         bar.classList.add('is-idle');
         if (iconEl) iconEl.textContent = '✅';
-        if (textEl) textEl.textContent = `Auto-Provisioning: All ${total} VMs active`;
+        if (textEl) textEl.textContent = `VM Auto-Provisioning: All ${total} VMs active`;
       }
     }
   }
@@ -2407,7 +2407,7 @@ function renderAutoProvisionStatus() {
 
   if (!autoProv) {
     if (liveBadge) { liveBadge.textContent = 'Off'; liveBadge.className = 'badge badge-grey'; }
-    liveSummary.innerHTML = `<div class="muted" style="font-size:13px;">Auto-Provisioning is disabled. Enable it in Setup → USB.</div>`;
+    liveSummary.innerHTML = `<div class="muted" style="font-size:13px;">VM Auto-Provisioning is disabled. Enable it in Setup → Proxmox.</div>`;
     logEl.innerHTML = '';
     return;
   }

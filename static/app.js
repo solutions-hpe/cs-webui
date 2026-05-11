@@ -1238,7 +1238,9 @@ function renderServerTab(data) {
   const emptyTpl = document.getElementById('server-empty-tpl');
   if (templateTbody) {
     templateTbody.innerHTML = templateVms.map((vm) => {
-      const statusDot = vm.status === 'running' ? '🟢' : vm.status === 'paused' ? '🟡' : '⚫';
+      const isProvisioning = vm.prov_status === 'provisioning' || vm.pending_checkin === true;
+      const statusDot = isProvisioning ? '🔵' : vm.status === 'running' ? '🟢' : vm.status === 'paused' ? '🟡' : '⚫';
+      const statusText = isProvisioning ? 'provisioning' : (vm.status || 'unknown');
       const memUsed  = vm.mem    ? fmtSize(Number(vm.mem)    * 1024 * 1024) : '—';
       const memTotal = vm.maxmem ? fmtSize(Number(vm.maxmem) * 1024 * 1024) : '—';
       const cpu = vm.cpu != null && !Number.isNaN(Number(vm.cpu)) ? Number(vm.cpu).toFixed(1) + '%' : '—';
@@ -1247,7 +1249,7 @@ function renderServerTab(data) {
         <td>${escHtml(vm.name || '—')}</td>
         <td>${cpu}</td>
         <td>${memUsed} / ${memTotal}</td>
-        <td>${statusDot} ${vm.status || 'unknown'}</td>
+        <td>${statusDot} ${statusText}</td>
       </tr>`;
     }).join('');
     if (emptyTpl) emptyTpl.style.display = templateVms.length ? 'none' : '';
@@ -1293,7 +1295,10 @@ function renderServerTab(data) {
     sorted.forEach((vm) => {
       const isRecloning  = recloningVmids.has(Number(vm.vmid));
       const isWebui      = webuiVmid != null && Number(vm.vmid) === webuiVmid;
-      const baseStatusText = `${vm.status === 'running' ? '🟢' : vm.status === 'paused' ? '🟡' : '⚫'} ${vm.status || 'unknown'}`;
+      const isProvisioning = vm.prov_status === 'provisioning' || vm.pending_checkin === true;
+      const baseStatusText = isProvisioning
+        ? '🔵 provisioning'
+        : `${vm.status === 'running' ? '🟢' : vm.status === 'paused' ? '🟡' : '⚫'} ${vm.status || 'unknown'}`;
       const statusLabel  = isRecloning ? '🟡 recloning…' : baseStatusText;
       const memUsed  = vm.mem    ? fmtSize(Number(vm.mem)    * 1024 * 1024) : '—';
       const memTotal = vm.maxmem ? fmtSize(Number(vm.maxmem) * 1024 * 1024) : '—';

@@ -351,6 +351,7 @@
         <button class="setup-subtab settings-subtab" data-subtab="settings-api" type="button">API Info</button>
         <button class="setup-subtab settings-subtab" data-subtab="settings-tls" type="button">TLS Certificate</button>
         <button class="setup-subtab settings-subtab" data-subtab="settings-pending-spokes" id="settings-pending-tab-btn" type="button" style="display:none;">Pending Spokes <span id="settings-pending-count" class="badge-count">0</span></button>
+        <button class="setup-subtab settings-subtab" data-subtab="settings-spoke-config" id="settings-spoke-config-tab-btn" type="button" style="display:none;">Spoke Config</button>
       </nav>
 
         <div id="settings-account" class="setup-subpanel" style="margin-top:16px;">
@@ -514,6 +515,43 @@
               <thead><tr><th>Spoke Name</th><th>Hostname</th><th>Registered</th><th></th></tr></thead>
               <tbody id="settings-pending-tbody"></tbody>
             </table>
+          </div>
+        </div>
+
+        <div id="settings-spoke-config" class="setup-subpanel hidden" style="margin-top:16px;">
+          <div class="setup-card" style="max-width:760px;">
+            <div class="setup-card-header">
+              <h2>Spoke Config (Hub as Source of Truth)</h2>
+              <p>When enabled, the hub pushes this config to all spokes on approval and whenever it changes. The first approved spoke seeds this config automatically.</p>
+            </div>
+            <div class="form-row" style="margin-bottom:18px;">
+              <label class="toggle-label">
+                <input type="checkbox" id="hub-config-enabled-toggle">
+                <span>Enable hub as source of truth</span>
+              </label>
+            </div>
+            <div id="hub-config-fields" class="hidden">
+              <div class="form-grid">
+                <label>Repo Branch<input type="text" id="hc-repo_branch" placeholder="lrb"></label>
+                <label>Reclone Schedule<select id="hc-reclone_schedule_enabled"><option value="off">Off</option><option value="on">On</option></select></label>
+                <label>Reclone Cron<input type="text" id="hc-reclone_schedule_cron" placeholder="sunday 02:00"></label>
+                <label>Reclone Concurrency<input type="number" id="hc-reclone_concurrency" min="1" max="10" placeholder="1"></label>
+                <label>VM Image 1 Template ID<input type="text" id="hc-vm_image_1_template_id" placeholder="100"></label>
+                <label>VM Image 2 Template ID<input type="text" id="hc-vm_image_2_template_id" placeholder="200"></label>
+                <label>VM Image 1 %<input type="number" id="hc-vm_image_1_pct" min="0" max="100" placeholder="50"></label>
+                <label>USB Auto Provision<select id="hc-usb_auto_provision"><option value="off">Off</option><option value="on">On</option></select></label>
+                <label>USB Missing Timeout (s)<input type="number" id="hc-usb_missing_timeout" placeholder="60"></label>
+                <label>VM Silent Timeout (h)<input type="number" id="hc-vm_silent_timeout" placeholder="24"></label>
+                <label>L1 VLAN Start<input type="text" id="hc-l1_vlan_start" placeholder="100"></label>
+                <label>L1 VLAN End<input type="text" id="hc-l1_vlan_end" placeholder="199"></label>
+                <label style="grid-column:1/-1;">USB VID:PIDs (JSON array)<input type="text" id="hc-usb_vidpids" placeholder='["vid:pid"]'></label>
+                <label style="grid-column:1/-1;">Ignored Hostnames (JSON array)<input type="text" id="hc-ignored_hostnames" placeholder='["sim-rpi-0000"]'></label>
+              </div>
+              <div style="margin-top:16px;display:flex;gap:10px;align-items:center;">
+                <button class="btn-primary" id="hub-config-save-btn">Save &amp; Push to All Spokes</button>
+                <span id="hub-config-save-status" style="font-size:0.85rem;"></span>
+              </div>
+            </div>
           </div>
         </div>
       </main>

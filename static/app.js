@@ -9025,6 +9025,7 @@ async function loadHubSettings() {
   ["aruba-save-btn", "notif-save-btn", "acme-request-btn"].forEach(id => { const btn = document.getElementById(id); if (btn) btn.disabled = disabled; });
   // Load tenant admin pending spokes whenever settings tab opens
   if (canManageTenant() && !currentUser?.is_superadmin) loadTenantPendingSpokes();
+  if (canManageTenant()) loadHubConfig();
   const res = await apiFetch(`/api/${encodeURIComponent(currentTenantId)}/settings`);
   if (!res || !res.ok) return;
   const data = await res.json();
@@ -9426,6 +9427,71 @@ function renderPendingSpokes(items) {
       </td>
     </tr>
   `).join("");
+}
+
+// ── Hub as Source of Truth config ────────────────────────────────────────────
+const HUB_CONFIG_FIELDS = [
+  "repo_branch","reclone_schedule_enabled","reclone_schedule_cron","reclone_concurrency",
+  "vm_image_1_template_id","vm_image_2_template_id","vm_image_1_pct",
+  "usb_auto_provision","usb_missing_timeout","vm_silent_timeout",
+  "l1_vlan_start","l1_vlan_end","usb_vidpids","ignored_hostnames",
+];
+
+async function loadHubConfig() {
+  if (!currentTenantId || !canManageTenant()) return;
+  const tabBtn = document.getElementById("settings-spoke-config-tab-btn");
+  if (tabBtn) tabBtn.style.display = "";
+  try {
+    const res = await fetch(`/api/tenant/${currentTenantId}/hub-config`,
+      { headers: { Authorization: `Bearer ${authToken}` } });
+    if (!res.ok) return;
+    const data = await res.json();
+    const toggle = document.getElementById("hub-config-enabled-toggle");
+    if (toggle) toggle.checked = Boolean(data.hub_config_enabled);
+    const fields = document.getElementById("hub-config-fields");
+    if (fields) fields.classList.toggle("hidden", !data.hub_config_enabled);
+    const cfg = data.hub_config || {};
+    HUB_CONFIG_FIELDS.forEach(key => {
+      const el = document.getElementById(`hc-${key}`);
+      if (el && cfg[key] !== undefined) el.value = typeof cfg[key] === "object" ? JSON.stringify(cfg[key]) : cfg[key];
+    });
+  } catch (_) { /* silent */ }
+}
+
+async function saveHubConfig() {
+  if (!currentTenantId || !canManageTenant()) return;
+  const toggle = document.getElementById("hub-config-enabled-toggle");
+  const enabled = toggle?.checked ?? false;
+  const config = {};
+  HUB_CONFIG_FIELDS.forEach(key => {
+    const el = document.getElementById(`hc-${key}`);
+    if (!el) return;
+    const v = el.value.trim();
+    if (!v) return;
+    if (key === "usb_vidpids" || key === "ignored_hostnames") {
+      try { config[key] = JSON.parse(v); } catch { config[key] = v; }
+    } else {
+      config[key] = v;
+    }
+  });
+  const statusEl = document.getElementById("hub-config-save-status");
+  if (statusEl) statusEl.textContent = "Saving…";
+  try {
+    const res = await fetch(`/api/tenant/${currentTenantId}/hub-config`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${authToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ hub_config_enabled: enabled, hub_config: config }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      if (statusEl) statusEl.textContent = `✅ Saved. Pushed to ${data.pushed_to_spokes} spoke(s).`;
+      setTimeout(() => { if (statusEl) statusEl.textContent = ""; }, 4000);
+    } else {
+      if (statusEl) statusEl.textContent = `❌ ${data.detail || "Save failed"}`;
+    }
+  } catch (e) {
+    if (statusEl) statusEl.textContent = `❌ ${e.message}`;
+  }
 }
 
 // ── Tenant admin pending spokes ──────────────────────────────────────────────
@@ -10018,6 +10084,10 @@ function bindEvents() {
   $("#pw-save-btn")?.addEventListener("click", savePassword);
   $("#aruba-save-btn")?.addEventListener("click", saveArubaSettings);
   $("#notif-save-btn")?.addEventListener("click", saveNotificationSettings);
+  $("#hub-config-save-btn")?.addEventListener("click", saveHubConfig);
+  $("#hub-config-enabled-toggle")?.addEventListener("change", function () {
+    document.getElementById("hub-config-fields")?.classList.toggle("hidden", !this.checked);
+  });
   $("#sa-gkill-refresh-btn")?.addEventListener("click", loadGkillState);
   $("#sa-add-tenant-btn")?.addEventListener("click", () => $("#sa-tenant-form")?.classList.toggle("hidden"));
   $("#sa-cancel-tenant-btn")?.addEventListener("click", () => $("#sa-tenant-form")?.classList.add("hidden"));

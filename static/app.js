@@ -5197,7 +5197,7 @@ if (purgeHistoryBtn) {
       alert(`Purge failed: ${err.message}`);
     } finally {
       purgeHistoryBtn.disabled = false;
-      purgeHistoryBtn.textContent = '🗑 Purge History';
+      purgeHistoryBtn.textContent = '🗑 Purge Clients';
     }
   });
 }

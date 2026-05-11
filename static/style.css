@@ -2063,6 +2063,7 @@ details[open] > summary.panel-header { margin-bottom: 16px; }
 .spoke-section { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
 .spoke-section-header { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--card-bg); cursor: pointer; user-select: none; }
 .spoke-section-header:hover { background: var(--hover-bg); }
+.spoke-section-header .spoke-delete-btn { margin-left: auto; flex-shrink: 0; }
 .spoke-section-body { padding: 0 14px 14px; display: none; }
 .spoke-section-body.expanded { display: block; }
 

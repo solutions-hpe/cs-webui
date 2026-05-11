@@ -8526,6 +8526,7 @@ function createSpokeSection(spoke) {
       <span class="spoke-hostname">${escHtml(spokePrimaryLabel(spoke))}</span>
       <span class="spoke-label-inline">${escHtml(spokeSecondaryLabel(spoke))}</span>
       <span class="spoke-meta">${clients.length} clients · ${escHtml(relativeTime(spoke.last_seen))}</span>
+      <button class="btn btn-danger btn-small spoke-delete-btn" data-delete-spoke="${escHtml(spoke.id)}" title="Delete this spoke" type="button">✕ Delete</button>
     </div>
     <div class="spoke-section-body ${expanded ? "expanded" : ""}"></div>
   `;
@@ -9398,6 +9399,17 @@ async function createTenant() {
   await loadSuperadmin();
 }
 
+async function deleteSpoke(spokeId) {
+  if (!window.confirm(`Delete spoke "${spokeId}"? This will remove it from the hub. The spoke itself is not affected.`)) return;
+  const res = await apiFetch(`/api/spokes/${encodeURIComponent(spokeId)}`, { method: "DELETE" });
+  if (!res || !res.ok) {
+    showToast("Failed to delete spoke.", "err");
+    return;
+  }
+  showToast("Spoke deleted.", "ok");
+  await loadSpokes(true);
+}
+
 async function deleteTenant(id) {
   if (!window.confirm(`Delete tenant ${id}?`)) return;
   const res = await apiFetch(`/api/superadmin/tenants/${encodeURIComponent(id)}`, { method: "DELETE" });
@@ -9715,6 +9727,7 @@ function bindEvents() {
     if (event.target.matches("[data-reject-id]")) rejectPendingSpoke(event.target.dataset.rejectId);
     if (event.target.matches("[data-delete-tenant]")) deleteTenant(event.target.dataset.deleteTenant);
     if (event.target.matches("[data-delete-user]")) deleteUser(event.target.dataset.deleteUser);
+    if (event.target.matches("[data-delete-spoke]")) { deleteSpoke(event.target.dataset.deleteSpoke); return; }
     if (event.target.matches("[data-assign-role]")) assignRole(event.target.dataset.assignRole);
     if (event.target.matches("[data-remove-role]")) {
       const [userId, tenantId] = event.target.dataset.removeRole.split(":");

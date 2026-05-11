@@ -67,6 +67,9 @@ body.mode-spoke #spoke-root {
   overflow-y: auto;
 }
 
+/* Hub root is hidden until body.mode-hub is confirmed — prevents flash on spoke */
+#hub-root { display: none; }
+
 a { color: var(--hpe-green); text-decoration: none; }
 a:hover { color: var(--hpe-green-dark); text-decoration: underline; }
 

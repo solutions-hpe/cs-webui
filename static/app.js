@@ -134,8 +134,9 @@ let latestRecloneState = null;
 let usbCountdownTimer = null;
 let activeVmCat = 'sim';   // 'sim' | 'other' | 'containers' | 'templates'
 let webuiVmid = null;      // VMID of the LXC container running this service (protected from delete)
-let activeSpokeTab = document.querySelector('.spoke-only .tab.active')?.dataset.tab || 'simulations';
-let activeServerSubtab = document.querySelector('.server-subtab.active')?.dataset.subtab || 'server-vms';
+const spokeRoot = document.getElementById('spoke-root');
+let activeSpokeTab = spokeRoot?.querySelector('.tab.active')?.dataset.tab || 'simulations';
+let activeServerSubtab = spokeRoot?.querySelector('.server-subtab.active')?.dataset.subtab || 'server-vms';
 let refreshPaused = false;
 let refreshCountdownTimer = null;
 let refreshSecondsLeft = 10;
@@ -214,18 +215,18 @@ function bindSecretInput(input) {
 const refreshActiveServerSubtabs = new Set(['server-vms', 'server-commands']);
 
 // ── Tab navigation ────────────────────────────────────────────────
-document.querySelectorAll('.tab').forEach((tab) => {
+spokeRoot?.querySelectorAll('.tab').forEach((tab) => {
   tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach((t) => {
+    spokeRoot.querySelectorAll('.tab').forEach((t) => {
       t.classList.remove('active');
       t.setAttribute('aria-selected', 'false');
     });
-    document.querySelectorAll('.tab-content').forEach((c) => c.classList.add('hidden'));
+    spokeRoot.querySelectorAll('.tab-content').forEach((c) => c.classList.add('hidden'));
 
     tab.classList.add('active');
     tab.setAttribute('aria-selected', 'true');
     activeSpokeTab = tab.dataset.tab;
-    document.getElementById(`tab-${tab.dataset.tab}`).classList.remove('hidden');
+    spokeRoot.querySelector(`#tab-${CSS.escape(tab.dataset.tab)}`)?.classList.remove('hidden');
     if (tab.dataset.tab === 'setup') activateSetupSubtab('setup-github');
     if (tab.dataset.tab === 'server') { activateServerSubtab('server-vms'); loadProxmoxApproved().catch(() => {}); }
     if (tab.dataset.tab === 'api-server') { renderServiceStatus().catch(() => {}); }
@@ -524,12 +525,12 @@ const versionAvailable = document.getElementById('version-available');
 const versionLastChecked = document.getElementById('version-last-checked');
 const setupActiveBranch = document.getElementById('setup-active-branch');
 const repoUrlInput = document.getElementById('repo-url-input');
-const centralTabButton = document.querySelector('.tab[data-tab="central"]');
-const configTabButton = document.querySelector('.tab[data-tab="config"]');
-const simTabButton = document.querySelector('.tab[data-tab="simulations"]');
-const setupTabButton = document.querySelector('.tab[data-tab="setup"]');
-const setupSubtabButtons = document.querySelectorAll('.setup-subtab:not(.server-subtab):not(.sim-subtab):not(.central-subtab):not(.simtop-subtab)');
-const setupSubpanels = document.querySelectorAll('.setup-subpanel:not(#server-vms):not(#server-usb):not(#server-node):not(#server-commands)');
+const centralTabButton = spokeRoot?.querySelector('.tab[data-tab="central"]');
+const configTabButton = spokeRoot?.querySelector('.tab[data-tab="config"]');
+const simTabButton = spokeRoot?.querySelector('.tab[data-tab="simulations"]');
+const setupTabButton = spokeRoot?.querySelector('.tab[data-tab="setup"]');
+const setupSubtabButtons = spokeRoot?.querySelectorAll('.setup-subtab:not(.server-subtab):not(.sim-subtab):not(.central-subtab):not(.simtop-subtab)') || [];
+const setupSubpanels = spokeRoot?.querySelectorAll('.setup-subpanel:not(#server-vms):not(#server-usb):not(#server-node):not(#server-commands)') || [];
 const centralOverview = document.getElementById('central-overview');
 const centralSitesGrid = document.getElementById('central-sites-table');
 const centralEmpty = document.getElementById('central-empty');
@@ -6276,10 +6277,15 @@ let autoRefreshTimer = null;
 let autoRefreshCountdownTimer = null;
 let autoRefreshSecondsLeft = 10;
 let refreshPaused = false;
-const autoRefreshActiveTabs = new Set(["dashboard", "spokes", "commands"]);
+const autoRefreshActiveTabs = new Set(["dashboard", "simulations", "clients", "spokes", "config"]);
 let tenantDetailState = { open: false, tenantId: null, activeTab: "dashboard", data: {} };
 let tenantUserCounts = {};
 let dashboardTenantRows = [];
+let aggregateDashboardData = null;
+let aggregateSimulationRows = [];
+let aggregateClientRows = [];
+const hubSimulationUiState = { search: "" };
+const hubClientUiState = { search: "", status: "all", spoke: "all" };
 const tenantDashboardSort = { key: "name", direction: "asc" };
 
 const PROCESSING_FEATURES = ["aruba_polling", "teams_webhook", "email", "heartbeat", "gkill", "schedules", "repo_sync"];
@@ -6471,6 +6477,152 @@ function renderTenantSummaryPills(summary) {
   `;
 }
 
+function getActiveTenantId() {
+  return tenantDetailState.open ? tenantDetailState.tenantId : currentTenantId;
+}
+
+function aggregateEndpoint(path) {
+  const tenantId = getActiveTenantId();
+  return tenantId
+    ? `/api/aggregate/${path}?tenant_id=${encodeURIComponent(tenantId)}`
+    : `/api/aggregate/${path}`;
+}
+
+async function loadAggregateData(path) {
+  if (!currentUser || !getActiveTenantId()) return null;
+  const res = await apiFetch(aggregateEndpoint(path));
+  if (!res || !res.ok) return null;
+  return res.json();
+}
+
+function hubSimulationBadgeClass(simulation) {
+  if (FAILURE_SIMS.has(simulation)) return "badge badge-failure";
+  if (TRAFFIC_SIMS.has(simulation)) return "badge badge-traffic";
+  return "badge badge-grey";
+}
+
+function hubImpactSummary(activeSimulations = []) {
+  const labels = [...new Set((activeSimulations || []).map(sim => IMPACT_LABELS[sim]).filter(Boolean))];
+  return labels.length ? labels.join(" · ") : "— Normal";
+}
+
+function simulationStatusBadge(status) {
+  const normalized = String(status || "").toLowerCase();
+  const cls = normalized.includes("running") ? "online" : normalized.includes("offline") ? "offline" : "warning";
+  return `<span class="site-status-pill ${cls}">${escHtml(status || "Unknown")}</span>`;
+}
+
+function renderDashboardAggregate(data) {
+  const hardwareRows = Object.entries(data.hardware_breakdown || {}).map(([name, count]) => `
+    <tr><td>${escHtml(name)}</td><td>${count}</td></tr>
+  `).join("");
+  const checks = data.checks_summary || {};
+  return `
+    <div class="tenant-metrics-grid">
+      <article class="tenant-metric-card"><span class="tenant-metric-label">Total Clients</span><strong class="tenant-metric-value">${data.client_count ?? 0}</strong><span class="tenant-metric-hint">Across approved spokes</span></article>
+      <article class="tenant-metric-card"><span class="tenant-metric-label">Spoke Health</span><strong class="tenant-metric-value">${data.spokes_online ?? 0} / ${data.spokes_total ?? 0}</strong><span class="tenant-metric-hint">Online within last 120s</span></article>
+      <article class="tenant-metric-card"><span class="tenant-metric-label">Checks Passing</span><strong class="tenant-metric-value">${checks.pass ?? 0}</strong><span class="tenant-metric-hint">Warnings ${checks.warning ?? 0} · Failing ${checks.fail ?? 0}</span></article>
+      <article class="tenant-metric-card"><span class="tenant-metric-label">Hardware Types</span><strong class="tenant-metric-value">${Object.keys(data.hardware_breakdown || {}).length}</strong><span class="tenant-metric-hint">Observed client platforms</span></article>
+    </div>
+    <div class="tenant-detail-grid">
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>Hardware Breakdown</h2><p>Client totals per reported hardware type for this tenant.</p></div>
+        <table class="data-table">
+          <thead><tr><th>Hardware Type</th><th>Count</th></tr></thead>
+          <tbody>${hardwareRows || '<tr><td colspan="2" class="empty-state">No client hardware reported.</td></tr>'}</tbody>
+        </table>
+      </section>
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>Checks Summary</h2><p>Roll-up across stored spoke telemetry in this tenant.</p></div>
+        <table class="data-table">
+          <tbody>
+            <tr><td>Pass</td><td>${checks.pass ?? 0}</td></tr>
+            <tr><td>Fail</td><td>${checks.fail ?? 0}</td></tr>
+            <tr><td>Warning</td><td>${checks.warning ?? 0}</td></tr>
+            <tr><td>Spokes Online</td><td>${data.spokes_online ?? 0} of ${data.spokes_total ?? 0}</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  `;
+}
+
+function renderSimulationRows() {
+  const tbody = $("#hub-simulations-tbody");
+  if (!tbody) return;
+  const search = hubSimulationUiState.search.trim().toLowerCase();
+  const rows = aggregateSimulationRows.filter(row => !search
+    || String(row.spoke_name || row.spoke_hostname || "").toLowerCase().includes(search)
+    || String(row.simulation_name || "").toLowerCase().includes(search)
+    || String(row.status || "").toLowerCase().includes(search));
+  const uniqueSpokes = new Set(rows.map(row => row.spoke_id));
+  const totalClients = rows.reduce((sum, row) => sum + Number(row.client_count || 0), 0);
+  $("#hub-simulations-pill") && ($("#hub-simulations-pill").textContent = `${rows.length} simulations`);
+  $("#hub-simulation-clients-pill") && ($("#hub-simulation-clients-pill").textContent = `${totalClients} clients`);
+  $("#hub-simulation-spokes-pill") && ($("#hub-simulation-spokes-pill").textContent = `${uniqueSpokes.size} spokes`);
+  tbody.innerHTML = rows.length ? rows.map(row => `
+    <tr>
+      <td><strong>${escHtml(row.spoke_name || row.spoke_hostname || row.spoke_id)}</strong></td>
+      <td>${escHtml(row.simulation_name || "—")}</td>
+      <td>${simulationStatusBadge(row.status)}</td>
+      <td>${Number(row.client_count || 0)}</td>
+    </tr>
+  `).join("") : '<tr><td colspan="4" class="empty-state">No simulation telemetry reported for this tenant.</td></tr>';
+}
+
+function updateClientSpokeFilterOptions() {
+  const select = $("#hub-clients-spoke-filter");
+  if (!select) return;
+  const currentValue = select.value || "all";
+  const options = [...new Set(aggregateClientRows.map(row => row.spoke_name || row.spoke_hostname || row.spoke_id).filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right));
+  select.innerHTML = '<option value="all">All spokes</option>' + options.map(name => `<option value="${escHtml(name)}">${escHtml(name)}</option>`).join("");
+  select.value = options.includes(currentValue) ? currentValue : "all";
+}
+
+function renderClientRowsForHub() {
+  const tbody = $("#hub-clients-tbody");
+  if (!tbody) return;
+  const search = hubClientUiState.search.trim().toLowerCase();
+  const rows = aggregateClientRows.filter(client => {
+    const statusMatch = hubClientUiState.status === "all"
+      || (hubClientUiState.status === "online" && client.online)
+      || (hubClientUiState.status === "offline" && !client.online);
+    if (!statusMatch) return false;
+    const spokeName = client.spoke_name || client.spoke_hostname || client.spoke_id || "";
+    if (hubClientUiState.spoke !== "all" && spokeName !== hubClientUiState.spoke) return false;
+    if (!search) return true;
+    const haystack = [
+      client.hostname,
+      spokeName,
+      client.platform,
+      client.simulation_id,
+      client.connected_ssid,
+      ...(client.active_simulations || []),
+    ].join(" ").toLowerCase();
+    return haystack.includes(search);
+  });
+  const onlineCount = rows.filter(client => client.online).length;
+  const uniqueSpokes = new Set(rows.map(client => client.spoke_id));
+  $("#hub-clients-pill") && ($("#hub-clients-pill").textContent = `${rows.length} clients`);
+  $("#hub-clients-online-pill") && ($("#hub-clients-online-pill").textContent = `${onlineCount} online`);
+  $("#hub-clients-spokes-pill") && ($("#hub-clients-spokes-pill").textContent = `${uniqueSpokes.size} spokes`);
+  tbody.innerHTML = rows.length ? rows.map(client => `
+    <tr>
+      <td><span class="site-status-pill ${client.online ? "online" : "offline"}">${client.online ? "Online" : "Offline"}</span></td>
+      <td>${escHtml(client.hostname || "—")}</td>
+      <td>${escHtml(client.spoke_name || client.spoke_hostname || client.spoke_id || "—")}</td>
+      <td>${escHtml(client.platform || client.hw_type || "—")}</td>
+      <td>${escHtml(client.simulation_id || "—")}</td>
+      <td>${escHtml(client.connected_ssid || "—")}</td>
+      <td><div class="badge-list">${(client.active_simulations || []).length ? client.active_simulations.map(sim => `<span class="${hubSimulationBadgeClass(sim)}">${escHtml(sim)}</span>`).join("") : '<span class="muted">—</span>'}</div></td>
+      <td>${escHtml(hubImpactSummary(client.active_simulations || []))}</td>
+      <td>${escHtml(fmtDate(client.last_seen))}</td>
+      <td>${Number(client.error_count || 0)}</td>
+    </tr>
+  `).join("") : '<tr><td colspan="10" class="empty-state">No client telemetry reported for this tenant.</td></tr>';
+}
+
 function buildTenantUserCounts(users = []) {
   return users.reduce((counts, user) => {
     (user.tenant_roles || []).forEach(role => {
@@ -6589,7 +6741,10 @@ async function refreshAfterSpokeApproval(tenantId = currentTenantId) {
     }
     await loadDashboard(true);
     if (tenantId === currentTenantId) {
+      await loadSimulations(true);
+      await loadClients(true);
       await loadSpokes(true);
+      await loadConfig(true);
     }
     if (tenantDetailState.open && tenantDetailState.tenantId === tenantId) {
       const data = await loadTenantDetailData(true);
@@ -6727,8 +6882,8 @@ function applyAuthUI() {
   buildTenantSelector();
   syncRoleBadge();
   buildSuperadminTenantTabs();
-  const settingsTab = $('.tab[data-tab="settings"]');
-  settingsTab?.classList.toggle("hidden", !canManageTenant() && !currentUser.is_superadmin);
+  const setupTab = $('.tab[data-tab="setup"]');
+  setupTab?.classList.toggle("hidden", !canManageTenant() && !currentUser.is_superadmin);
 }
 
 async function loadUserContext() {
@@ -6806,6 +6961,9 @@ function logout(showMessage = true) {
   currentTenantId = null;
   tenants = [];
   spokeCache = {};
+  aggregateDashboardData = null;
+  aggregateSimulationRows = [];
+  aggregateClientRows = [];
   tenantDetailState.data = {};
   resetTenantDetail();
   activeSpokeModal = null;
@@ -6817,27 +6975,30 @@ function logout(showMessage = true) {
 
 async function setCurrentTenant(tenantId, reload = true) {
   currentTenantId = tenantId;
+  aggregateDashboardData = null;
+  aggregateSimulationRows = [];
+  aggregateClientRows = [];
   $("#tenant-select") && ($("#tenant-select").value = tenantId || "");
   syncRoleBadge();
   applyAuthUI();
   populateCommandSpokeSelect();
-  if (reload && ["dashboard", "spokes", "commands", "settings"].includes(activeTab)) await refreshCurrentView(true);
+  if (reload && ["dashboard", "simulations", "clients", "spokes", "setup", "config", "commands"].includes(activeTab)) await refreshCurrentView(true);
 }
 
 function showTab(tabId, opts = {}) {
-  if (["spokes", "commands", "settings", "superadmin"].includes(tabId) && !currentUser) {
+  if (["simulations", "clients", "spokes", "setup", "config", "commands", "superadmin"].includes(tabId) && !currentUser) {
     openLoginModal();
     return;
   }
   activeTab = tabId;
-  $$(".tab-content").forEach(panel => panel.classList.add("hidden"));
-  const panel = document.getElementById(`tab-${tabId}`);
+  $("#hub-root")?.querySelectorAll(".tab-content").forEach(panel => panel.classList.add("hidden"));
+  const panel = $("#hub-root")?.querySelector(`#tab-${CSS.escape(tabId)}`);
   if (panel) panel.classList.remove("hidden");
-  $$("#tab-nav .tab").forEach(button => button.classList.remove("active"));
+  $$("#tab-nav .hub-only .tab").forEach(button => button.classList.remove("active"));
   if (opts.button) {
     opts.button.classList.add("active");
   } else {
-    $(`#tab-nav .tab[data-tab="${tabId}"]`)?.classList.add("active");
+    $(`#tab-nav .hub-only .tab[data-tab="${tabId}"]`)?.classList.add("active");
   }
   updateRefreshPausedState();
   refreshCurrentView();
@@ -6845,13 +7006,19 @@ function showTab(tabId, opts = {}) {
 
 async function refreshCurrentView(force = false) {
   if (activeTab === "dashboard") {
-    await loadDashboard();
+    await loadDashboard(force);
+  } else if (activeTab === "simulations") {
+    await loadSimulations(force);
+  } else if (activeTab === "clients") {
+    await loadClients(force);
   } else if (activeTab === "spokes") {
     await loadSpokes(force);
   } else if (activeTab === "commands") {
     await loadCommands();
-  } else if (activeTab === "settings") {
-    await loadSettings();
+  } else if (activeTab === "setup") {
+    await loadSetup(force);
+  } else if (activeTab === "config") {
+    await loadConfig(force);
   } else if (activeTab === "superadmin") {
     await loadSuperadmin();
   }
@@ -6863,6 +7030,37 @@ function getTenantSpokes() {
 
 function spokeLabel(count) {
   return `${count} ${count === 1 ? "spoke" : "spokes"}`;
+}
+
+function spokePrimaryLabel(spoke) {
+  return String(spoke?.spoke_name || spoke?.hostname || spoke?.id || "—");
+}
+
+function spokeSecondaryLabel(spoke, fallback = "—") {
+  const primary = spokePrimaryLabel(spoke);
+  const parts = [];
+  const hostname = String(spoke?.hostname || "").trim();
+  const label = String(spoke?.label || "").trim();
+  const workspace = String(spoke?.workspace_id || spoke?.tenant_id || "").trim();
+  if (hostname && hostname !== primary) parts.push(hostname);
+  if (label && label !== primary && label !== hostname) parts.push(label);
+  if (!parts.length && workspace && workspace !== primary) parts.push(workspace);
+  return parts.join(" · ") || fallback;
+}
+
+function spokeCommandLabel(spoke) {
+  const primary = spokePrimaryLabel(spoke);
+  const hostname = String(spoke?.hostname || "").trim();
+  return hostname && hostname !== primary ? `${primary} (${hostname})` : primary;
+}
+
+function spokeSearchText(spoke) {
+  return [
+    spokePrimaryLabel(spoke),
+    String(spoke?.hostname || ""),
+    String(spoke?.label || ""),
+    String(spoke?.id || ""),
+  ].join(" ").toLowerCase();
 }
 
 function updateSpokeStatPills(spokes) {
@@ -6953,10 +7151,10 @@ async function loadTenantDetailData(force = false) {
 function renderTenantDashboardPanel(data, summary) {
   const healthRows = data.spokes
     .filter(spoke => spoke.status === "approved")
-    .sort((a, b) => String(a.hostname || "").localeCompare(String(b.hostname || "")))
+    .sort((a, b) => spokePrimaryLabel(a).localeCompare(spokePrimaryLabel(b)))
     .map(spoke => `
       <tr>
-        <td><strong>${escHtml(spoke.hostname || spoke.id)}</strong><div class="muted">${escHtml(spoke.label || "—")}</div></td>
+        <td><strong>${escHtml(spokePrimaryLabel(spoke))}</strong><div class="muted">${escHtml(spokeSecondaryLabel(spoke))}</div></td>
         <td><span class="tenant-status-badge ${isOnline(spoke.last_seen) ? "online" : "offline"}">${isOnline(spoke.last_seen) ? "Online" : "Offline"}</span></td>
         <td>${getSpokeClients(spoke).length}</td>
         <td>${getSpokeVmCount(spoke)}</td>
@@ -6973,7 +7171,7 @@ function renderTenantDashboardPanel(data, summary) {
       return `
         <tr>
           <td>${escHtml(fmtDate(command.created_at))}</td>
-          <td>${escHtml(spoke?.hostname || command.spoke_id)}</td>
+          <td>${escHtml(spoke ? spokeCommandLabel(spoke) : command.spoke_id)}</td>
           <td>${escHtml(command.type)}</td>
           <td><span class="badge cmd-status-${escHtml(command.status)}">${escHtml(command.status)}</span></td>
         </tr>
@@ -7009,10 +7207,10 @@ function renderTenantDashboardPanel(data, summary) {
 
 function renderTenantSpokesPanel(data) {
   const rows = [...data.spokes]
-    .sort((a, b) => String(a.hostname || "").localeCompare(String(b.hostname || "")))
+    .sort((a, b) => spokePrimaryLabel(a).localeCompare(spokePrimaryLabel(b)))
     .map(spoke => `
       <tr>
-        <td><strong>${escHtml(spoke.hostname || spoke.id)}</strong><div class="muted">${escHtml(spoke.label || "—")}</div></td>
+        <td><strong>${escHtml(spokePrimaryLabel(spoke))}</strong><div class="muted">${escHtml(spokeSecondaryLabel(spoke))}</div></td>
         <td><span class="tenant-status-badge ${spoke.status === "approved" && isOnline(spoke.last_seen) ? "online" : "offline"}">${escHtml(spoke.status === "approved" ? (isOnline(spoke.last_seen) ? "online" : "offline") : spoke.status)}</span></td>
         <td><code>${escHtml(spoke.id)}</code></td>
         <td title="${escHtml(fmtDate(spoke.last_seen))}">${escHtml(relativeTime(spoke.last_seen))}</td>
@@ -7042,7 +7240,7 @@ function renderTenantCommandsPanel(data) {
     return `
       <tr>
         <td>${escHtml(fmtDate(command.created_at))}</td>
-        <td>${escHtml(spoke?.hostname || command.spoke_id)}</td>
+        <td>${escHtml(spoke ? spokeCommandLabel(spoke) : command.spoke_id)}</td>
         <td>${escHtml(command.type)}</td>
         <td><span class="badge cmd-status-${escHtml(command.status)}">${escHtml(command.status)}</span></td>
         <td>${escHtml(fmtDate(command.expires_at))}</td>
@@ -7213,39 +7411,28 @@ async function openTenantDetail(tenantId, tabId = "dashboard", force = false) {
 }
 
 async function loadDashboard(force = false) {
-  if (tenantDetailState.open && tenantDetailState.tenantId && currentUser) {
-    const data = await loadTenantDetailData(true);
-    renderTenantDetail(data);
-    return;
-  }
-
-  if (currentUser && tenants.length) {
-    await Promise.all(tenants.map(tenant => ensureTenantSpokesFor(tenant.id, true)));
-    const summaries = tenants.map(tenant => ({
-      tenant,
-      summary: summarizeTenantSpokes(spokeCache[tenant.id] || []),
-    }));
-    const grid = $("#dashboard-grid");
-    const empty = $("#dashboard-empty");
-    const totalSpokes = summaries.reduce((sum, item) => sum + item.summary.approvedCount, 0);
-    const totalClients = summaries.reduce((sum, item) => sum + item.summary.clientCount, 0);
-    const totalOnline = summaries.reduce((sum, item) => sum + item.summary.onlineCount, 0);
-    dashboardTenantRows = summaries.map(item => ({
-      id: item.tenant.id,
-      name: item.tenant.name || item.tenant.id,
-      approvedSpokes: item.summary.approvedCount,
-      userCount: getTenantUserCount(item.tenant.id),
-      createdAt: item.tenant.raw?.created_at || null,
-      lastSync: item.summary.lastSync,
-    }));
-    $("#dash-spokes-pill") && ($("#dash-spokes-pill").textContent = `${summaries.length} tenant${summaries.length === 1 ? "" : "s"}`);
-    $("#dash-clients-pill") && ($("#dash-clients-pill").textContent = `${totalClients} clients`);
-    $("#dash-online-pill") && ($("#dash-online-pill").textContent = `${totalOnline}/${totalSpokes} online`);
-    empty && (empty.textContent = "No tenants available.");
-    empty?.classList.toggle("hidden", dashboardTenantRows.length > 0);
+  const grid = $("#dashboard-grid");
+  const empty = $("#dashboard-empty");
+  if (currentUser) {
+    if (!currentTenantId) {
+      if (grid) grid.innerHTML = "";
+      if (empty) {
+        empty.textContent = "Select a tenant to view dashboard data.";
+        empty.classList.remove("hidden");
+      }
+      return;
+    }
+    aggregateDashboardData = force || !aggregateDashboardData
+      ? await loadAggregateData("dashboard")
+      : aggregateDashboardData;
+    $("#dash-spokes-pill") && ($("#dash-spokes-pill").textContent = `${aggregateDashboardData?.spokes_online ?? 0}/${aggregateDashboardData?.spokes_total ?? 0} online`);
+    $("#dash-clients-pill") && ($("#dash-clients-pill").textContent = `${aggregateDashboardData?.client_count ?? 0} clients`);
+    $("#dash-online-pill") && ($("#dash-online-pill").textContent = `${aggregateDashboardData?.checks_summary?.pass ?? 0} checks passing`);
     if (!grid) return;
     grid.classList.remove("spoke-grid");
-    grid.innerHTML = renderDashboardTenantTable(dashboardTenantRows);
+    grid.innerHTML = aggregateDashboardData ? renderDashboardAggregate(aggregateDashboardData) : "";
+    empty?.classList.toggle("hidden", Boolean(aggregateDashboardData));
+    if (empty && !aggregateDashboardData) empty.textContent = "Unable to load tenant dashboard data.";
     setTenantDetailVisible(false);
     return;
   }
@@ -7253,8 +7440,6 @@ async function loadDashboard(force = false) {
   const res = await fetch("/api/sites").catch(() => null);
   if (!res || !res.ok) return;
   const sites = (await res.json()).filter(site => site.status === "approved");
-  const grid = $("#dashboard-grid");
-  const empty = $("#dashboard-empty");
   dashboardTenantRows = [];
   const onlineCount = sites.filter(site => isOnline(site.last_seen)).length;
   const clientCount = sites.reduce((sum, site) => sum + ((site.telemetry?.clients || []).length), 0);
@@ -7275,8 +7460,8 @@ async function loadDashboard(force = false) {
     card.innerHTML = `
       <div class="spoke-card-header-row">
         <div class="spoke-card-title-wrap">
-          <div class="spoke-card-title">${escHtml(site.hostname)}</div>
-          <div class="spoke-card-subtitle">${escHtml(site.label || site.workspace_id || "—")}</div>
+          <div class="spoke-card-title">${escHtml(spokePrimaryLabel(site))}</div>
+          <div class="spoke-card-subtitle">${escHtml(spokeSecondaryLabel(site, site.workspace_id || "—"))}</div>
         </div>
         <div class="spoke-card-status" data-online-state>${statusDot(online)}</div>
       </div>
@@ -7289,6 +7474,46 @@ async function loadDashboard(force = false) {
     return card;
   }, 60);
   setTenantDetailVisible(false);
+}
+
+async function loadSimulations(force = false) {
+  if (!currentTenantId) {
+    aggregateSimulationRows = [];
+    renderSimulationRows();
+    return;
+  }
+  const data = force || !aggregateSimulationRows.length ? await loadAggregateData("simulations") : { simulations: aggregateSimulationRows };
+  aggregateSimulationRows = data?.simulations || [];
+  renderSimulationRows();
+}
+
+async function loadClients(force = false) {
+  if (!currentTenantId) {
+    aggregateClientRows = [];
+    updateClientSpokeFilterOptions();
+    renderClientRowsForHub();
+    return;
+  }
+  const data = force || !aggregateClientRows.length ? await loadAggregateData("clients") : { clients: aggregateClientRows };
+  aggregateClientRows = data?.clients || [];
+  updateClientSpokeFilterOptions();
+  renderClientRowsForHub();
+}
+
+async function loadSetup() {
+  await loadSettings();
+}
+
+async function loadConfig(force = false) {
+  const container = $("#hub-config-content");
+  if (!container) return;
+  if (!currentTenantId || !currentUser) {
+    container.innerHTML = '<div class="empty-state">Sign in and select a tenant to view config.</div>';
+    return;
+  }
+  container.innerHTML = '<div class="empty-state">Loading…</div>';
+  const data = await loadTenantDetailData(force);
+  container.innerHTML = data ? renderTenantConfigPanel(data) : '<div class="empty-state">Unable to load tenant config.</div>';
 }
 
 async function ensureSpokes(force = false) {
@@ -7371,8 +7596,8 @@ function createSpokeSection(spoke) {
     <div class="spoke-section-header">
       <span class="spoke-toggle ${expanded ? "open" : ""}">▶</span>
       ${statusDot(online)}
-      <span class="spoke-hostname">${escHtml(spoke.hostname)}</span>
-      <span class="spoke-label-inline">${escHtml(spoke.label || "—")}</span>
+      <span class="spoke-hostname">${escHtml(spokePrimaryLabel(spoke))}</span>
+      <span class="spoke-label-inline">${escHtml(spokeSecondaryLabel(spoke))}</span>
       <span class="spoke-meta">${clients.length} clients · ${escHtml(relativeTime(spoke.last_seen))}</span>
     </div>
     <div class="spoke-section-body ${expanded ? "expanded" : ""}"></div>
@@ -7410,7 +7635,7 @@ async function loadSpokes(force = false) {
   const spokes = await ensureSpokes(force);
   updateSpokeStatPills(spokes);
   const search = spokeUiState.search.trim().toLowerCase();
-  const filtered = spokes.filter(spoke => spoke.status === "approved" && (!search || spoke.hostname.toLowerCase().includes(search)));
+  const filtered = spokes.filter(spoke => spoke.status === "approved" && (!search || spokeSearchText(spoke).includes(search)));
   const list = $("#spokes-list");
   const empty = $("#spokes-empty");
   empty?.classList.toggle("hidden", filtered.length > 0);
@@ -7431,7 +7656,7 @@ function populateCommandSpokeSelect() {
   const select = $("#cmd-spoke");
   if (!select) return;
   const spokes = getTenantSpokes().filter(spoke => spoke.status === "approved");
-  select.innerHTML = spokes.map(spoke => `<option value="${escHtml(spoke.id)}">${escHtml(spoke.hostname)}</option>`).join("");
+  select.innerHTML = spokes.map(spoke => `<option value="${escHtml(spoke.id)}">${escHtml(spokeCommandLabel(spoke))}</option>`).join("");
 }
 
 async function sendCommandToSpoke(tenantId, spokeId, type) {
@@ -7469,7 +7694,7 @@ async function loadCommands() {
     const spoke = getTenantSpokes().find(item => item.id === command.spoke_id);
     return `
       <tr>
-        <td>${escHtml(spoke?.hostname || command.spoke_id)}</td>
+        <td>${escHtml(spoke ? spokeCommandLabel(spoke) : command.spoke_id)}</td>
         <td>${escHtml(command.type)}</td>
         <td><span class="badge cmd-status-${escHtml(command.status)}">${escHtml(command.status)}</span></td>
         <td>${escHtml(fmtDate(command.created_at))}</td>
@@ -7594,7 +7819,7 @@ async function saveSpokeProcessingMode() {
 
 function openSpokeModal(spoke, tenantId, subtab = "spoke-clients") {
   activeSpokeModal = { spoke, tenant_id: tenantId };
-  $("#spoke-modal-title") && ($("#spoke-modal-title").textContent = `${spoke.hostname} — ${tenantName(tenantId)}`);
+  $("#spoke-modal-title") && ($("#spoke-modal-title").textContent = `${spokePrimaryLabel(spoke)} — ${tenantName(tenantId)}`);
   $("#spoke-modal")?.classList.remove("hidden");
   activateSpokeSubtab(subtab);
   renderSpokeClientsTab();
@@ -8255,8 +8480,11 @@ function connectWebSocket() {
   ws.onmessage = event => {
     const data = JSON.parse(event.data);
     if (data.type === "telemetry") {
+      if (activeTab === "dashboard") scheduleReload("ws-dashboard", () => loadDashboard(true));
+      if (activeTab === "simulations") scheduleReload("ws-simulations", () => loadSimulations(true));
+      if (activeTab === "clients") scheduleReload("ws-clients", () => loadClients(true));
       if (activeTab === "spokes") scheduleReload("ws-spokes", () => loadSpokes(true));
-      if (activeTab === "dashboard") scheduleReload("ws-dashboard", () => loadDashboard());
+      if (activeTab === "config") scheduleReload("ws-config", () => loadConfig(true));
       if (activeSpokeModal && data.tenant_id === activeSpokeModal.tenant_id && data.spoke_id === activeSpokeModal.spoke.id) {
         scheduleReload("ws-modal", () => loadSpokes(true).then(() => renderSpokeClientsTab()));
       }
@@ -8268,7 +8496,7 @@ function connectWebSocket() {
       showToast(data.message, data.level === "warning" ? "warn" : "ok");
     } else if (data.type === "cert_renewed") {
       showToast(`TLS certificate renewed — expires ${data.expires || "unknown"}`, "ok");
-      if (activeTab === "settings") loadAcmeSettings();
+      if (activeTab === "setup") loadAcmeSettings();
     } else if (data.type === "pending_spoke_registered") {
       if (currentUser?.is_superadmin && activeTab === "superadmin") loadSuperadmin();
       if (canManageTenant() && !currentUser?.is_superadmin && data.tenant_hint === currentTenantId) {
@@ -8383,11 +8611,7 @@ function bindEvents() {
 
   $("#tenant-select")?.addEventListener("change", event => {
     const tenantId = event.target.value;
-    if (tenantDetailState.open) {
-      openTenantDetail(tenantId, tenantDetailState.activeTab, true);
-    } else {
-      setCurrentTenant(tenantId);
-    }
+    setCurrentTenant(tenantId);
   });
   $("#login-btn")?.addEventListener("click", openLoginModal);
   $("#logout-btn")?.addEventListener("click", () => logout(true));
@@ -8396,8 +8620,11 @@ function bindEvents() {
   $("#login-modal")?.addEventListener("click", event => { if (event.target === event.currentTarget) closeLoginModal(); });
   $("#login-password")?.addEventListener("keydown", event => { if (event.key === "Enter") submitLogin(); });
   $("#refresh-dashboard-btn")?.addEventListener("click", () => loadDashboard(true));
+  $("#refresh-simulations-btn")?.addEventListener("click", () => loadSimulations(true));
+  $("#refresh-clients-btn")?.addEventListener("click", () => loadClients(true));
   $("#refresh-spokes-btn")?.addEventListener("click", () => loadSpokes(true));
   $("#refresh-commands-btn")?.addEventListener("click", loadCommands);
+  $("#refresh-config-btn")?.addEventListener("click", () => loadConfig(true));
   $("#auto-refresh-toggle")?.addEventListener("change", startAutoRefresh);
   $("#auto-refresh-interval")?.addEventListener("change", startAutoRefresh);
   $("#send-command-btn")?.addEventListener("click", sendCommandFromForm);
@@ -8406,6 +8633,22 @@ function bindEvents() {
     const spokes = await ensureSpokes();
     spokeUiState.expandedByTenant[currentTenantId] = new Set(spokes.filter(spoke => spoke.status === "approved").map(spoke => spoke.id));
     loadSpokes();
+  });
+  $("#hub-simulations-search")?.addEventListener("input", event => {
+    hubSimulationUiState.search = event.target.value || "";
+    renderSimulationRows();
+  });
+  $("#hub-clients-search")?.addEventListener("input", event => {
+    hubClientUiState.search = event.target.value || "";
+    renderClientRowsForHub();
+  });
+  $("#hub-clients-status-filter")?.addEventListener("change", event => {
+    hubClientUiState.status = event.target.value || "all";
+    renderClientRowsForHub();
+  });
+  $("#hub-clients-spoke-filter")?.addEventListener("change", event => {
+    hubClientUiState.spoke = event.target.value || "all";
+    renderClientRowsForHub();
   });
   $("#spoke-search")?.addEventListener("input", event => {
     spokeUiState.search = event.target.value || "";

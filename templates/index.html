@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Client-Sim</title>
   <link rel="stylesheet" href="/static/style.css">
-  <script>window.WEBUI_MODE = "{{WEBUI_MODE}}";</script>
   <script src="/static/app.js" defer></script>
 </head>
 <body>
@@ -45,7 +44,7 @@
         <div id="hub-admin-topbar-nav" class="hub-admin-topbar-nav hidden hub-only" aria-label="Hub admin navigation">
           <button class="btn btn-secondary btn-small hub-admin-shortcut" data-admin-tab="hub-dashboard" type="button">Tenants</button>
           <button class="btn btn-secondary btn-small hub-admin-shortcut" data-admin-tab="hub-spokes" type="button">Spokes</button>
-          <button class="btn btn-secondary btn-small hub-admin-shortcut" data-admin-tab="hub-setup" type="button">Setup</button>
+          <button class="btn btn-secondary btn-small hub-admin-shortcut" data-admin-tab="hub-setup" type="button">Hub Setup</button>
           <button class="btn btn-secondary btn-small hub-admin-shortcut superadmin-tab hidden" data-admin-tab="hub-superadmin" type="button">Superadmin</button>
         </div>
         <div id="tenant-context-indicator" class="tenant-context-indicator hidden hub-only">
@@ -103,17 +102,17 @@
       <div id="hub-admin-nav" class="hub-admin-nav">
         <button class="tab active" data-tab="hub-dashboard" type="button">Tenants</button>
         <button class="tab auth-tab hidden" data-tab="hub-spokes" type="button">Spokes</button>
-        <button class="tab auth-tab hidden" data-tab="hub-setup" type="button">⚙ Setup</button>
+        <button class="tab auth-tab hidden" data-tab="hub-setup" type="button">⚙ Hub Setup</button>
         <button class="tab superadmin-tab hidden" data-tab="hub-superadmin" type="button">Superadmin</button>
       </div>
       <div id="tenant-context-nav" class="tenant-context-nav hidden">
         <button class="tab active" data-tab="hub-simulations" type="button">Simulations</button>
         <button class="tab" data-tab="hub-clients" type="button">Clients</button>
-        <button class="tab" data-tab="hub-spokes" type="button">Spokes</button>
-        <button class="tab" data-tab="hub-commands" type="button">Commands</button>
-        <span class="tab-nav-sep" aria-hidden="true"></span>
-        <button class="tab" data-tab="hub-setup" type="button">⚙ Setup</button>
-        <button class="tab" data-tab="hub-config" type="button">⚙ Config</button>
+        <button class="tab" data-tab="hub-vm-server" type="button">VM Server</button>
+        <button class="tab" data-tab="hub-api-server" type="button">API Server</button>
+        <button class="tab" data-tab="hub-central" type="button">Central</button>
+        <button class="tab" data-tab="hub-config" type="button">Config</button>
+        <button class="tab" data-tab="hub-tenant-setup" type="button">⚙ Setup</button>
       </div>
     </div>
     <span class="spoke-only">
@@ -199,6 +198,48 @@
       </div>
     </main>
 
+    <main id="tab-hub-vm-server" class="page tab-content hidden">
+      <div class="page-toolbar">
+        <div class="toolbar-stats">
+          <span class="stat-pill" id="hub-vm-hosts-pill">— hosts</span>
+          <span class="stat-pill" id="hub-vm-vms-pill">— VMs</span>
+          <span class="stat-pill" id="hub-vm-usb-pill">— USB devices</span>
+        </div>
+        <div class="toolbar-actions">
+          <button id="refresh-vm-server-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+        </div>
+      </div>
+      <div id="hub-vm-server-content"></div>
+    </main>
+
+    <main id="tab-hub-api-server" class="page tab-content hidden">
+      <div class="page-toolbar">
+        <div class="toolbar-stats">
+          <span class="stat-pill" id="hub-api-spokes-pill">— spokes</span>
+          <span class="stat-pill" id="hub-api-online-pill">— healthy</span>
+          <span class="stat-pill" id="hub-api-version-pill">— versions</span>
+        </div>
+        <div class="toolbar-actions">
+          <button id="refresh-api-server-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+        </div>
+      </div>
+      <div id="hub-api-server-content"></div>
+    </main>
+
+    <main id="tab-hub-central" class="page tab-content hidden">
+      <div class="page-toolbar">
+        <div class="toolbar-stats">
+          <span class="stat-pill" id="hub-central-mode-pill">— mode</span>
+          <span class="stat-pill" id="hub-central-spokes-pill">— spokes</span>
+          <span class="stat-pill" id="hub-central-connected-pill">— connected</span>
+        </div>
+        <div class="toolbar-actions">
+          <button id="refresh-central-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+        </div>
+      </div>
+      <div id="hub-central-content"></div>
+    </main>
+
     <!-- ── Islands tab (auth required) ── -->
     <main id="tab-hub-spokes" class="page tab-content hidden">
       <div class="page-toolbar">
@@ -265,7 +306,15 @@
       <div id="hub-config-content"></div>
     </main>
 
-    <!-- ── Setup tab ── -->
+    <main id="tab-hub-tenant-setup" class="page tab-content hidden">
+      <div class="page-toolbar">
+        <span class="server-node-name">Tenant Setup</span>
+        <button id="refresh-tenant-setup-btn" class="btn btn-secondary btn-small" style="margin-left:auto;" type="button">Refresh</button>
+      </div>
+      <div id="hub-tenant-setup-content"></div>
+    </main>
+
+    <!-- ── Hub setup tab ── -->
     <main id="tab-hub-setup" class="page tab-content hidden">
       <div class="page-toolbar"><span class="server-node-name">Setup</span></div>
       <nav class="setup-subnav">

@@ -4,20 +4,54 @@
    ═══════════════════════════════════════════════════════════════ */
 
 // ── Mode detection ──────────────────────────────────────────────
-const WEBUI_MODE = window.WEBUI_MODE || 'spoke';
+let WEBUI_MODE = window.WEBUI_MODE || '';
 // Keep the lightweight pre-commit balance check aligned with this regex-heavy bundle.
 void /\)\)\}\}\}/;
 
-(function applyMode() {
-  const cls = `mode-${WEBUI_MODE}`;
-  if (document.body) { document.body.classList.add(cls); return; }
-  document.addEventListener('DOMContentLoaded', () => document.body.classList.add(cls), { once: true });
-})();
+function applyModeClass(mode) {
+  const update = () => {
+    if (!document.body) return;
+    document.body.classList.remove('mode-hub', 'mode-spoke');
+    if (mode === 'hub' || mode === 'spoke') document.body.classList.add(`mode-${mode}`);
+  };
+  if (document.body) { update(); return; }
+  document.addEventListener('DOMContentLoaded', update, { once: true });
+}
+
+function setWebuiMode(mode) {
+  WEBUI_MODE = mode === 'hub' ? 'hub' : 'spoke';
+  window.WEBUI_MODE = WEBUI_MODE;
+  applyModeClass(WEBUI_MODE);
+  return WEBUI_MODE;
+}
+
+function consumeInitPayload() {
+  const init = window.__CS_WEBUI_INIT__ || null;
+  window.__CS_WEBUI_INIT__ = null;
+  return init;
+}
+
+async function detectWebuiMode() {
+  try {
+    const response = await fetch('/api/init', { headers: { Accept: 'application/json' } });
+    if (response?.ok) {
+      const init = await response.json().catch(() => ({}));
+      const mode = String(init?.mode || '').trim().toLowerCase();
+      if (mode === 'hub' || mode === 'spoke') {
+        window.__CS_WEBUI_INIT__ = init;
+        return setWebuiMode(mode);
+      }
+    }
+  } catch (_) { /* ignore */ }
+  return setWebuiMode(WEBUI_MODE === 'hub' ? 'hub' : 'spoke');
+}
+
+applyModeClass(WEBUI_MODE);
 
 // ════════════════════════════════════════════════════════════════
-// SPOKE — only runs when WEBUI_MODE === 'spoke'
+// SPOKE — booted after /api/init mode detection
 // ════════════════════════════════════════════════════════════════
-if (WEBUI_MODE === 'spoke') {
+function startSpokeApp() {
   (function () {
 
 const FLAG_ORDER = [
@@ -2573,7 +2607,9 @@ function renderAutoProvisionStatus() {
   const logEl = document.getElementById('auto-prov-log');
   if (!livePanel || !liveSummary || !logEl) return;
 
-  const showPanel = autoProv && run.running && total > 0;
+  // Show panel whenever provisioning is running — regardless of the auto-prov setting
+  // (provisioning can be triggered manually even when the toggle is off)
+  const showPanel = run.running && total > 0;
   livePanel.classList.toggle('hidden', !showPanel);
   if (!showPanel) {
     if (liveBadge) { liveBadge.textContent = autoProv ? 'Idle' : 'Off'; liveBadge.className = 'badge badge-grey'; }
@@ -6167,7 +6203,7 @@ loadSimulations();
 // Single init call replaces 5 separate REST calls — UI renders immediately from cache
 (async () => {
   try {
-    const init = await requestJson('/api/init');
+    const init = consumeInitPayload() || await requestJson('/api/init');
     // Proxmox
     if (init.proxmox) {
       if (init.proxmox.webui_vmid != null) webuiVmid = init.proxmox.webui_vmid;
@@ -6450,9 +6486,9 @@ document.getElementById('spoke-acme-dns-provider')?.addEventListener('change', t
 }
 
 // ════════════════════════════════════════════════════════════════
-// HUB — only runs when WEBUI_MODE === 'hub'
+// HUB — booted after /api/init mode detection
 // ════════════════════════════════════════════════════════════════
-if (WEBUI_MODE === 'hub') {
+function startHubApp() {
   (function () {
 
 "use strict";
@@ -6479,6 +6515,10 @@ let dashboardTenantRows = [];
 let aggregateDashboardData = null;
 let aggregateSimulationRows = [];
 let aggregateClientRows = [];
+let aggregateProxmoxHosts = [];
+let aggregateApiServerRows = [];
+let aggregateCentralData = null;
+let hubConfigDraft = "";
 const hubSimulationUiState = { search: "" };
 const hubClientUiState = { search: "", status: "all", spoke: "all" };
 const tenantDashboardSort = { key: "name", direction: "asc" };
@@ -6573,10 +6613,15 @@ function tenantName(tenantId) {
   return tenant ? tenant.name : tenantId;
 }
 
+function normalizeTenantRole(role) {
+  const value = String(role || "").toLowerCase();
+  return value === "operator" ? "viewer" : value;
+}
+
 function currentRoleForTenant(tenantId = currentTenantId) {
   if (!currentUser) return "";
   if (currentUser.is_superadmin) return "superadmin";
-  return currentUser.tenant_roles.find(role => role.tenant_id === tenantId)?.role || "";
+  return normalizeTenantRole(currentUser.tenant_roles.find(role => role.tenant_id === tenantId)?.role || "");
 }
 
 function canManageTenant(tenantId = currentTenantId) {
@@ -7815,8 +7860,306 @@ async function loadClients(force = false) {
   renderClientRowsForHub();
 }
 
+function summarizeHubConfigState(spoke) {
+  if (!spoke || spoke.status !== "approved") return { label: spoke?.status || "pending", className: "pending" };
+  const desired = Number(spoke.config_version || 0);
+  const applied = Number(spoke.applied_config_version || 0);
+  if (desired > applied) return { label: `Pending v${desired}`, className: "pending" };
+  if (desired > 0) return { label: `Applied v${applied}`, className: "approved" };
+  return { label: "No push yet", className: "offline" };
+}
+
+function renderHubVmServer() {
+  const container = $("#hub-vm-server-content");
+  if (!container) return;
+  const hosts = aggregateProxmoxHosts || [];
+  const vmCount = hosts.reduce((sum, host) => sum + Number(host.vm_count || 0), 0);
+  const usbCount = hosts.reduce((sum, host) => sum + Number(host.usb_count || 0), 0);
+  $("#hub-vm-hosts-pill") && ($("#hub-vm-hosts-pill").textContent = `${hosts.length} hosts`);
+  $("#hub-vm-vms-pill") && ($("#hub-vm-vms-pill").textContent = `${vmCount} VMs`);
+  $("#hub-vm-usb-pill") && ($("#hub-vm-usb-pill").textContent = `${usbCount} USB devices`);
+  if (!hosts.length) {
+    container.innerHTML = '<div class="empty-state">No Proxmox telemetry reported for this tenant.</div>';
+    return;
+  }
+  container.innerHTML = hosts.map((host, index) => {
+    const vms = Array.isArray(host.proxmox_vms) ? host.proxmox_vms : [];
+    const usbDevices = Array.isArray(host.usb_devices) ? host.usb_devices : [];
+    const usbByVmid = usbDevices.reduce((acc, device) => {
+      const key = String(device?.vmid ?? "unassigned");
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(device);
+      return acc;
+    }, {});
+    const vmRows = vms.map(vm => {
+      const vmUsb = usbByVmid[String(vm?.vmid ?? "")] || [];
+      return `
+        <tr>
+          <td>${escHtml(vm.vmid ?? "—")}</td>
+          <td>${escHtml(vm.name || "—")}</td>
+          <td><span class="site-status-pill ${escHtml(vm.status === "running" ? "online" : "offline")}">${escHtml(vm.status || "unknown")}</span></td>
+          <td>${escHtml(vm.type || "—")}</td>
+          <td>${escHtml(vmUsb.map(device => device.product || device.description || device.vidpid || device.bus_path || "USB").join(", ") || "—")}</td>
+        </tr>
+      `;
+    }).join("");
+    const usbRows = usbDevices.map(device => `
+      <tr>
+        <td>${escHtml(device.vmid ?? "—")}</td>
+        <td>${escHtml(device.product || device.description || "USB Device")}</td>
+        <td>${escHtml(device.vidpid || "—")}</td>
+        <td>${escHtml(device.bus_path || device.path || "—")}</td>
+        <td>${escHtml(device.prov_status || device.state || "—")}</td>
+      </tr>
+    `).join("");
+    return `
+      <details class="setup-card"${index === 0 ? " open" : ""}>
+        <summary class="panel-header">
+          <span class="server-node-name">${escHtml(host.spoke_name || host.spoke_id || "Spoke")}</span>
+          <span class="stat-pill">${host.spoke_online ? "Online" : "Offline"}</span>
+          <span class="stat-pill">${escHtml(String(host.vm_count || 0))} VMs</span>
+          <span class="stat-pill">${escHtml(String(host.usb_count || 0))} USB</span>
+        </summary>
+        <div class="setup-section-gap">
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead><tr><th>VMID</th><th>Name</th><th>Status</th><th>Type</th><th>USB Assignments</th></tr></thead>
+              <tbody>${vmRows || '<tr><td colspan="5" class="empty-state">No VM inventory reported.</td></tr>'}</tbody>
+            </table>
+          </div>
+          <div class="table-scroll setup-section-gap">
+            <table class="data-table">
+              <thead><tr><th>VMID</th><th>USB Device</th><th>VID:PID</th><th>Bus Path</th><th>Status</th></tr></thead>
+              <tbody>${usbRows || '<tr><td colspan="5" class="empty-state">No USB assignments reported.</td></tr>'}</tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+    `;
+  }).join("");
+}
+
+function renderHubApiServer() {
+  const container = $("#hub-api-server-content");
+  if (!container) return;
+  const rows = aggregateApiServerRows || [];
+  const healthyCount = rows.filter(row => String(row.api_server?.health?.status || row.api_server?.status || "").toLowerCase() === "ok").length;
+  const versions = uniqueValues(rows.map(row => row.api_server?.health?.version || row.api_server?.version).filter(Boolean));
+  $("#hub-api-spokes-pill") && ($("#hub-api-spokes-pill").textContent = `${rows.length} spokes`);
+  $("#hub-api-online-pill") && ($("#hub-api-online-pill").textContent = `${healthyCount} healthy`);
+  $("#hub-api-version-pill") && ($("#hub-api-version-pill").textContent = versions.length ? versions.join(" • ") : "— versions");
+  if (!rows.length) {
+    container.innerHTML = '<div class="empty-state">No API server telemetry reported for this tenant.</div>';
+    return;
+  }
+  container.innerHTML = `
+    <div class="tenant-detail-grid">
+      ${rows.map(row => {
+        const health = row.api_server?.health || row.api_server || {};
+        const services = row.api_server?.services || {};
+        const serviceCount = Object.keys(services).length;
+        const state = String(health.status || row.spoke_online && "ok" || "offline").toLowerCase();
+        const pillClass = state === "ok" ? "online" : state === "offline" ? "offline" : "pending";
+        return `
+          <details class="setup-card"${row.spoke_online ? " open" : ""}>
+            <summary class="panel-header">
+              <span class="server-node-name">${escHtml(row.spoke_name || row.spoke_id || "Spoke")}</span>
+              <span class="site-status-pill ${pillClass}">${escHtml(state || "unknown")}</span>
+              <span class="stat-pill">${escHtml(health.version || "—")}</span>
+              <span class="stat-pill">${serviceCount} services</span>
+            </summary>
+            <div class="setup-status-grid setup-section-gap">
+              <div class="setup-status-item"><span class="setup-status-label">Spoke Status</span><span class="setup-status-value">${row.spoke_online ? "Online" : "Offline"}</span></div>
+              <div class="setup-status-item"><span class="setup-status-label">API Version</span><span class="setup-status-value">${escHtml(health.version || "—")}</span></div>
+              <div class="setup-status-item"><span class="setup-status-label">Clients</span><span class="setup-status-value">${escHtml(String(health.clients ?? "—"))}</span></div>
+              <div class="setup-status-item"><span class="setup-status-label">Repo Sync</span><span class="setup-status-value">${escHtml(health.repo_synced ? "Synced" : health.repo_error || "Unknown")}</span></div>
+            </div>
+            <pre class="setup-section-gap" style="margin:0;max-height:280px;overflow:auto;background:#0f172a;color:#e2e8f0;border-radius:10px;padding:12px;font-size:12px;line-height:1.45;">${escHtml(JSON.stringify(row.api_server || {}, null, 2))}</pre>
+          </details>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderHubCentral() {
+  const container = $("#hub-central-content");
+  if (!container) return;
+  const data = aggregateCentralData || { spokes: [], hub_central_config: {}, mode: "distributed" };
+  const spokes = data.spokes || [];
+  const connectedCount = spokes.filter(item => item.central_status?.token_valid).length;
+  $("#hub-central-mode-pill") && ($("#hub-central-mode-pill").textContent = `${escHtml(data.mode || "distributed")} mode`);
+  $("#hub-central-spokes-pill") && ($("#hub-central-spokes-pill").textContent = `${spokes.length} spokes`);
+  $("#hub-central-connected-pill") && ($("#hub-central-connected-pill").textContent = `${connectedCount} connected`);
+  const config = data.hub_central_config || {};
+  const disabled = canManageTenant() ? "" : " disabled";
+  const note = canManageTenant() ? "" : '<div class="tenant-detail-note">Tenant Viewer access: Central settings are read-only.</div>';
+  const spokeRows = spokes.map(item => {
+    const central = item.central_status || {};
+    const state = central.token_state?.state || (central.token_valid ? "connected" : (item.spoke_online ? "unknown" : "offline"));
+    const siteCount = Object.keys(central.status || {}).length;
+    const pillClass = state === "connected" ? "online" : state === "offline" ? "offline" : "pending";
+    return `
+      <tr>
+        <td><strong>${escHtml(item.spoke_name || item.spoke_id || "Spoke")}</strong></td>
+        <td><span class="site-status-pill ${pillClass}">${escHtml(state)}</span></td>
+        <td>${siteCount}</td>
+        <td>${escHtml(item.spoke_online ? "Online" : "Offline")}</td>
+        <td>${escHtml(item.last_seen ? relativeTime(item.last_seen) : "—")}</td>
+      </tr>
+    `;
+  }).join("");
+  container.innerHTML = `
+    ${note}
+    <div class="tenant-detail-grid">
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>Central Control</h2><p>Hub-managed Aruba Central settings and processing mode for this tenant.</p></div>
+        <div class="setup-form">
+          <div class="form-group">
+            <label class="form-label" for="hub-central-mode">Mode</label>
+            <select id="hub-central-mode" class="form-input"${disabled}>
+              <option value="centralized"${data.mode === "centralized" ? " selected" : ""}>Centralized</option>
+              <option value="distributed"${data.mode === "distributed" ? " selected" : ""}>Distributed</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="hub-central-api-version">API Version</label>
+            <select id="hub-central-api-version" class="form-input"${disabled}>
+              <option value="classic"${config.api_version === "classic" ? " selected" : ""}>Classic</option>
+              <option value="new_central"${config.api_version === "new_central" ? " selected" : ""}>Central / HPE GreenLake</option>
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label" for="hub-central-cluster-url">Cluster URL</label><input id="hub-central-cluster-url" type="url" class="form-input" value="${escHtml(config.cluster_url || "")}"${disabled}></div>
+          <div class="form-group"><label class="form-label" for="hub-central-client-id">Client ID</label><input id="hub-central-client-id" type="text" class="form-input" value="${escHtml(config.client_id || "")}"${disabled}></div>
+          <div class="form-group"><label class="form-label" for="hub-central-client-secret">Client Secret</label><input id="hub-central-client-secret" type="password" class="form-input" placeholder="Leave blank to keep existing"${disabled}></div>
+          <div class="form-group"><label class="form-label" for="hub-central-customer-id">Customer ID</label><input id="hub-central-customer-id" type="text" class="form-input" value="${escHtml(config.customer_id || "")}"${disabled}></div>
+          <div class="form-actions">
+            <button id="save-central-btn" class="btn btn-primary" type="button"${disabled}>Save Central Settings</button>
+            <span id="hub-central-msg" class="form-msg"></span>
+          </div>
+        </div>
+      </section>
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>Spoke Central Status</h2><p>Last known Central API status reported by each spoke.</p></div>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th>Spoke</th><th>Central Status</th><th>Mapped Sites</th><th>Spoke</th><th>Last Seen</th></tr></thead>
+            <tbody>${spokeRows || '<tr><td colspan="5" class="empty-state">No spoke Central telemetry reported.</td></tr>'}</tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function renderHubConfigPage(data) {
+  const approved = (data.spokes || []).filter(spoke => spoke.status === "approved");
+  if (!hubConfigDraft) {
+    const seed = approved.find(spoke => Object.keys(spoke.config || {}).length > 0)?.config || {};
+    hubConfigDraft = JSON.stringify(seed, null, 2);
+  }
+  const readonly = canManageTenant() ? "" : " readonly";
+  const disabled = canManageTenant() ? "" : " disabled";
+  const note = canManageTenant() ? "" : '<div class="tenant-detail-note">Tenant Viewer access: config push controls are read-only.</div>';
+  const stateRows = approved.map(spoke => {
+    const summary = summarizeHubConfigState(spoke);
+    return `
+      <tr>
+        <td><strong>${escHtml(spokePrimaryLabel(spoke))}</strong></td>
+        <td><span class="site-status-pill ${summary.className}">${escHtml(summary.label)}</span></td>
+        <td>${escHtml(String(spoke.config_version || 0))}</td>
+        <td>${escHtml(String(spoke.applied_config_version || 0))}</td>
+        <td>${escHtml(spoke.last_config_applied_at ? fmtDate(spoke.last_config_applied_at) : "—")}</td>
+        <td>${escHtml(Object.keys(spoke.config || {}).join(", ") || "—")}</td>
+      </tr>
+    `;
+  }).join("");
+  return `
+    ${note}
+    <div class="setup-section-gap">${renderTenantConfigPanel(data)}</div>
+    <div class="tenant-detail-grid setup-section-gap">
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>Push Config to Spokes</h2><p>Save tenant config on the hub and deliver it to each spoke on its next inbox check.</p></div>
+        <div class="setup-form">
+          <div class="form-group">
+            <label class="form-label" for="hub-config-payload">Config JSON</label>
+            <textarea id="hub-config-payload" class="form-input" rows="14" spellcheck="false"${readonly}>${escHtml(hubConfigDraft || "{}")}</textarea>
+          </div>
+          <div class="form-actions">
+            <button id="save-config-push-btn" class="btn btn-primary" type="button"${disabled}>Store + Push Config</button>
+            <span id="hub-config-msg" class="form-msg"></span>
+          </div>
+        </div>
+      </section>
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>Per-Spoke Config State</h2><p>Desired hub config version versus last applied version on each spoke.</p></div>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th>Spoke</th><th>Status</th><th>Desired</th><th>Applied</th><th>Last Applied</th><th>Fields</th></tr></thead>
+            <tbody>${stateRows || '<tr><td colspan="6" class="empty-state">No approved spokes in this tenant.</td></tr>'}</tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+async function loadVmServer(force = false) {
+  const container = $("#hub-vm-server-content");
+  if (!container) return;
+  if (!currentTenantId || !currentUser) {
+    aggregateProxmoxHosts = [];
+    renderHubVmServer();
+    return;
+  }
+  container.innerHTML = '<div class="empty-state">Loading…</div>';
+  const data = force || !aggregateProxmoxHosts.length ? await loadAggregateData("proxmox") : { hosts: aggregateProxmoxHosts };
+  aggregateProxmoxHosts = data?.hosts || [];
+  renderHubVmServer();
+}
+
+async function loadApiServer(force = false) {
+  const container = $("#hub-api-server-content");
+  if (!container) return;
+  if (!currentTenantId || !currentUser) {
+    aggregateApiServerRows = [];
+    renderHubApiServer();
+    return;
+  }
+  container.innerHTML = '<div class="empty-state">Loading…</div>';
+  const data = force || !aggregateApiServerRows.length ? await loadAggregateData("api-server") : { spokes: aggregateApiServerRows };
+  aggregateApiServerRows = data?.spokes || [];
+  renderHubApiServer();
+}
+
+async function loadCentral(force = false) {
+  const container = $("#hub-central-content");
+  if (!container) return;
+  if (!currentTenantId || !currentUser) {
+    aggregateCentralData = { mode: "distributed", hub_central_config: {}, spokes: [] };
+    renderHubCentral();
+    return;
+  }
+  container.innerHTML = '<div class="empty-state">Loading…</div>';
+  const data = force || !aggregateCentralData ? await loadAggregateData("central") : aggregateCentralData;
+  aggregateCentralData = data || { mode: "distributed", hub_central_config: {}, spokes: [] };
+  renderHubCentral();
+}
+
 async function loadSetup() {
   await loadSettings();
+}
+
+async function loadTenantSetup(force = false) {
+  const container = $("#hub-tenant-setup-content");
+  if (!container) return;
+  if (!currentTenantId || !currentUser) {
+    container.innerHTML = '<div class="empty-state">Sign in and select a tenant to view setup.</div>';
+    return;
+  }
+  container.innerHTML = '<div class="empty-state">Loading…</div>';
+  const data = await loadTenantDetailData(force);
+  container.innerHTML = data ? renderTenantSetupPanel(data) : '<div class="empty-state">Unable to load tenant setup.</div>';
 }
 
 async function loadConfig(force = false) {
@@ -7828,7 +8171,60 @@ async function loadConfig(force = false) {
   }
   container.innerHTML = '<div class="empty-state">Loading…</div>';
   const data = await loadTenantDetailData(force);
-  container.innerHTML = data ? renderTenantConfigPanel(data) : '<div class="empty-state">Unable to load tenant config.</div>';
+  container.innerHTML = data ? renderHubConfigPage(data) : '<div class="empty-state">Unable to load tenant config.</div>';
+}
+
+async function saveCentralSettings() {
+  if (!canManageTenant()) {
+    setFormMessage("hub-central-msg", "Tenant Viewer access is read-only.", false);
+    return;
+  }
+  const payload = {
+    mode: $("#hub-central-mode")?.value || "distributed",
+    hub_central_config: {
+      api_version: $("#hub-central-api-version")?.value || "classic",
+      cluster_url: $("#hub-central-cluster-url")?.value.trim() || "",
+      client_id: $("#hub-central-client-id")?.value.trim() || "",
+      client_secret: $("#hub-central-client-secret")?.value || "",
+      customer_id: $("#hub-central-customer-id")?.value.trim() || "",
+    },
+  };
+  const res = await apiFetch(aggregateEndpoint("central"), { method: "POST", body: payload });
+  if (!res || !res.ok) {
+    const err = await readJson(res);
+    setFormMessage("hub-central-msg", err?.detail || "Unable to save Central settings.", false);
+    return;
+  }
+  aggregateCentralData = await res.json();
+  setFormMessage("hub-central-msg", "Central settings saved.", true);
+  await loadCentral(true);
+  await loadSetup();
+}
+
+async function saveConfigPush() {
+  if (!canManageTenant()) {
+    setFormMessage("hub-config-msg", "Tenant Viewer access is read-only.", false);
+    return;
+  }
+  const raw = $("#hub-config-payload")?.value || "{}";
+  hubConfigDraft = raw;
+  let config;
+  try {
+    config = JSON.parse(raw || "{}");
+  } catch (error) {
+    setFormMessage("hub-config-msg", `Invalid JSON: ${error.message}`, false);
+    return;
+  }
+  const res = await apiFetch(aggregateEndpoint("config-push"), { method: "POST", body: { config } });
+  if (!res || !res.ok) {
+    const err = await readJson(res);
+    setFormMessage("hub-config-msg", err?.detail || "Unable to push config.", false);
+    return;
+  }
+  setFormMessage("hub-config-msg", "Config stored and queued for spokes.", true);
+  tenantDetailState.data[currentTenantId] = null;
+  await ensureSpokes(true);
+  await loadConfig(true);
 }
 
 async function ensureSpokes(force = false) {
@@ -8673,7 +9069,7 @@ function renderSuperadminTenants(items) {
 function renderUserRoles(user) {
   if (user.is_superadmin) return '<span class="role-badge">SUPERADMIN</span>';
   return user.tenant_roles?.length ? user.tenant_roles.map(role => `
-    <span class="tenant-role-chip">${escHtml(role.tenant_id)} · ${escHtml(role.role)} <button data-remove-role="${escHtml(user.id)}:${escHtml(role.tenant_id)}" type="button">×</button></span>
+    <span class="tenant-role-chip">${escHtml(role.tenant_id)} · ${escHtml(normalizeTenantRole(role.role))} <button data-remove-role="${escHtml(user.id)}:${escHtml(role.tenant_id)}" type="button">×</button></span>
   `).join("") : "—";
 }
 
@@ -8683,7 +9079,7 @@ function renderUserRoleAssignForm(user, tenants) {
   return `<div class="inline-form-row">` +
     `<select class="form-input form-input-sm user-tenant-select" data-user-id="${escHtml(user.id)}">${options}</select>` +
     `<select class="form-input form-input-sm user-role-select" data-user-id="${escHtml(user.id)}">` +
-    `<option value="admin">Admin</option><option value="operator">Operator</option></select>` +
+    `<option value="admin">Tenant Admin</option><option value="viewer">Tenant Viewer</option></select>` +
     `<button class="btn btn-secondary btn-small" data-assign-role="${escHtml(user.id)}" type="button">Assign</button>` +
     `<button class="btn btn-danger btn-small" data-delete-user="${escHtml(user.id)}" type="button">Delete</button>` +
     `</div>`;
@@ -8822,7 +9218,7 @@ async function deleteUser(userId) {
 
 async function assignRole(userId) {
   const tenantId = $(`.user-tenant-select[data-user-id="${CSS.escape(userId)}"]`)?.value;
-  const role = $(`.user-role-select[data-user-id="${CSS.escape(userId)}"]`)?.value || "operator";
+  const role = $(`.user-role-select[data-user-id="${CSS.escape(userId)}"]`)?.value || "viewer";
   if (!tenantId) return;
   const res = await apiFetch(`/api/superadmin/users/${encodeURIComponent(userId)}/roles`, { method: "POST", body: { tenant_id: tenantId, role } });
   if (!res || !res.ok) {
@@ -9164,3 +9560,9 @@ document.getElementById("acme-dns-provider")?.addEventListener("change", toggleA
 
   })();
 }
+
+(async function initUnifiedWebUi() {
+  const mode = await detectWebuiMode();
+  if (mode === 'hub') startHubApp();
+  else startSpokeApp();
+})();

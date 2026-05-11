@@ -1152,7 +1152,7 @@ function renderServerTab(data) {
         };
         try {
           if (btn.dataset.action === 'delete_vm') {
-            if (!confirmVmDelete([entry])) return;
+            if (catKey !== 'sim' && !confirmVmDelete([entry])) return;
             await deleteProxmoxVm(btn.dataset.vmid);
             showNotification(`Delete queued for ${describeProxmoxGuest(entry)}`, 'info');
             scheduleProxmoxRefresh();
@@ -5962,7 +5962,7 @@ document.getElementById('server-select-all')?.addEventListener('change', (e) => 
 
     try {
       if (op === 'delete') {
-        if (!confirmVmDelete(selected)) return;
+        if (activeVmCat !== 'sim' && !confirmVmDelete(selected)) return;
         const results = await Promise.allSettled(selected.map((entry) => deleteProxmoxVm(entry.vmid)));
         const failed = results.filter((result) => result.status === 'rejected');
         const successCount = results.length - failed.length;

@@ -658,6 +658,69 @@
               <tbody id="spoke-audit-tbody"></tbody>
             </table>
           </div>
+
+          <div id="spoke-server" class="setup-subpanel hidden" style="margin-top:12px;">
+            <div id="spoke-server-node-bar" class="server-node-bar" style="margin-bottom:10px;">
+              <span class="server-node-name" id="spoke-server-hostname">—</span>
+              <span class="server-stat-pill" id="spoke-server-vm-count" title="Total VMs">0 VMs</span>
+              <span class="server-stat-pill" id="spoke-server-running-count" title="Running VMs">0 running</span>
+              <span class="server-stat-pill" id="spoke-server-pve-version" title="PVE version"></span>
+              <span class="server-stat-pill" id="spoke-server-agent-version" title="Agent version"></span>
+            </div>
+            <div class="setup-card" style="margin-bottom:10px;">
+              <div class="setup-card-header"><h3>Virtual Machines</h3></div>
+              <table class="data-table" id="spoke-server-vms-table">
+                <thead><tr><th>VMID</th><th>Name</th><th>Type</th><th>Status</th><th>USB</th></tr></thead>
+                <tbody id="spoke-server-vms-tbody"></tbody>
+              </table>
+            </div>
+            <div class="setup-card">
+              <div class="setup-card-header"><h3>USB Devices</h3></div>
+              <table class="data-table" id="spoke-server-usb-table">
+                <thead><tr><th>Bus</th><th>VID:PID</th><th>VMID</th><th>Prov Status</th></tr></thead>
+                <tbody id="spoke-server-usb-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="spoke-central" class="setup-subpanel hidden" style="margin-top:12px;">
+            <div id="spoke-central-token-bar" class="server-node-bar" style="margin-bottom:10px;">
+              <span class="server-node-name">Aruba Central</span>
+              <span class="server-stat-pill" id="spoke-central-token-state">—</span>
+            </div>
+            <div class="setup-card" style="margin-bottom:10px;">
+              <div class="setup-card-header"><h3>Health Checks</h3></div>
+              <table class="data-table" id="spoke-central-checks-table">
+                <thead><tr><th>Check</th><th>State</th><th>Value</th><th>Last Check</th></tr></thead>
+                <tbody id="spoke-central-checks-tbody"></tbody>
+              </table>
+            </div>
+            <div class="setup-card">
+              <div class="setup-card-header"><h3>Hardware Alerts</h3></div>
+              <table class="data-table" id="spoke-central-alerts-table">
+                <thead><tr><th>Severity</th><th>Type</th><th>Message</th></tr></thead>
+                <tbody id="spoke-central-alerts-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="spoke-status" class="setup-subpanel hidden" style="margin-top:12px;">
+            <div class="setup-card" style="margin-bottom:10px;">
+              <div class="setup-card-header"><h3>Agent Info</h3></div>
+              <table class="data-table" id="spoke-status-info-table">
+                <thead><tr><th>Field</th><th>Value</th></tr></thead>
+                <tbody id="spoke-status-info-tbody"></tbody>
+              </table>
+            </div>
+            <div class="setup-card">
+              <div class="setup-card-header"><h3>Services</h3></div>
+              <table class="data-table" id="spoke-status-services-table">
+                <thead><tr><th>Service</th><th>Status</th><th>Errors</th><th>Last Run</th></tr></thead>
+                <tbody id="spoke-status-services-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
         </div>
       </div>
 

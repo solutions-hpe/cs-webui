@@ -8821,12 +8821,172 @@ async function saveSpokeProcessingMode() {
   await loadSpokes(true);
 }
 
+function renderSpokeServerTab() {
+  if (!activeSpokeModal) return;
+  const proxmox = activeSpokeModal.spoke?.telemetry?.proxmox || {};
+  const vms = proxmox.vms || [];
+  const usbState = proxmox.usb_state || [];
+
+  // Node bar
+  $("#spoke-server-hostname") && ($("#spoke-server-hostname").textContent = proxmox.hostname || activeSpokeModal.spoke?.hostname || "—");
+  $("#spoke-server-vm-count") && ($("#spoke-server-vm-count").textContent = `${proxmox.vm_count ?? vms.length} VMs`);
+  $("#spoke-server-running-count") && ($("#spoke-server-running-count").textContent = `${proxmox.running_count ?? vms.filter(v => v.status === "running").length} running`);
+  $("#spoke-server-pve-version") && ($("#spoke-server-pve-version").textContent = proxmox.pve_version ? `PVE ${proxmox.pve_version}` : "");
+  $("#spoke-server-agent-version") && ($("#spoke-server-agent-version").textContent = proxmox.agent_version ? `Agent ${proxmox.agent_version}` : "");
+
+  // VMs table
+  const vmsTbody = $("#spoke-server-vms-tbody");
+  if (vmsTbody) {
+    if (!vms.length) {
+      vmsTbody.innerHTML = `<tr><td colspan="5" class="empty-msg">No VMs</td></tr>`;
+    } else {
+      const usbByVmid = {};
+      usbState.forEach(u => { if (u.vmid != null) usbByVmid[String(u.vmid)] = u; });
+      vmsTbody.innerHTML = vms.map(vm => {
+        const statusClass = vm.status === "running" ? "status-online" : "status-offline";
+        const usbEntry = usbByVmid[String(vm.vmid)];
+        const usbBadge = usbEntry
+          ? `<span class="status-badge ${usbEntry.prov_status === "active" ? "status-online" : "status-unknown"}">${usbEntry.prov_status || "—"}</span>`
+          : `<span class="status-badge status-offline">none</span>`;
+        return `<tr>
+          <td>${escapeHtml(String(vm.vmid ?? ""))}</td>
+          <td>${escapeHtml(vm.name || "")}</td>
+          <td>${escapeHtml(vm.type || "")}</td>
+          <td><span class="status-badge ${statusClass}">${escapeHtml(vm.status || "—")}</span></td>
+          <td>${usbBadge}</td>
+        </tr>`;
+      }).join("");
+    }
+  }
+
+  // USB table
+  const usbTbody = $("#spoke-server-usb-tbody");
+  if (usbTbody) {
+    if (!usbState.length) {
+      usbTbody.innerHTML = `<tr><td colspan="4" class="empty-msg">No USB devices</td></tr>`;
+    } else {
+      usbTbody.innerHTML = usbState.map(u => {
+        const ps = String(u.prov_status || "—");
+        const psClass = ps === "active" ? "status-online" : ps === "provisioning" ? "status-pending" : "status-offline";
+        return `<tr>
+          <td>${escapeHtml(String(u.bus || u.bus_path || "—"))}</td>
+          <td>${escapeHtml(String(u.vidpid || "—"))}</td>
+          <td>${escapeHtml(String(u.vmid ?? "—"))}</td>
+          <td><span class="status-badge ${psClass}">${escapeHtml(ps)}</span></td>
+        </tr>`;
+      }).join("");
+    }
+  }
+}
+
+function renderSpokeCentralTab() {
+  if (!activeSpokeModal) return;
+  const central = activeSpokeModal.spoke?.telemetry?.central || {};
+  const checks = central.status || {};
+  const alerts = central.hardware_alerts || [];
+  const tokenState = central.token_state || (central.token_valid ? "valid" : "unknown");
+
+  // Token bar
+  const tokenBadge = $("#spoke-central-token-state");
+  if (tokenBadge) {
+    const cls = tokenState === "valid" ? "status-online" : tokenState === "expired" ? "status-offline" : "status-unknown";
+    tokenBadge.className = `server-stat-pill ${cls}`;
+    tokenBadge.textContent = `Token: ${escapeHtml(tokenState)}`;
+  }
+
+  // Checks table
+  const checksTbody = $("#spoke-central-checks-tbody");
+  if (checksTbody) {
+    const checkEntries = Object.entries(checks);
+    if (!checkEntries.length) {
+      checksTbody.innerHTML = `<tr><td colspan="4" class="empty-msg">No checks</td></tr>`;
+    } else {
+      checksTbody.innerHTML = checkEntries.map(([name, c]) => {
+        const state = String(c.state || "—");
+        const stateClass = state === "ok" ? "status-online" : state === "warn" ? "status-pending" : state === "error" ? "status-offline" : "status-unknown";
+        const lastCheck = c.last_check ? new Date(c.last_check * 1000).toLocaleTimeString() : "—";
+        return `<tr>
+          <td>${escapeHtml(name)}</td>
+          <td><span class="status-badge ${stateClass}">${escapeHtml(state)}</span></td>
+          <td>${escapeHtml(String(c.value ?? "—"))}</td>
+          <td>${escapeHtml(lastCheck)}</td>
+        </tr>`;
+      }).join("");
+    }
+  }
+
+  // Alerts table
+  const alertsTbody = $("#spoke-central-alerts-tbody");
+  if (alertsTbody) {
+    if (!alerts.length) {
+      alertsTbody.innerHTML = `<tr><td colspan="3" class="empty-msg">No alerts</td></tr>`;
+    } else {
+      alertsTbody.innerHTML = alerts.map(a => {
+        const sev = String(a.severity || "info");
+        const sevClass = sev === "critical" ? "status-offline" : sev === "warning" ? "status-pending" : "status-unknown";
+        return `<tr>
+          <td><span class="status-badge ${sevClass}">${escapeHtml(sev)}</span></td>
+          <td>${escapeHtml(a.check_type || "—")}</td>
+          <td>${escapeHtml(a.message || "—")}</td>
+        </tr>`;
+      }).join("");
+    }
+  }
+}
+
+function renderSpokeStatusTab() {
+  if (!activeSpokeModal) return;
+  const api = activeSpokeModal.spoke?.telemetry?.api_server || {};
+  const health = api.health || {};
+  const services = api.services || {};
+
+  // Info table
+  const infoTbody = $("#spoke-status-info-tbody");
+  if (infoTbody) {
+    const rows = [
+      ["Hostname", activeSpokeModal.spoke?.hostname || health.hostname || "—"],
+      ["Version", health.version || "—"],
+      ["Installer Version", health.installer_version || "—"],
+      ["Clients", String(health.clients ?? "—")],
+      ["Repo Synced", health.repo_synced != null ? (health.repo_synced ? "Yes" : "No") : "—"],
+      ["Repo Error", health.repo_error || "None"],
+    ];
+    infoTbody.innerHTML = rows.map(([k, v]) =>
+      `<tr><td><strong>${escapeHtml(k)}</strong></td><td>${escapeHtml(String(v))}</td></tr>`
+    ).join("");
+  }
+
+  // Services table
+  const servicesTbody = $("#spoke-status-services-tbody");
+  if (servicesTbody) {
+    const entries = Object.entries(services);
+    if (!entries.length) {
+      servicesTbody.innerHTML = `<tr><td colspan="4" class="empty-msg">No services</td></tr>`;
+    } else {
+      servicesTbody.innerHTML = entries.map(([name, svc]) => {
+        const status = String(svc.status || "—");
+        const statusClass = status === "running" ? "status-online" : status === "stopped" ? "status-offline" : "status-unknown";
+        const lastRun = svc.last_run ? new Date(svc.last_run * 1000).toLocaleString() : "—";
+        return `<tr>
+          <td>${escapeHtml(name)}</td>
+          <td><span class="status-badge ${statusClass}">${escapeHtml(status)}</span></td>
+          <td>${escapeHtml(String(svc.error_count ?? 0))}</td>
+          <td>${escapeHtml(lastRun)}</td>
+        </tr>`;
+      }).join("");
+    }
+  }
+}
+
 function openSpokeModal(spoke, tenantId, subtab = "spoke-clients") {
   activeSpokeModal = { spoke, tenant_id: tenantId };
   $("#spoke-modal-title") && ($("#spoke-modal-title").textContent = `${spokePrimaryLabel(spoke)} — ${tenantName(tenantId)}`);
   $("#spoke-modal")?.classList.remove("hidden");
   activateSpokeSubtab(subtab);
   renderSpokeClientsTab();
+  renderSpokeServerTab();
+  renderSpokeCentralTab();
+  renderSpokeStatusTab();
   loadSpokeCommands();
   loadSpokeProcessingMode();
   loadSpokeAudit();
@@ -8851,12 +9011,15 @@ function closeSpokeModal() {
 
 function activateSpokeSubtab(subtabId) {
   $$(".spoke-subtab").forEach(button => button.classList.toggle("active", button.dataset.subtab === subtabId));
-  ["spoke-clients", "spoke-commands", "spoke-mode", "spoke-audit"].forEach(panelId => {
+  ["spoke-clients", "spoke-commands", "spoke-mode", "spoke-audit", "spoke-server", "spoke-central", "spoke-status"].forEach(panelId => {
     document.getElementById(panelId)?.classList.toggle("hidden", panelId !== subtabId);
   });
   if (subtabId === "spoke-commands") loadSpokeCommands();
   if (subtabId === "spoke-mode") loadSpokeProcessingMode();
   if (subtabId === "spoke-audit") loadSpokeAudit();
+  if (subtabId === "spoke-server") renderSpokeServerTab();
+  if (subtabId === "spoke-central") renderSpokeCentralTab();
+  if (subtabId === "spoke-status") renderSpokeStatusTab();
 }
 
 async function sendSpokeCommand(type) {

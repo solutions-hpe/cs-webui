@@ -109,6 +109,7 @@ let currentSettings = {
     teams_enabled: false,
     teams_webhook_url_configured: false,
   },
+  repo_sync_interval: 300,
   usb_vidpids: '[]',
   usb_missing_timeout: '60',
   vm_image_1_template_id: '100',
@@ -738,6 +739,7 @@ function mergeSettings(next = {}) {
       teams_enabled: next.notifications?.teams_enabled ?? currentSettings.notifications?.teams_enabled ?? false,
       teams_webhook_url_configured: next.notifications?.teams_webhook_url_configured ?? currentSettings.notifications?.teams_webhook_url_configured ?? false,
     },
+    repo_sync_interval: next.repo_sync_interval ?? currentSettings.repo_sync_interval ?? 300,
     usb_vidpids: next.usb_vidpids ?? currentSettings.usb_vidpids ?? '[]',
     usb_missing_timeout: next.usb_missing_timeout ?? currentSettings.usb_missing_timeout ?? '60',
     vm_image_1_template_id: next.vm_image_1_template_id ?? currentSettings.vm_image_1_template_id ?? '100',
@@ -5659,11 +5661,12 @@ if (syncIntervalInput) {
       return;
     }
     try {
-      await requestJson('/api/settings', {
+      const response = await requestJson('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ repo_sync_interval: val })
       });
+      applySettingsToUI(response.settings || { repo_sync_interval: val });
       showInlineMessage(syncIntervalMsg, `Sync interval set to ${val}s.`, false);
     } catch (err) {
       showInlineMessage(syncIntervalMsg, `Error: ${err.message}`, true);

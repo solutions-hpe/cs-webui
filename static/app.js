@@ -331,7 +331,26 @@ async function hydrateSetupSubtab(subtabId) {
     return;
   }
 
-  await loadSettings().catch(() => {});
+  const loadSetupSettings = async () => {
+    try {
+      await loadSettings();
+    } catch (error) {
+      const activePanel = document.querySelector('#tab-setup .setup-subpanel:not(.hidden)');
+      const existingMsg = activePanel?.querySelector('.settings-message, [role="alert"]');
+      if (existingMsg) {
+        existingMsg.textContent = `Could not load settings: ${error.message}`;
+        existingMsg.classList.remove('hidden');
+        existingMsg.classList.add('error');
+      }
+    }
+  };
+
+  if (subtabId === 'setup-notifications') {
+    await loadSetupSettings();
+    return;
+  }
+
+  await loadSetupSettings();
 
   if (subtabId === 'setup-relay') {
     await requestJson('/api/relay/status').then(setRelayStatus).catch(() => {});
@@ -683,10 +702,12 @@ const smtpPassword       = document.getElementById('smtp-password');
 const smtpFrom           = document.getElementById('smtp-from');
 const smtpTo             = document.getElementById('smtp-to');
 const testEmailBtn       = document.getElementById('test-email-btn');
+const saveEmailBtn       = document.getElementById('save-email-btn');
 const emailNotifMsg      = document.getElementById('email-notif-msg');
 const teamsEnabledToggle = document.getElementById('teams-enabled-toggle');
 const teamsWebhookUrl    = document.getElementById('teams-webhook-url');
 const testTeamsBtn       = document.getElementById('test-teams-btn');
+const saveTeamsBtn       = document.getElementById('save-teams-btn');
 const teamsNotifMsg      = document.getElementById('teams-notif-msg');
 const usbAutoProvisionInput = document.getElementById('usb-auto-provision');
 const usbMissingTimeoutInput = document.getElementById('usb-missing-timeout');
@@ -1551,23 +1572,23 @@ function applySettingsToUI(s) {
   if (l1VlanEndInput && !l1VlanEndInput.matches(':focus')) l1VlanEndInput.value = settings.l1_vlan_end ?? '199';
   if (recloneScheduleDayInput && !recloneScheduleDayInput.matches(':focus')) recloneScheduleDayInput.value = schedule.day;
   if (recloneScheduleTimeInput && !recloneScheduleTimeInput.matches(':focus')) recloneScheduleTimeInput.value = schedule.time;
-  renderUsbVidPidTable();
-  renderIgnoredUsbList();
-  renderIgnoredHostnamesList();
-  renderSiteMappingsTable();
-  renderSelectedChecksPreview();
-  renderHwChecksPreview();
+  try { renderUsbVidPidTable(); } catch (_) {}
+  try { renderIgnoredUsbList(); } catch (_) {}
+  try { renderIgnoredHostnamesList(); } catch (_) {}
+  try { renderSiteMappingsTable(); } catch (_) {}
+  try { renderSelectedChecksPreview(); } catch (_) {}
+  try { renderHwChecksPreview(); } catch (_) {}
   if ((availableChecks.alerts.length || availableChecks.insights.length) && availableChecksContainer) {
-    renderAvailableChecks();
+    try { renderAvailableChecks(); } catch (_) {}
   }
-  renderCentralOverview();
-  renderChecksList(); // Refresh sim tab whenever settings change (monitored checks may have changed)
-  renderUsbSummary(latestProxmoxData);
-  renderRecloneStatus(latestRecloneState || latestProxmoxData.reclone_state || {});
-  renderAutoProvisionStatus();
+  try { renderCentralOverview(); } catch (_) {}
+  try { renderChecksList(); } catch (_) {} // Refresh sim tab whenever settings change (monitored checks may have changed)
+  try { renderUsbSummary(latestProxmoxData); } catch (_) {}
+  try { renderRecloneStatus(latestRecloneState || latestProxmoxData.reclone_state || {}); } catch (_) {}
+  try { renderAutoProvisionStatus(); } catch (_) {}
   if (centralSiteDetailOpen) {
-    renderSiteClients(centralSiteDetailOpen);
-    renderSiteChecks(centralSiteDetailOpen, centralStatusData[centralSiteDetailOpen] || {});
+    try { renderSiteClients(centralSiteDetailOpen); } catch (_) {}
+    try { renderSiteChecks(centralSiteDetailOpen, centralStatusData[centralSiteDetailOpen] || {}); } catch (_) {}
   }
 
   // Sync interval
@@ -5966,6 +5987,7 @@ async function _autoSaveEmail() {
 }
 
 if (emailEnabledToggle) emailEnabledToggle.addEventListener('change', _autoSaveEmail);
+if (saveEmailBtn) saveEmailBtn.addEventListener('click', _autoSaveEmail);
 [smtpHost, smtpPort, smtpUser, smtpPassword, smtpFrom, smtpTo].forEach((el) => {
   if (el) el.addEventListener('blur', _autoSaveEmail);
 });
@@ -6013,6 +6035,7 @@ async function _autoSaveTeams() {
 }
 
 if (teamsEnabledToggle) teamsEnabledToggle.addEventListener('change', _autoSaveTeams);
+if (saveTeamsBtn) saveTeamsBtn.addEventListener('click', _autoSaveTeams);
 if (teamsWebhookUrl) teamsWebhookUrl.addEventListener('blur', _autoSaveTeams);
 
 if (testTeamsBtn) {

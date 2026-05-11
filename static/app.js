@@ -9690,8 +9690,27 @@ document.getElementById("acme-dns-provider")?.addEventListener("change", toggleA
   })();
 }
 
+async function setFooterVersions() {
+  try {
+    const init = await fetch('/api/init').then(r => r.json()).catch(() => null);
+    if (!init) return;
+    const fWebui = document.getElementById('footer-cswebui-version');
+    const fRepo  = document.getElementById('footer-repo-version');
+    if (fWebui) {
+      const ver = init.app_version || init.installer_version || '—';
+      fWebui.textContent = `cs-webui v${ver}`;
+      fWebui.title = `cs-webui frontend version: v${ver}`;
+    }
+    if (fRepo) {
+      const rver = init.installer_version || '—';
+      fRepo.textContent = `repo v${rver}`;
+    }
+  } catch (_) {}
+}
+
 (async function initUnifiedWebUi() {
   const mode = await detectWebuiMode();
+  void setFooterVersions();
   if (mode === 'hub') startHubApp();
   else startSpokeApp();
 })();

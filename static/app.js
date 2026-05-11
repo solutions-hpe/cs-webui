@@ -629,7 +629,7 @@ function setRepoStatus(synced, error, lastSync, repoVersion) {
   // Update footer repo pill
   if (repoVersion) {
     const fRepo = document.getElementById('footer-repo-version');
-    if (fRepo) { fRepo.textContent = `repo v${repoVersion}`; fRepo.title = `Client-sim repo version: v${repoVersion}`; }
+    if (fRepo) { fRepo.textContent = `GitHub Repo v${repoVersion}`; fRepo.title = `Client-sim repo version: v${repoVersion}`; }
   }
 }
 
@@ -1169,7 +1169,7 @@ function renderServerTab(data) {
   const fAgent = document.getElementById('footer-agent-version');
   if (fAgent) {
     if (agentVer) {
-      fAgent.textContent = `agent v${agentVer}`;
+      fAgent.textContent = `PXMX Agent v${agentVer}`;
       fAgent.title = `Proxmox agent version: v${agentVer}`;
       fAgent.style.display = '';
     } else {
@@ -6364,12 +6364,12 @@ loadSimulations();
     const fRepo  = document.getElementById('footer-repo-version');
     if (fWebui) {
       const ver = init.app_version || init.installer_version || '—';
-      fWebui.textContent = `cs-webui v${ver}`;
+      fWebui.textContent = `CS-WebUI v${ver}`;
       fWebui.title = `cs-webui frontend version: v${ver}`;
     }
     if (fRepo) {
       const rver = init.installer_version || '—';
-      fRepo.textContent = `repo v${rver}`;
+      fRepo.textContent = `GitHub Repo v${rver}`;
       fRepo.title = `Installer/repo version: v${rver}`;
     }
   } catch (_) { /* silent — WS will provide live state */ }
@@ -7263,7 +7263,7 @@ async function pingApi() {
     const data = await res.json().catch(() => null);
     const footerVersion = $("#footer-cswebui-version");
     if (footerVersion && data?.version) {
-      footerVersion.textContent = `cs-webui v${data.version}`;
+      footerVersion.textContent = `CS-WebUI v${data.version}`;
       footerVersion.title = `cs-webui version: v${data.version} | Branch: ${data.branch || "?"} | SHA: ${data.sha || "?"}`;
     }
   }
@@ -9760,12 +9760,12 @@ async function setFooterVersions() {
     const fRepo  = document.getElementById('footer-repo-version');
     if (fWebui) {
       const ver = init.app_version || init.installer_version || '—';
-      fWebui.textContent = `cs-webui v${ver}`;
+      fWebui.textContent = `CS-WebUI v${ver}`;
       fWebui.title = `cs-webui frontend version: v${ver}`;
     }
     if (fRepo) {
       const rver = init.installer_version || '—';
-      fRepo.textContent = `repo v${rver}`;
+      fRepo.textContent = `GitHub Repo v${rver}`;
     }
   } catch (_) {}
 }

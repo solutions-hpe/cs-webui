@@ -1929,7 +1929,7 @@ function ensureRow(hostname) {
   const detailRow = document.createElement('tr');
   detailRow.className = 'control-row hidden';
   const detailCell = document.createElement('td');
-  detailCell.colSpan = 10;
+  detailCell.colSpan = 8;
   detailRow.appendChild(detailCell);
 
   const statusCell = createCell('status-cell');
@@ -1939,11 +1939,9 @@ function ensureRow(hostname) {
 
   const hostnameCell = createCell('hostname-cell');
   const platformCell = createCell();
-  const simIdCell = createCell();
   const ssidCell = createCell();
   const activeCell = createCell('badge-cell');
-  const impactCell = createCell('impact-cell');
-  const lastSeenCell = createCell();
+  const lastSeenCell = createCell('nowrap-cell');
   const actionsCell = createCell();
 
   // Error count badge cell — shows a red badge when the client has reported errors.
@@ -1966,10 +1964,8 @@ function ensureRow(hostname) {
     statusCell,
     hostnameCell,
     platformCell,
-    simIdCell,
     ssidCell,
     activeCell,
-    impactCell,
     lastSeenCell,
     errorCell,
     actionsCell
@@ -1985,10 +1981,8 @@ function ensureRow(hostname) {
     statusDot,
     hostnameCell,
     platformCell,
-    simIdCell,
     ssidCell,
     activeCell,
-    impactCell,
     lastSeenCell,
     errorCell,
     errorBadge,
@@ -2040,10 +2034,8 @@ function upsertClient(client) {
   refs.mainRow.classList.toggle('client-offline', !merged.online);
   renderClientHostname(refs.hostnameCell, merged.hostname);
   refs.platformCell.textContent = merged.platform || '—';
-  refs.simIdCell.textContent = merged.simulation_id || '—';
   refs.ssidCell.textContent = merged.connected_ssid || '—';
   renderBadges(refs.activeCell, merged.active_simulations || []);
-  renderImpactCell(refs.impactCell, merged.active_simulations || []);
   refs.lastSeenCell.textContent = formatLastSeen(merged.last_seen);
   refs.controlButton.textContent = openControlHost === merged.hostname ? 'Close' : 'Control';
 
@@ -7103,14 +7095,12 @@ function renderClientRowsForHub() {
       <td>${escHtml(client.hostname || "—")}</td>
       <td>${escHtml(client.spoke_name || client.spoke_hostname || client.spoke_id || "—")}</td>
       <td>${escHtml(client.platform || client.hw_type || "—")}</td>
-      <td>${escHtml(client.simulation_id || "—")}</td>
       <td>${escHtml(client.connected_ssid || "—")}</td>
       <td><div class="badge-list">${(client.active_simulations || []).length ? client.active_simulations.map(sim => `<span class="${hubSimulationBadgeClass(sim)}">${escHtml(sim)}</span>`).join("") : '<span class="muted">—</span>'}</div></td>
-      <td>${escHtml(hubImpactSummary(client.active_simulations || []))}</td>
-      <td>${escHtml(fmtDate(client.last_seen))}</td>
+      <td style="white-space:nowrap">${escHtml(fmtDate(client.last_seen))}</td>
       <td>${Number(client.error_count || 0)}</td>
     </tr>
-  `).join("") : '<tr><td colspan="10" class="empty-state">No client telemetry reported for this tenant.</td></tr>';
+  `).join("") : '<tr><td colspan="8" class="empty-state">No client telemetry reported for this tenant.</td></tr>';
 }
 
 function buildTenantUserCounts(users = []) {

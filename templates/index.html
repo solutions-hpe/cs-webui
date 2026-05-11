@@ -216,7 +216,7 @@
       <div class="setup-card">
         <div class="table-scroll">
           <table class="data-table">
-            <thead><tr><th>Status</th><th>Hostname</th><th>Spoke</th><th>Platform</th><th>SIM Bucket</th><th>SSID</th><th>Active Simulations</th><th>Aruba Central Impact</th><th>Last Seen</th><th>Errors</th></tr></thead>
+            <thead><tr><th>Status</th><th>Hostname</th><th>Spoke</th><th>Platform</th><th>SSID</th><th>Active Simulations</th><th style="white-space:nowrap">Last Seen</th><th>Errors</th></tr></thead>
             <tbody id="hub-clients-tbody"></tbody>
           </table>
         </div>
@@ -676,18 +676,16 @@
                 <th>Status</th>
                 <th>Hostname</th>
                 <th>Platform</th>
-                <th>SIM Bucket</th>
                 <th>SSID</th>
                 <th>Active Simulations</th>
-                <th>Aruba Central Impact</th>
-                <th>Last Seen</th>
+                <th style="white-space:nowrap">Last Seen</th>
                 <th>Errors</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody id="clients-body">
               <tr id="empty-row">
-                <td colspan="10" class="empty-state">No clients connected — waiting for beacons…</td>
+                <td colspan="8" class="empty-state">No clients connected — waiting for beacons…</td>
               </tr>
             </tbody>
           </table>

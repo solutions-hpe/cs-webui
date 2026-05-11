@@ -249,6 +249,7 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 
 /* ── Impact cell ────────────────────────────────────────────────── */
 .impact-cell { display: flex; align-items: center; white-space: nowrap; }
+.nowrap-cell { white-space: nowrap; }
 
 /* ── Aruba Impact + Simulation badges ──────────────────────────── */
 .badge-cell {

@@ -643,6 +643,7 @@ const syncNowMsg = document.getElementById('sync-now-message');
 const settingsMsg = document.getElementById('settings-message');
 const githubClearConfigBtn = document.getElementById('github-clear-config-btn');
 const checkUpdateBtn = document.getElementById('check-update-btn');
+const refreshWebuiBtn = document.getElementById('refresh-webui-btn');
 const updateMsg = document.getElementById('update-message');
 const versionCurrent = document.getElementById('version-current');
 const versionAvailable = document.getElementById('version-available');
@@ -1784,6 +1785,31 @@ checkUpdateBtn.addEventListener('click', async () => {
     updateMsg._timer = setTimeout(() => { updateMsg.className = 'settings-message hidden'; }, 10000);
   }
 });
+
+if (refreshWebuiBtn) {
+  refreshWebuiBtn.addEventListener('click', async () => {
+    refreshWebuiBtn.disabled = true;
+    refreshWebuiBtn.textContent = '↻ Refreshing…';
+    updateMsg.textContent = 'Downloading latest UI files from GitHub…';
+    updateMsg.className = 'settings-message success';
+    updateMsg.classList.remove('hidden');
+    clearTimeout(updateMsg._timer);
+    try {
+      const res = await fetch('/api/refresh-webui', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      updateMsg.textContent = data.message;
+      updateMsg._timer = setTimeout(() => { updateMsg.className = 'settings-message hidden'; }, 10000);
+    } catch (err) {
+      updateMsg.textContent = `Error: ${err.message}`;
+      updateMsg.className = 'settings-message error';
+      updateMsg._timer = setTimeout(() => { updateMsg.className = 'settings-message hidden'; }, 10000);
+    } finally {
+      refreshWebuiBtn.disabled = false;
+      refreshWebuiBtn.textContent = '↻ Refresh UI Files';
+    }
+  });
+}
 
 // Load initial version status on page load
 fetch('/api/version').then(r => r.json()).then(applyVersionStatus).catch(() => {});

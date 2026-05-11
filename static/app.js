@@ -8185,6 +8185,8 @@ async function requestAcmeCert() {
     status: "running",
     last_result: null,
     last_error: null,
+    last_log: "",
+    last_log_at: "",
   };
   updateHubAcmeDisplay();
   startHubAcmeStatusPolling();

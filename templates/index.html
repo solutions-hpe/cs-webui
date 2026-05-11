@@ -340,6 +340,19 @@
               <p>Configure automatic certificate management via ACME (Let's Encrypt / ZeroSSL).</p>
             </div>
             <div id="acme-cert-status" class="setup-status-grid"></div>
+            <div id="acme-log-panel" class="hidden" style="margin-top:16px;border:1px solid rgba(148,163,184,0.35);border-radius:12px;padding:12px;background:rgba(15,23,42,0.03);">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+                <div>
+                  <div style="font-weight:600;">ACME Debug Log</div>
+                  <div id="acme-log-meta" class="form-hint">Most recent issuance details.</div>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                  <button id="acme-log-toggle-btn" class="btn btn-secondary btn-small" type="button">Show Log</button>
+                  <button id="acme-log-copy-btn" class="btn btn-secondary btn-small" type="button">Copy Log</button>
+                </div>
+              </div>
+              <pre id="acme-log-output" class="hidden" style="margin-top:12px;max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-word;background:#0f172a;color:#e2e8f0;border-radius:10px;padding:12px;font-size:12px;line-height:1.45;"></pre>
+            </div>
             <div class="setup-form" style="margin-top:16px;">
               <div class="form-group">
                 <label class="form-label">Domain</label>

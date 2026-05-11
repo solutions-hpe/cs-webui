@@ -2641,7 +2641,11 @@ function getAutoProvisionRunState(proxmoxData = latestProxmoxData) {
   const usbState = Array.isArray(proxmoxData?.usb_state) ? proxmoxData.usb_state : [];
   const vms = Array.isArray(proxmoxData?.vms) ? proxmoxData.vms : [];
   const vmByVmid = new Map(vms.map((vm) => [String(vm?.vmid), vm || {}]));
-  const provisioningItems = usbState
+  // Respect the configured concurrency limit — only show VMs that are actively
+  // being worked on (up to reclone_concurrency at a time). Prefer running VMs
+  // first (configuring) so they're not displaced by queued clones.
+  const concurrency = Math.max(1, parseInt(currentSettings.reclone_concurrency, 10) || 1);
+  const allProvisioningEntries = usbState
     .filter((entry) => entry && entry.vmid != null && entry.prov_status === 'provisioning')
     .map((entry) => {
       const vm = vmByVmid.get(String(entry.vmid)) || {};
@@ -2654,6 +2658,9 @@ function getAutoProvisionRunState(proxmoxData = latestProxmoxData) {
         status: vm.status === 'running' ? 'configuring' : 'cloning',
       };
     });
+  // Sort: configuring (VM running) first, then cloning — then cap to concurrency
+  allProvisioningEntries.sort((a, b) => (a.status === 'configuring' ? -1 : b.status === 'configuring' ? 1 : 0));
+  const provisioningItems = allProvisioningEntries.slice(0, concurrency);
 
   // Also include VMs that finished cloning but haven't checked into the API yet.
   // This keeps the live panel and "provisioning" badge visible through the

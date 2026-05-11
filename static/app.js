@@ -2426,129 +2426,155 @@ function updateVmRecloneIcons() {
   });
 }
 
+function getAutoProvisionRunState(proxmoxData = latestProxmoxData) {
+  const run = proxmoxData?.prov_run;
+  if (run && Array.isArray(run.items)) {
+    const items = run.items
+      .filter((item) => item && item.vmid != null)
+      .map((item) => ({
+        ...item,
+        status: String(item.status || 'pending').toLowerCase(),
+      }));
+    return {
+      running: Boolean(run.running),
+      total: Number.isFinite(Number(run.total)) ? Number(run.total) : items.length,
+      completed: Number.isFinite(Number(run.completed)) ? Number(run.completed) : items.filter((item) => item.status === 'done').length,
+      failed: Number.isFinite(Number(run.failed)) ? Number(run.failed) : items.filter((item) => item.status === 'failed').length,
+      startedAt: run.started_at || null,
+      updatedAt: run.updated_at || null,
+      completedAt: run.completed_at || null,
+      items,
+    };
+  }
+
+  const usbState = Array.isArray(proxmoxData?.usb_state) ? proxmoxData.usb_state : [];
+  const vms = Array.isArray(proxmoxData?.vms) ? proxmoxData.vms : [];
+  const vmByVmid = new Map(vms.map((vm) => [String(vm?.vmid), vm || {}]));
+  const items = usbState
+    .filter((entry) => entry && entry.vmid != null && entry.prov_status === 'provisioning')
+    .map((entry) => {
+      const vm = vmByVmid.get(String(entry.vmid)) || {};
+      return {
+        vmid: entry.vmid,
+        vm_name: vm.name || null,
+        usb_name: entry.name || null,
+        bus_path: entry.bus_path || null,
+        vidpid: entry.vidpid || null,
+        status: vm.status === 'running' ? 'configuring' : 'cloning',
+      };
+    });
+
+  return {
+    running: items.length > 0,
+    total: items.length,
+    completed: 0,
+    failed: 0,
+    startedAt: null,
+    updatedAt: null,
+    completedAt: null,
+    items,
+  };
+}
+
+function autoProvisionStatusMeta(status) {
+  switch (String(status || '').toLowerCase()) {
+    case 'cloning':
+      return { label: 'Cloning', className: 'autoprov-phase-cloning' };
+    case 'configuring':
+      return { label: 'Configuring', className: 'autoprov-phase-configuring' };
+    case 'done':
+      return { label: 'Done', className: 'autoprov-phase-done' };
+    case 'failed':
+      return { label: 'Failed', className: 'autoprov-phase-failed' };
+    default:
+      return { label: 'Pending', className: 'autoprov-phase-pending' };
+  }
+}
+
 function renderAutoProvisionStatus() {
+  const autoProv = currentSettings.usb_auto_provision === 'on';
+  const run = getAutoProvisionRunState(latestProxmoxData);
+  const total = Math.max(run.total || 0, run.items.length);
+  const completed = Math.min(run.completed || 0, total);
+  const failed = Math.min(run.failed || 0, Math.max(0, total - completed));
+
   // ── VM page status bar (right side of tab nav) ─────────────────────────────
   const bar = document.getElementById('autoprov-status-bar');
   if (bar) {
-    const usbState = Array.isArray(latestProxmoxData.usb_state) ? latestProxmoxData.usb_state : [];
-    const autoProv = currentSettings.usb_auto_provision === 'on';
     const iconEl = document.getElementById('autoprov-status-icon');
     const textEl = document.getElementById('autoprov-status-text');
-    bar.classList.remove('hidden', 'is-active', 'is-idle');
+    if (iconEl) iconEl.className = 'autoprov-status-icon';
+    bar.classList.remove('hidden', 'is-active', 'is-idle', 'is-disabled');
 
     if (!autoProv) {
-      bar.classList.add('is-idle');
-      if (iconEl) iconEl.textContent = '⏹';
-      if (textEl) textEl.textContent = 'VM Auto-Provisioning: Not Running';
-    } else {
-      const total = usbState.length;
-      const provisioning = usbState.filter((e) => e.prov_status === 'provisioning');
-      const activeUsb    = usbState.filter((e) => e.prov_status === 'active');
-
-      // Cross-reference: "active" USB entries whose VM is not yet running in Proxmox
-      const vms = Array.isArray(latestProxmoxData.vms) ? latestProxmoxData.vms : [];
-      const runningVmids = new Set(vms.filter((v) => v.status === 'running').map((v) => Number(v.vmid)));
-      const startingUp = activeUsb.filter((e) => e.vmid != null && !runningVmids.has(Number(e.vmid)));
-      const fullyActive = activeUsb.length - startingUp.length;
-
-      if (total === 0) {
-        bar.classList.add('is-idle');
-        if (iconEl) iconEl.textContent = '📋';
-        if (textEl) textEl.textContent = 'VM Auto-Provisioning: No USB devices tracked';
-      } else if (provisioning.length > 0 || startingUp.length > 0) {
-        bar.classList.add('is-active');
-        if (iconEl) iconEl.textContent = '⏳';
-        const parts = [];
-        if (provisioning.length > 0) parts.push(`${provisioning.length} cloning`);
-        if (startingUp.length > 0) parts.push(`${startingUp.length} starting up`);
-        parts.push(`${fullyActive} / ${total} active`);
-        if (textEl) textEl.textContent = `VM Auto-Provisioning: ${parts.join(' · ')}`;
-      } else {
-        bar.classList.add('is-idle');
-        if (iconEl) iconEl.textContent = '✅';
-        if (textEl) textEl.textContent = `VM Auto-Provisioning: All ${total} VMs active`;
+      bar.classList.add('is-disabled');
+      if (iconEl) iconEl.innerHTML = '<span class="autoprov-dot" aria-hidden="true"></span>';
+      if (textEl) textEl.textContent = 'VM Auto-Provisioning: Off';
+    } else if (run.running && total > 0) {
+      bar.classList.add('is-active');
+      if (iconEl) iconEl.innerHTML = '<span class="autoprov-spinner" aria-hidden="true"></span>';
+      if (textEl) {
+        const text = [`VM Auto-Provisioning: Provisioning… ${completed}/${total}`];
+        if (failed > 0) text.push(`${failed} failed`);
+        textEl.textContent = text.join(' · ');
       }
+    } else {
+      bar.classList.add('is-idle');
+      if (iconEl) iconEl.innerHTML = '<span class="autoprov-dot" aria-hidden="true"></span>';
+      if (textEl) textEl.textContent = 'VM Auto-Provisioning: Idle';
     }
   }
 
   // ── Right-side live panel ───────────────────────────────────────────────────
-  const liveBadge   = document.getElementById('autoprov-live-badge');
+  const livePanel = document.getElementById('autoprov-live-panel');
+  const liveBadge = document.getElementById('autoprov-live-badge');
   const liveSummary = document.getElementById('autoprov-live-summary');
-  const logEl       = document.getElementById('auto-prov-log');
-  if (!liveSummary || !logEl) return;
+  const logEl = document.getElementById('auto-prov-log');
+  if (!livePanel || !liveSummary || !logEl) return;
 
-  const usbState = Array.isArray(latestProxmoxData.usb_state) ? latestProxmoxData.usb_state : [];
-  const autoProv = currentSettings.usb_auto_provision === 'on';
-  const missingTimeoutMins = parseInt(latestProxmoxData.missing_timeout_mins, 10) || 60;
-  const vms = Array.isArray(latestProxmoxData.vms) ? latestProxmoxData.vms : [];
-  const runningVmids = new Set(vms.filter((v) => v.status === 'running').map((v) => Number(v.vmid)));
-
-  if (!autoProv) {
-    if (liveBadge) { liveBadge.textContent = 'Off'; liveBadge.className = 'badge badge-grey'; }
-    liveSummary.innerHTML = `<div class="muted" style="font-size:13px;">VM Auto-Provisioning is disabled. Enable it in Setup → Proxmox.</div>`;
+  const showPanel = autoProv && run.running && total > 0;
+  livePanel.classList.toggle('hidden', !showPanel);
+  if (!showPanel) {
+    if (liveBadge) { liveBadge.textContent = autoProv ? 'Idle' : 'Off'; liveBadge.className = 'badge badge-grey'; }
+    liveSummary.innerHTML = '';
     logEl.innerHTML = '';
     return;
   }
 
-  // In-flight entries only: provisioning, starting-up, missing, tearing_down
-  const inFlight = usbState.filter((e) => {
-    if (e.prov_status === 'provisioning' || e.prov_status === 'tearing_down' || e.prov_status === 'missing') return true;
-    if (e.prov_status === 'active' && e.vmid != null && !runningVmids.has(Number(e.vmid))) return true;
-    return false;
-  });
-
-  // Badge
   if (liveBadge) {
-    const total = usbState.length;
-    if (inFlight.length > 0) {
-      liveBadge.textContent = `${inFlight.length} in progress`; liveBadge.className = 'badge badge-blue';
-    } else if (total === 0) {
-      liveBadge.textContent = 'Idle'; liveBadge.className = 'badge badge-grey';
-    } else {
-      liveBadge.textContent = 'All settled'; liveBadge.className = 'badge badge-green';
-    }
+    liveBadge.textContent = `Provisioning ${completed}/${total}`;
+    liveBadge.className = 'badge badge-blue';
   }
 
-  // Summary line from last completed provisioning/teardown event
-  const summary = latestProxmoxData.prov_summary;
-  if (summary && summary.at) {
-    const when = new Date(summary.at * 1000).toLocaleString();
-    const verb = summary.action === 'provisioned' ? 'provisioned' : 'deleted';
-    const colour = summary.action === 'provisioned' ? '#16a34a' : '#dc2626';
-    liveSummary.innerHTML = `<div style="font-size:12px;color:${colour};margin-bottom:6px;">
-      ${summary.count} VM${summary.count !== 1 ? 's' : ''} ${verb} · ${when}</div>`;
-  } else {
-    liveSummary.innerHTML = '';
-  }
+  const completedPct = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const startedText = run.startedAt ? `Started ${formatRelativeTime(run.startedAt)}` : 'Provisioning in progress';
+  const summaryBits = [`${completed} of ${total} complete`];
+  if (failed > 0) summaryBits.push(`${failed} failed`);
+  liveSummary.innerHTML = `
+    <div class="autoprov-live-summary-main">
+      <strong>${summaryBits.join(' · ')}</strong>
+      <span class="muted">${completedPct}%</span>
+    </div>
+    <div class="progress-bar-wrap autoprov-progress-wrap"><div class="progress-bar" style="width:${completedPct}%;"></div></div>
+    <div class="autoprov-live-summary-sub">${escHtml(startedText)}</div>
+  `;
 
-  // In-flight VM rows
-  if (inFlight.length === 0) {
-    logEl.innerHTML = `<div class="muted" style="padding:6px 0;font-size:13px;">No active provisioning work.</div>`;
-    return;
-  }
-
-  const now = Date.now() / 1000;
-  logEl.innerHTML = inFlight.map((e) => {
-    const isStarting = e.prov_status === 'active';
-    const icon  = isStarting ? '🔄' : e.prov_status === 'provisioning' ? '⏳' : e.prov_status === 'tearing_down' ? '🗑️' : '⚠️';
-    const label = isStarting ? 'Starting Up' : e.prov_status === 'provisioning' ? 'Cloning' : e.prov_status === 'tearing_down' ? 'Tearing Down' : 'Missing Dongle';
-    const name  = e.name || `USB ${e.bus_path || ''}`;
-    let detail = '';
-    if (e.prov_status === 'missing' && e.missing_since) {
-      const elapsedMins = Math.round((now - e.missing_since) / 60);
-      const remainMins  = Math.max(0, missingTimeoutMins - elapsedMins);
-      detail = `<span class="muted">${elapsedMins}m elapsed · tears down in ~${remainMins}m</span>`;
-    } else if (e.prov_status === 'tearing_down') {
-      detail = `<span class="muted">Destroying VM…</span>`;
-    } else if (e.prov_status === 'provisioning') {
-      detail = `<span class="muted">Cloning &amp; configuring…</span>`;
-    } else if (isStarting) {
-      detail = `<span class="muted">VM booting…</span>`;
-    }
-    return `<div class="log-entry">
-        <span>${icon}</span><span>VM ${e.vmid ?? '—'}</span>
-        <span class="muted">${name}</span><span>${label}</span>${detail}
-      </div>`;
+  logEl.innerHTML = run.items.map((item) => {
+    const meta = autoProvisionStatusMeta(item.status);
+    const vmName = item.vm_name || `VM ${item.vmid ?? '—'}`;
+    const detailBits = [];
+    if (item.vmid != null) detailBits.push(`VMID ${item.vmid}`);
+    if (item.usb_name) detailBits.push(item.usb_name);
+    if (item.vidpid) detailBits.push(item.vidpid);
+    return `
+      <div class="autoprov-live-item">
+        <div class="autoprov-live-item-main">
+          <div class="autoprov-live-item-name">${escHtml(vmName)}</div>
+          <div class="autoprov-live-item-meta">${escHtml(detailBits.join(' · ') || 'Provisioning')}</div>
+        </div>
+        <span class="autoprov-phase ${meta.className}">${meta.label}</span>
+      </div>
+    `;
   }).join('');
 }
 

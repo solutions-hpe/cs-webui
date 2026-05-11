@@ -670,13 +670,13 @@
           </div>
 
           <!-- Right: VM Auto-Provisioning Live Status -->
-          <div id="autoprov-live-panel" class="setup-card vm-server-status-tile">
+          <div id="autoprov-live-panel" class="setup-card vm-server-status-tile hidden">
             <div class="setup-card-header" style="margin-bottom:8px;">
               <h2 style="font-size:1rem;margin:0;">⚡ VM Auto-Provisioning</h2>
-              <span id="autoprov-live-badge" class="badge badge-grey">Off</span>
+              <span id="autoprov-live-badge" class="badge badge-grey">Idle</span>
             </div>
-            <div id="autoprov-live-summary" class="autoprov-live-summary"></div>
-            <div id="auto-prov-log" class="reclone-log" style="max-height:300px;margin-top:8px;"></div>
+            <div id="autoprov-live-summary" class="autoprov-live-summary" aria-live="polite"></div>
+            <div id="auto-prov-log" class="autoprov-live-list" aria-live="polite"></div>
           </div>
 
           </div><!-- end reclone-autoprov-grid -->

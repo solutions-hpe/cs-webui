@@ -1400,19 +1400,49 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 .autoprov-status-bar {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border-radius: 6px;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
   font-size: 0.82rem;
-  font-weight: 500;
+  font-weight: 600;
   margin-left: auto;
   white-space: nowrap;
-  background: var(--card-bg, #f9fafb);
-  border: 1px solid var(--border);
-  color: var(--text);
+  background: rgba(15, 23, 42, 0.86);
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  color: #e2e8f0;
 }
-.autoprov-status-bar.is-active { background:#eff6ff; border-color:#93c5fd; color:#1d4ed8; }
-.autoprov-status-bar.is-idle   { background:#f3f4f6; border-color:#d1d5db; color:#6b7280; }
+.autoprov-status-bar.is-active {
+  background: rgba(2, 132, 199, 0.16);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #e0f2fe;
+}
+.autoprov-status-bar.is-idle {
+  background: rgba(15, 23, 42, 0.72);
+  border-color: rgba(100, 116, 139, 0.32);
+  color: #cbd5e1;
+}
+.autoprov-status-bar.is-disabled {
+  background: rgba(51, 65, 85, 0.58);
+  border-color: rgba(100, 116, 139, 0.28);
+  color: #94a3b8;
+}
+.autoprov-status-icon { display:flex; align-items:center; }
+.autoprov-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: autoprov-spin 0.85s linear infinite;
+}
+.autoprov-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.85;
+}
+.autoprov-status-bar.is-active .autoprov-dot { animation: autoprov-pulse 1.2s ease-in-out infinite; }
 .btn-warning { background:#f59e0b; color:#fff; border:none; border-radius:6px; padding:6px 14px; cursor:pointer; font-size:0.85rem; }
 .btn-warning:hover { background:#d97706; }
 .server-bulk-bar .btn-danger { background:#ef4444; color:#fff; border:none; border-radius:6px; padding:6px 14px; cursor:pointer; font-size:0.85rem; }
@@ -1530,21 +1560,116 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 }
 
 #autoprov-live-panel .autoprov-live-summary {
-  margin-bottom: 6px;
+  margin-bottom: 10px;
 }
 
-#auto-prov-log {
-  margin-top: 6px !important;
+.autoprov-live-summary-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+}
+
+.autoprov-live-summary-sub {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.autoprov-progress-wrap {
+  height: 10px;
+  margin: 0 0 10px;
+  background: rgba(148, 163, 184, 0.2);
+}
+
+.autoprov-progress-wrap .progress-bar {
+  background: linear-gradient(90deg, #01a982, #38bdf8);
+}
+
+.autoprov-live-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.autoprov-live-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.38);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.autoprov-live-item-main { min-width: 0; }
+.autoprov-live-item-name { font-weight: 600; }
+.autoprov-live-item-meta {
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  word-break: break-word;
+}
+
+.autoprov-phase {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 92px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.autoprov-phase-cloning,
+.autoprov-phase-pending {
+  background: rgba(59, 130, 246, 0.16);
+  color: #bfdbfe;
+}
+
+.autoprov-phase-configuring {
+  background: rgba(14, 165, 233, 0.16);
+  color: #bae6fd;
+}
+
+.autoprov-phase-done {
+  background: rgba(34, 197, 94, 0.16);
+  color: #bbf7d0;
+}
+
+.autoprov-phase-failed {
+  background: rgba(239, 68, 68, 0.16);
+  color: #fecaca;
+}
+
+@keyframes autoprov-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes autoprov-pulse {
+  0%, 100% { transform: scale(0.9); opacity: 0.65; }
+  50% { transform: scale(1.15); opacity: 1; }
 }
 
 @media (max-width: 900px) {
   .vm-server-status-tile {
     flex-basis: 100%;
   }
-}
 
-.autoprov-live-summary { margin-bottom: 8px; }
-#autoprov-live-panel .reclone-log { max-height: 300px; }
+  .autoprov-live-summary-main,
+  .autoprov-live-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
 
 /* ── Agent Log Viewer ─────────────────────────────────── */
 .agent-log-viewer {

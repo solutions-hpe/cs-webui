@@ -547,7 +547,7 @@ function setRelayStatus(data = {}) {
   const apikeyStatus = document.getElementById('relay-apikey-status');
 
   const isNameConflict = data.registration_status === 'name_conflict' || (data.error || '').startsWith('name_conflict:');
-  const isPending = (data.registration_status === 'pending' || !data.api_key_configured) && !data.connected && !isNameConflict;
+  const isPending = data.enabled && (data.registration_status === 'pending' || data.api_key_configured === false) && !data.connected && !isNameConflict;
 
   if (stateText) stateText.textContent = !data.enabled ? 'Disabled' : data.connected ? '✓ Connected' : isNameConflict ? '✗ Name conflict' : data.error ? '✗ Error' : data.registration_status === 'pending' ? 'Pending approval' : 'Enabled';
   if (lastTime) lastTime.textContent = data.last_sync ? new Date(data.last_sync * 1000).toLocaleTimeString() : '—';

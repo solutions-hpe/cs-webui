@@ -6278,6 +6278,9 @@ let autoRefreshSecondsLeft = 10;
 let refreshPaused = false;
 const autoRefreshActiveTabs = new Set(["dashboard", "spokes", "commands"]);
 let tenantDetailState = { open: false, tenantId: null, activeTab: "dashboard", data: {} };
+let tenantUserCounts = {};
+let dashboardTenantRows = [];
+const tenantDashboardSort = { key: "name", direction: "asc" };
 
 const PROCESSING_FEATURES = ["aruba_polling", "teams_webhook", "email", "heartbeat", "gkill", "schedules", "repo_sync"];
 const spokeUiState = { expandedByTenant: {}, search: "" };
@@ -6468,6 +6471,90 @@ function renderTenantSummaryPills(summary) {
   `;
 }
 
+function buildTenantUserCounts(users = []) {
+  return users.reduce((counts, user) => {
+    (user.tenant_roles || []).forEach(role => {
+      counts[role.tenant_id] = (counts[role.tenant_id] || 0) + 1;
+    });
+    return counts;
+  }, {});
+}
+
+function getTenantUserCount(tenantId) {
+  return Object.prototype.hasOwnProperty.call(tenantUserCounts, tenantId) ? tenantUserCounts[tenantId] : null;
+}
+
+function compareTenantDashboardValues(a, b) {
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  return String(a || "").localeCompare(String(b || ""), undefined, { numeric: true, sensitivity: "base" });
+}
+
+function tenantDashboardSortValue(row, key) {
+  if (key === "approvedSpokes" || key === "userCount") return row[key] ?? -1;
+  if (key === "createdAt" || key === "lastSync") return row[key] ? new Date(row[key]).getTime() : 0;
+  return String(row[key] || "").toLowerCase();
+}
+
+function sortDashboardTenantRows(rows) {
+  const { key, direction } = tenantDashboardSort;
+  const sorted = [...rows].sort((left, right) => compareTenantDashboardValues(
+    tenantDashboardSortValue(left, key),
+    tenantDashboardSortValue(right, key),
+  ));
+  return direction === "desc" ? sorted.reverse() : sorted;
+}
+
+function renderDashboardTenantSortHeader(label, key) {
+  const active = tenantDashboardSort.key === key;
+  const indicator = active ? (tenantDashboardSort.direction === "asc" ? "▲" : "▼") : "↕";
+  const ariaSort = active ? (tenantDashboardSort.direction === "asc" ? "ascending" : "descending") : "none";
+  return `<button class="tenant-table-sort${active ? " active" : ""}" data-dashboard-tenant-sort="${escHtml(key)}" aria-sort="${ariaSort}" type="button"><span>${escHtml(label)}</span><span class="tenant-table-sort-indicator" aria-hidden="true">${indicator}</span></button>`;
+}
+
+function renderDashboardTenantTable(rows) {
+  const sortedRows = sortDashboardTenantRows(rows);
+  const body = sortedRows.length ? sortedRows.map(row => `
+    <tr>
+      <td><button class="btn btn-link tenant-link-btn" data-open-tenant="${escHtml(row.id)}" type="button">${escHtml(row.name)}</button></td>
+      <td><code>${escHtml(row.id)}</code></td>
+      <td>${row.approvedSpokes}</td>
+      <td>${row.userCount ?? '<span class="muted">—</span>'}</td>
+      <td>${row.createdAt ? escHtml(fmtDate(row.createdAt)) : '<span class="muted">—</span>'}</td>
+      <td title="${escHtml(row.lastSync ? fmtDate(row.lastSync) : "—")}">${row.lastSync ? escHtml(relativeTime(row.lastSync)) : '<span class="muted">—</span>'}</td>
+      <td>
+        <div class="tenant-table-actions">
+          <button class="btn btn-secondary btn-small" data-open-tenant="${escHtml(row.id)}" type="button">Manage</button>
+          ${currentUser?.is_superadmin ? `<button class="btn btn-danger btn-small" data-delete-tenant="${escHtml(row.id)}" type="button">Delete</button>` : ""}
+        </div>
+      </td>
+    </tr>
+  `).join("") : '<tr><td colspan="7" class="empty-state">No tenants available.</td></tr>';
+  return `
+    <section class="setup-card tenant-list-card">
+      <div class="setup-card-header">
+        <h2>Tenants</h2>
+        <p>Tenant overview for the hub. Open a tenant to view its dashboard, spokes, commands, and configuration.</p>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>${renderDashboardTenantSortHeader("Tenant Name", "name")}</th>
+              <th>${renderDashboardTenantSortHeader("Tenant ID", "id")}</th>
+              <th>${renderDashboardTenantSortHeader("Approved Spokes", "approvedSpokes")}</th>
+              <th>${renderDashboardTenantSortHeader("Users", "userCount")}</th>
+              <th>${renderDashboardTenantSortHeader("Created", "createdAt")}</th>
+              <th>${renderDashboardTenantSortHeader("Last Sync", "lastSync")}</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
 function setTenantDetailVisible(open) {
   $("#hub-dashboard-overview")?.classList.toggle("hidden", open);
   $("#hub-tenant-detail")?.classList.toggle("hidden", !open);
@@ -6592,6 +6679,8 @@ function applyAuthUI() {
     currentTenantId = null;
     tenants = [];
     spokeCache = {};
+    tenantUserCounts = {};
+    dashboardTenantRows = [];
     tenantDetailState.data = {};
     resetTenantDetail();
     clearDynamicTenantTabs();
@@ -6621,10 +6710,15 @@ async function loadUserContext() {
   }
   currentUser = await meRes.json();
   if (currentUser.is_superadmin) {
-    const tenantsRes = await apiFetch("/api/superadmin/tenants");
-    tenants = tenantsRes && tenantsRes.ok ? (await tenantsRes.json()).map(item => ({ id: item.id, name: item.name || item.id })) : [];
+    const [tenantsRes, usersRes] = await Promise.all([
+      apiFetch("/api/superadmin/tenants"),
+      apiFetch("/api/superadmin/users"),
+    ]);
+    tenants = tenantsRes && tenantsRes.ok ? (await tenantsRes.json()).map(item => ({ id: item.id, name: item.name || item.id, raw: item })) : [];
+    tenantUserCounts = usersRes && usersRes.ok ? buildTenantUserCounts(await usersRes.json()) : {};
   } else {
-    tenants = (currentUser.tenant_roles || []).map(role => ({ id: role.tenant_id, name: role.tenant_id }));
+    tenants = (currentUser.tenant_roles || []).map(role => ({ id: role.tenant_id, name: role.tenant_id, raw: null }));
+    tenantUserCounts = {};
   }
   if (tenants.length && !tenants.some(tenant => tenant.id === currentTenantId)) {
     currentTenantId = tenants[0].id;
@@ -7102,34 +7196,22 @@ async function loadDashboard(force = false) {
     const totalSpokes = summaries.reduce((sum, item) => sum + item.summary.approvedCount, 0);
     const totalClients = summaries.reduce((sum, item) => sum + item.summary.clientCount, 0);
     const totalOnline = summaries.reduce((sum, item) => sum + item.summary.onlineCount, 0);
+    dashboardTenantRows = summaries.map(item => ({
+      id: item.tenant.id,
+      name: item.tenant.name || item.tenant.id,
+      approvedSpokes: item.summary.approvedCount,
+      userCount: getTenantUserCount(item.tenant.id),
+      createdAt: item.tenant.raw?.created_at || null,
+      lastSync: item.summary.lastSync,
+    }));
     $("#dash-spokes-pill") && ($("#dash-spokes-pill").textContent = `${summaries.length} tenant${summaries.length === 1 ? "" : "s"}`);
     $("#dash-clients-pill") && ($("#dash-clients-pill").textContent = `${totalClients} clients`);
     $("#dash-online-pill") && ($("#dash-online-pill").textContent = `${totalOnline}/${totalSpokes} online`);
     empty && (empty.textContent = "No tenants available.");
-    empty?.classList.toggle("hidden", summaries.length > 0);
+    empty?.classList.toggle("hidden", dashboardTenantRows.length > 0);
     if (!grid) return;
-    renderInBatches("dashboard", grid, summaries, item => {
-      const card = document.createElement("article");
-      card.className = "spoke-card compact-card tenant-card";
-      card.dataset.openTenant = item.tenant.id;
-      card.innerHTML = `
-        <div class="spoke-card-header-row">
-          <div class="spoke-card-title-wrap">
-            <div class="spoke-card-title">${escHtml(item.tenant.name || item.tenant.id)}</div>
-            <div class="spoke-card-subtitle"><code>${escHtml(item.tenant.id)}</code></div>
-          </div>
-          <div class="tenant-card-chevron">→</div>
-        </div>
-        <div class="spoke-card-meta">
-          <span class="stat-pill">${item.summary.approvedCount} spokes</span>
-          <span class="stat-pill">${item.summary.onlineCount} online</span>
-          <span class="stat-pill">${item.summary.clientCount} clients</span>
-          <span class="stat-pill">${item.summary.vmCount} VMs</span>
-        </div>
-        <div class="spoke-card-footer">Last sync ${escHtml(relativeTime(item.summary.lastSync))}</div>
-      `;
-      return card;
-    }, 60);
+    grid.classList.remove("spoke-grid");
+    grid.innerHTML = renderDashboardTenantTable(dashboardTenantRows);
     setTenantDetailVisible(false);
     return;
   }
@@ -7139,6 +7221,7 @@ async function loadDashboard(force = false) {
   const sites = (await res.json()).filter(site => site.status === "approved");
   const grid = $("#dashboard-grid");
   const empty = $("#dashboard-empty");
+  dashboardTenantRows = [];
   const onlineCount = sites.filter(site => isOnline(site.last_seen)).length;
   const clientCount = sites.reduce((sum, site) => sum + ((site.telemetry?.clients || []).length), 0);
   $("#dash-spokes-pill") && ($("#dash-spokes-pill").textContent = spokeLabel(sites.length));
@@ -7147,6 +7230,7 @@ async function loadDashboard(force = false) {
   empty && (empty.textContent = "No spokes registered yet.");
   empty?.classList.toggle("hidden", sites.length > 0);
   if (!grid) return;
+  grid.classList.add("spoke-grid");
   renderInBatches("dashboard", grid, sites, site => {
     const online = isOnline(site.last_seen);
     const clients = site.telemetry?.clients || [];
@@ -7745,15 +7829,21 @@ async function loadSuperadmin() {
     apiFetch("/api/superadmin/pending-spokes"),
     apiFetch("/api/superadmin/users"),
   ]);
+  let tenantData = [];
   if (tenantsRes?.ok) {
-    const tenantData = await tenantsRes.json();
+    tenantData = await tenantsRes.json();
     tenants = tenantData.map(item => ({ id: item.id, name: item.name || item.id, raw: item }));
+    await Promise.all(tenantData.map(item => ensureTenantSpokesFor(item.id, true)));
     buildTenantSelector();
     buildSuperadminTenantTabs();
-    renderSuperadminTenants(tenantData);
   }
+  if (usersRes?.ok) {
+    const users = await usersRes.json();
+    tenantUserCounts = buildTenantUserCounts(users);
+    renderSuperadminUsers(users);
+  }
+  if (tenantsRes?.ok) renderSuperadminTenants(tenantData);
   if (pendingRes?.ok) renderPendingSpokes(await pendingRes.json());
-  if (usersRes?.ok) renderSuperadminUsers(await usersRes.json());
   loadGkillState();
 }
 
@@ -7852,18 +7942,25 @@ function renderSuperadminTenants(items) {
   $("#sa-tenants-count") && ($("#sa-tenants-count").textContent = String(items.length));
   const tbody = $("#sa-tenants-tbody");
   if (!tbody) return;
-  tbody.innerHTML = items.length ? items.map(item => {
-    const spokeCount = Object.values(spokeCache).reduce((sum, arr) => sum + arr.filter(spoke => spoke.tenant_id === item.id).length, 0);
+  tbody.innerHTML = items.length ? [...items].sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id), undefined, { numeric: true, sensitivity: "base" })).map(item => {
+    const summary = summarizeTenantSpokes(spokeCache[item.id] || []);
+    const userCount = getTenantUserCount(item.id);
     return `
       <tr>
-        <td><button class="btn btn-link tenant-link-btn" data-open-tenant="${escHtml(item.id)}" type="button">${escHtml(item.name)}</button></td>
-        <td>${escHtml(item.id)}</td>
-        <td>${item.has_aruba_config ? "Yes" : "No"}</td>
-        <td>${spokeCount}</td>
-        <td><button class="btn btn-danger btn-small" data-delete-tenant="${escHtml(item.id)}" type="button">Delete</button></td>
+        <td>${escHtml(item.name || item.id)}</td>
+        <td><code>${escHtml(item.id)}</code></td>
+        <td>${summary.approvedCount}</td>
+        <td>${userCount ?? '<span class="muted">—</span>'}</td>
+        <td>${item.created_at ? escHtml(fmtDate(item.created_at)) : '<span class="muted">—</span>'}</td>
+        <td>
+          <div class="tenant-table-actions">
+            <button class="btn btn-secondary btn-small" data-open-tenant="${escHtml(item.id)}" type="button">Manage</button>
+            <button class="btn btn-danger btn-small" data-delete-tenant="${escHtml(item.id)}" type="button">Delete</button>
+          </div>
+        </td>
       </tr>
     `;
-  }).join("") : '<tr><td colspan="5" class="empty-state">No tenants found.</td></tr>';
+  }).join("") : '<tr><td colspan="6" class="empty-state">No tenants found.</td></tr>';
 }
 
 function renderUserRoles(user) {
@@ -7968,6 +8065,7 @@ async function deleteTenant(id) {
   if (currentTenantId === id) currentTenantId = tenants.find(tenant => tenant.id !== id)?.id || null;
   showToast("Tenant deleted.", "ok");
   await loadSuperadmin();
+  await loadDashboard(true);
 }
 
 async function createUser() {
@@ -8166,6 +8264,17 @@ function bindEvents() {
     if (tabButton) {
       if (tabButton.dataset.tenantId) setCurrentTenant(tabButton.dataset.tenantId, false);
       showTab(tabButton.dataset.tab, { button: tabButton });
+      return;
+    }
+
+    const tenantSortButton = event.target.closest("[data-dashboard-tenant-sort]");
+    if (tenantSortButton) {
+      const key = tenantSortButton.dataset.dashboardTenantSort;
+      if (key) {
+        tenantDashboardSort.direction = tenantDashboardSort.key === key && tenantDashboardSort.direction === "asc" ? "desc" : "asc";
+        tenantDashboardSort.key = key;
+        $("#dashboard-grid") && ($("#dashboard-grid").innerHTML = renderDashboardTenantTable(dashboardTenantRows));
+      }
       return;
     }
 

@@ -1809,8 +1809,13 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 .tenant-card { cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease; }
 .tenant-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,0.12); }
 .tenant-card-chevron { font-size: 1.2rem; color: var(--hpe-green); font-weight: 700; }
-.tenant-link-btn { padding: 0; border: none; background: none; color: var(--hpe-green-dark); font: inherit; font-weight: 600; cursor: pointer; }
+.tenant-list-card { margin-top: 16px; }
+.tenant-link-btn { padding: 0; border: none; background: none; color: var(--hpe-green-dark); font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
 .tenant-link-btn:hover { text-decoration: underline; }
+.tenant-table-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.tenant-table-sort { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: none; background: none; color: inherit; font: inherit; font-weight: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.tenant-table-sort.active { color: var(--hpe-navy); }
+.tenant-table-sort-indicator { font-size: 0.72rem; opacity: 0.8; }
 .tenant-detail-view { margin-top: 16px; }
 .tenant-detail-header-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
 .tenant-detail-heading { display: flex; flex-direction: column; gap: 4px; }

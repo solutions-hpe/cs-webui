@@ -125,7 +125,7 @@
               <button id="refresh-dashboard-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
             </div>
           </div>
-          <div id="dashboard-grid" class="spoke-grid"></div>
+          <div id="dashboard-grid"></div>
           <div id="dashboard-empty" class="empty-state hidden">No spokes registered yet.</div>
         </div>
 
@@ -403,7 +403,7 @@
               <button id="sa-add-tenant-btn" class="btn btn-primary btn-small" type="button">+ New Tenant</button>
             </div>
             <table class="data-table" id="sa-tenants-table">
-              <thead><tr><th>Name</th><th>ID / CID</th><th>Aruba Linked</th><th>Spokes</th><th></th></tr></thead>
+              <thead><tr><th>Tenant Name</th><th>Tenant ID</th><th>Approved Spokes</th><th>Users</th><th>Created</th><th>Actions</th></tr></thead>
               <tbody id="sa-tenants-tbody"></tbody>
             </table>
             <div id="sa-tenant-form" class="setup-form hidden" style="max-width:460px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">

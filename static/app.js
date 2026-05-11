@@ -215,18 +215,19 @@ function bindSecretInput(input) {
 const refreshActiveServerSubtabs = new Set(['server-vms', 'server-commands']);
 
 // ── Tab navigation ────────────────────────────────────────────────
-spokeRoot?.querySelectorAll('.tab').forEach((tab) => {
+const spokeNavTabs = document.querySelectorAll('#tab-nav .spoke-only .tab');
+spokeNavTabs.forEach((tab) => {
   tab.addEventListener('click', () => {
-    spokeRoot.querySelectorAll('.tab').forEach((t) => {
+    spokeNavTabs.forEach((t) => {
       t.classList.remove('active');
       t.setAttribute('aria-selected', 'false');
     });
-    spokeRoot.querySelectorAll('.tab-content').forEach((c) => c.classList.add('hidden'));
+    spokeRoot?.querySelectorAll('.tab-content').forEach((c) => c.classList.add('hidden'));
 
     tab.classList.add('active');
     tab.setAttribute('aria-selected', 'true');
     activeSpokeTab = tab.dataset.tab;
-    spokeRoot.querySelector(`#tab-${CSS.escape(tab.dataset.tab)}`)?.classList.remove('hidden');
+    spokeRoot?.querySelector(`#tab-${CSS.escape(tab.dataset.tab)}`)?.classList.remove('hidden');
     if (tab.dataset.tab === 'setup') activateSetupSubtab('setup-github');
     if (tab.dataset.tab === 'server') { activateServerSubtab('server-vms'); loadProxmoxApproved().catch(() => {}); }
     if (tab.dataset.tab === 'api-server') { renderServiceStatus().catch(() => {}); }
@@ -7988,15 +7989,56 @@ function toggleAcmeDnsSection() {
   }
 }
 
-function renderAcmeStatus(certInfo = {}, cfg = {}) {
+let hubAcmeSettings = null;
+let hubAcmeStatus = {};
+let hubAcmePoller = null;
+let hubAcmeLogExpanded = false;
+
+function getHubAcmeRequestStatus(status = {}, cfg = {}) {
+  if (status?.running) return "running";
+  if (status?.status) return String(status.status).toLowerCase();
+  if (status?.last_result?.success === true) return "success";
+  if (status?.last_result?.success === false) return "failed";
+  if (status?.last_error || cfg?.last_error) return "error";
+  return "idle";
+}
+
+function hubAcmeStatusLabel(statusValue) {
+  switch (statusValue) {
+    case "running": return "Running";
+    case "success": return "Success";
+    case "failed": return "Failed";
+    case "error": return "Error";
+    default: return "Idle";
+  }
+}
+
+function getHubAcmeLogText(cfg = {}, status = {}) {
+  return String(status?.last_log || cfg?.last_log || status?.last_error || cfg?.last_error || "");
+}
+
+function updateHubAcmeDisplay() {
+  renderAcmeStatus(hubAcmeSettings?.cert_info || {}, hubAcmeSettings || {}, hubAcmeStatus || {});
+  renderAcmeLogPanel(hubAcmeSettings || {}, hubAcmeStatus || {});
+}
+
+function renderAcmeStatus(certInfo = {}, cfg = {}, status = {}) {
   const container = $("#acme-cert-status");
   if (!container) return;
+  const requestStatus = getHubAcmeRequestStatus(status, cfg);
+  const requestStatusLabel = hubAcmeStatusLabel(requestStatus);
+  const lastLogAt = status?.last_log_at || cfg?.last_log_at || "";
+  const lastLogValue = lastLogAt ? escHtml(fmtDate(lastLogAt)) : '<span class="muted">—</span>';
+  const lastError = status?.last_error || cfg?.last_error || "";
+  const lastErrorValue = lastError ? escHtml(lastError) : '<span class="muted">—</span>';
   if (!certInfo || certInfo.source === "none") {
     container.innerHTML = `
       <div class="setup-status-item"><span class="setup-status-label">Certificate</span><span class="setup-status-value">Not configured</span></div>
       <div class="setup-status-item"><span class="setup-status-label">Challenge</span><span class="setup-status-value">${escHtml(cfg.challenge || "http-01")}</span></div>
       <div class="setup-status-item"><span class="setup-status-label">Authority</span><span class="setup-status-value">${escHtml(cfg.ca || "letsencrypt")}</span></div>
-      <div class="setup-status-item"><span class="setup-status-label">Last Error</span><span class="setup-status-value muted">${escHtml(cfg.last_error || "—")}</span></div>
+      <div class="setup-status-item"><span class="setup-status-label">Request Status</span><span class="setup-status-value">${escHtml(requestStatusLabel)}</span></div>
+      <div class="setup-status-item"><span class="setup-status-label">Log Updated</span><span class="setup-status-value">${lastLogValue}</span></div>
+      <div class="setup-status-item"><span class="setup-status-label">Last Error</span><span class="setup-status-value">${lastErrorValue}</span></div>
     `;
     return;
   }
@@ -8006,13 +8048,87 @@ function renderAcmeStatus(certInfo = {}, cfg = {}) {
     <div class="setup-status-item"><span class="setup-status-label">Expires</span><span class="setup-status-value">${escHtml(certInfo.expires || "—")} <span class="badge ${acmeBadgeClass(days)}">${Number.isFinite(days) ? `${days} days` : "unknown"}</span></span></div>
     <div class="setup-status-item"><span class="setup-status-label">Issuer</span><span class="setup-status-value">${escHtml(certInfo.issuer || "—")}</span></div>
     <div class="setup-status-item"><span class="setup-status-label">Source</span><span class="setup-status-value">${escHtml(certInfo.source || "—")}</span></div>
+    <div class="setup-status-item"><span class="setup-status-label">Request Status</span><span class="setup-status-value">${escHtml(requestStatusLabel)}</span></div>
+    <div class="setup-status-item"><span class="setup-status-label">Log Updated</span><span class="setup-status-value">${lastLogValue}</span></div>
+    <div class="setup-status-item"><span class="setup-status-label">Last Error</span><span class="setup-status-value">${lastErrorValue}</span></div>
   `;
 }
 
+function renderAcmeLogPanel(cfg = {}, status = {}) {
+  const panel = $("#acme-log-panel");
+  const meta = $("#acme-log-meta");
+  const output = $("#acme-log-output");
+  const toggleBtn = $("#acme-log-toggle-btn");
+  const copyBtn = $("#acme-log-copy-btn");
+  if (!panel || !meta || !output || !toggleBtn || !copyBtn) return;
+  const requestStatus = getHubAcmeRequestStatus(status, cfg);
+  const logText = getHubAcmeLogText(cfg, status);
+  const logAt = status?.last_log_at || cfg?.last_log_at || "";
+  const hasLog = Boolean(logText);
+  const forceExpanded = requestStatus === "failed" || requestStatus === "error";
+  if (forceExpanded) hubAcmeLogExpanded = true;
+  const expanded = forceExpanded || hubAcmeLogExpanded;
+  panel.classList.toggle("hidden", !hasLog && requestStatus === "idle");
+  meta.textContent = `${hubAcmeStatusLabel(requestStatus)}${logAt ? ` · Updated ${fmtDate(logAt)}` : ""}`;
+  toggleBtn.classList.toggle("hidden", forceExpanded || !hasLog);
+  toggleBtn.textContent = expanded ? "Hide Log" : "Show Log";
+  toggleBtn.onclick = () => {
+    hubAcmeLogExpanded = !expanded;
+    renderAcmeLogPanel(cfg, status);
+  };
+  copyBtn.disabled = !hasLog;
+  copyBtn.onclick = async () => {
+    if (!hasLog) return;
+    try {
+      await navigator.clipboard.writeText(logText);
+      showToast("ACME log copied to clipboard", "ok");
+    } catch (error) {
+      console.warn("ACME log copy failed", error);
+      showToast("Unable to copy ACME log", "warn");
+    }
+  };
+  output.textContent = hasLog ? logText : "No ACME debug log captured yet.";
+  output.classList.toggle("hidden", !expanded && !forceExpanded);
+  if ((expanded || forceExpanded) && requestStatus === "running") {
+    output.scrollTop = output.scrollHeight;
+  }
+}
+
+function stopHubAcmeStatusPolling() {
+  if (!hubAcmePoller) return;
+  clearInterval(hubAcmePoller);
+  hubAcmePoller = null;
+}
+
+async function pollHubAcmeStatus() {
+  try {
+    const res = await apiFetch("/api/acme/status");
+    if (!res || !res.ok) return;
+    hubAcmeStatus = await res.json();
+    updateHubAcmeDisplay();
+    if (!hubAcmeStatus?.running) stopHubAcmeStatusPolling();
+  } catch (error) {
+    console.warn("Hub ACME status poll failed", error);
+  }
+}
+
+function startHubAcmeStatusPolling() {
+  stopHubAcmeStatusPolling();
+  pollHubAcmeStatus().catch(() => {});
+  hubAcmePoller = window.setInterval(() => {
+    pollHubAcmeStatus().catch(() => {});
+  }, 2000);
+}
+
 async function loadAcmeSettings() {
-  const res = await apiFetch("/api/settings/acme");
-  if (!res || !res.ok) return;
-  const data = await res.json();
+  const [settingsRes, statusRes] = await Promise.all([
+    apiFetch("/api/settings/acme"),
+    apiFetch("/api/acme/status"),
+  ]);
+  if (!settingsRes || !settingsRes.ok) return;
+  const data = await settingsRes.json();
+  hubAcmeSettings = data;
+  hubAcmeStatus = statusRes?.ok ? await statusRes.json() : {};
   $("#acme-domain") && ($("#acme-domain").value = data.domain || "");
   $("#acme-email") && ($("#acme-email").value = data.email || "");
   $("#acme-ca") && ($("#acme-ca").value = data.ca || "letsencrypt");
@@ -8022,7 +8138,9 @@ async function loadAcmeSettings() {
   setSecretInputConfigured($("#acme-cf-token"), isConfiguredSecretValue(data.dns_credentials_configured?.cf_api_token ?? data.dns_credentials?.cf_api_token));
   setSecretInputConfigured($("#acme-he-ddns-key"), isConfiguredSecretValue(data.dns_credentials_configured?.he_ddns_key ?? data.dns_credentials?.he_ddns_key));
   toggleAcmeDnsSection();
-  renderAcmeStatus(data.cert_info || {}, data);
+  updateHubAcmeDisplay();
+  if (hubAcmeStatus?.running) startHubAcmeStatusPolling();
+  else stopHubAcmeStatusPolling();
 }
 
 async function saveAcmeConfig() {
@@ -8047,8 +8165,9 @@ async function saveAcmeConfig() {
     return;
   }
   const data = await res.json();
+  hubAcmeSettings = data;
   setFormMessage("acme-msg", "TLS certificate settings saved.", true);
-  renderAcmeStatus(data.cert_info || {}, data);
+  updateHubAcmeDisplay();
   setSecretInputConfigured($("#acme-cf-token"), isConfiguredSecretValue(data.dns_credentials_configured?.cf_api_token ?? data.dns_credentials?.cf_api_token));
   setSecretInputConfigured($("#acme-he-ddns-key"), isConfiguredSecretValue(data.dns_credentials_configured?.he_ddns_key ?? data.dns_credentials?.he_ddns_key));
 }
@@ -8059,19 +8178,31 @@ async function requestAcmeCert() {
     button.disabled = true;
     button.textContent = "Requesting certificate…";
   }
+  hubAcmeLogExpanded = true;
+  hubAcmeStatus = {
+    ...(hubAcmeStatus || {}),
+    running: true,
+    status: "running",
+    last_result: null,
+    last_error: null,
+  };
+  updateHubAcmeDisplay();
+  startHubAcmeStatusPolling();
   setFormMessage("acme-msg", "Requesting certificate… (this may take 60-90 seconds)", true);
   try {
     const res = await apiFetch("/api/settings/acme/request", { method: "POST" });
     const data = await readJson(res);
+    await loadAcmeSettings();
     if (!res || !res.ok || !data?.success) {
       setFormMessage("acme-msg", data?.error || data?.detail || "Certificate request failed.", false);
       return;
     }
     setFormMessage("acme-msg", `Certificate issued for ${data.domain} — expires ${data.expires || "unknown"}.`, true);
-    await loadAcmeSettings();
   } catch (error) {
+    await loadAcmeSettings().catch(() => {});
     setFormMessage("acme-msg", error.message || "Certificate request failed.", false);
   } finally {
+    stopHubAcmeStatusPolling();
     if (button) {
       button.disabled = !canManageTenant();
       button.textContent = "Request Certificate Now";

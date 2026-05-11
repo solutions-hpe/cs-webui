@@ -4733,16 +4733,19 @@ function simStatusBadge(pf) {
 const SIM_TEST_ORDER = [
   'dns_fail', 'assoc_fail', 'dhcp_fail', 'port_flap',
   'iperf', 'www_traffic', 'download', 'ping_test',
+  'ssidpw_fail', 'auth_fail',
 ];
 const SIM_TEST_LABELS = {
-  dns_fail:   'DNS Fail',
-  assoc_fail: 'Association Fail',
-  dhcp_fail:  'DHCP Fail',
-  port_flap:  'Port Flap',
-  iperf:      'iPerf',
-  www_traffic:'Web Traffic',
-  download:   'Download',
-  ping_test:  'Ping Test',
+  dns_fail:    'DNS Fail',
+  assoc_fail:  'Association Fail',
+  dhcp_fail:   'DHCP Fail',
+  port_flap:   'Port Flap',
+  iperf:       'iPerf',
+  www_traffic: 'Web Traffic',
+  download:    'Download',
+  ping_test:   'Ping Test',
+  ssidpw_fail: 'Bad SSID Password',
+  auth_fail:   'Auth Fail',
 };
 
 /** Build a map of testKey → { label, sims[], aggLabel, aggCls }

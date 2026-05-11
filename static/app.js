@@ -999,6 +999,23 @@ function deleteProxmoxVm(vmid) {
   return requestJson(`/api/proxmox/vms/${encodeURIComponent(vmid)}`, { method: 'DELETE' });
 }
 
+/**
+ * Handle the "Reclone" action for a single VM.
+ * If auto-provisioning is enabled, just delete — auto-prov will redeploy automatically,
+ * avoiding a race where both reclone and auto-prov try to deploy the same client.
+ * If auto-provisioning is disabled, queue the full delete+reclone.
+ */
+async function handleRecloneAction(vmid, entry = {}, extraArgs = {}) {
+  if (currentSettings.usb_auto_provision === 'on') {
+    await deleteProxmoxVm(vmid);
+    showNotification(`Deleted ${describeProxmoxGuest(entry)} — auto-provisioning will redeploy`, 'info');
+    scheduleProxmoxRefresh();
+  } else {
+    await sendProxmoxCommand('reclone_vm', vmid, extraArgs);
+    showNotification(`Reclone queued for ${describeProxmoxGuest(entry)}`, 'info');
+  }
+}
+
 function scheduleProxmoxRefresh(delayMs = 4000) {
   window.setTimeout(() => {
     requestJson('/api/proxmox/status').then(renderServerTab).catch(() => {});
@@ -1230,7 +1247,7 @@ function renderServerTab(data) {
     { action: 'stop_vm',     label: '■',  title: 'Stop'     },
     { action: 'reboot_vm',   label: '↺',  title: 'Reboot'   },
     { action: 'snapshot_vm', label: '📷', title: 'Snapshot' },
-    { action: 'reclone_vm',  label: '⎘',  title: 'Reclone'  },
+    { action: 'reclone_vm',  label: '⎘',  title: currentSettings.usb_auto_provision === 'on' ? 'Reclone (delete only — auto-prov will redeploy)' : 'Reclone'  },
     { action: 'delete_vm',   label: '✕',  title: 'Delete'   },
   ];
 
@@ -1326,6 +1343,13 @@ function renderServerTab(data) {
             await deleteProxmoxVm(btn.dataset.vmid);
             showNotification(`Delete queued for ${describeProxmoxGuest(entry)}`, 'info');
             scheduleProxmoxRefresh();
+            return;
+          }
+          if (btn.dataset.action === 'reclone_vm') {
+            await handleRecloneAction(btn.dataset.vmid, entry, {
+              type: row?.dataset.vmType || 'qemu',
+              source_vmid: row?.dataset.recloneSourceVmid ? parseInt(row.dataset.recloneSourceVmid, 10) : undefined,
+            });
             return;
           }
           await sendProxmoxCommand(btn.dataset.action, btn.dataset.vmid, {
@@ -6196,6 +6220,30 @@ document.getElementById('server-select-all')?.addEventListener('change', (e) => 
         showNotification('No selected guests can be recloned with the current configuration.', 'warning');
         return;
       }
+
+      if (op === 'reclone') {
+        const autoProvOn = currentSettings.usb_auto_provision === 'on';
+        if (autoProvOn) {
+          // Auto-provisioning will redeploy — just delete to avoid race conditions
+          const results = await Promise.allSettled(eligible.map((entry) => deleteProxmoxVm(entry.vmid)));
+          const failed = results.filter((r) => r.status === 'rejected');
+          const successCount = results.length - failed.length;
+          if (successCount) {
+            showNotification(`Deleted ${successCount} guest(s) — auto-provisioning will redeploy`, 'info');
+            scheduleProxmoxRefresh();
+          }
+          if (failed.length) throw new Error(failed[0].reason?.message || 'One or more deletes failed');
+        } else {
+          await Promise.all(eligible.map((entry) => sendProxmoxCommand('reclone_vm', entry.vmid, {
+            type: entry.vmType || 'qemu',
+            source_vmid: entry.sourceVmid ? parseInt(entry.sourceVmid, 10) : undefined,
+          })));
+          const skipped = selected.length - eligible.length;
+          showNotification(`Reclone sent for ${eligible.length} VM(s)${skipped ? ` (${skipped} skipped)` : ''}`, 'info');
+        }
+        return;
+      }
+
       await Promise.all(eligible.map((entry) => sendProxmoxCommand(action, entry.vmid, {
         type: entry.vmType || 'qemu',
         source_vmid: entry.sourceVmid ? parseInt(entry.sourceVmid, 10) : undefined,

@@ -2585,17 +2585,22 @@ function updateVmRecloneIcons() {
 function getAutoProvisionRunState(proxmoxData = latestProxmoxData) {
   const run = proxmoxData?.prov_run;
   if (run && Array.isArray(run.items)) {
-    const items = run.items
+    const concurrency = Math.max(1, parseInt(currentSettings.reclone_concurrency, 10) || 1);
+    const allItems = run.items
       .filter((item) => item && item.vmid != null)
       .map((item) => ({
         ...item,
         status: String(item.status || 'pending').toLowerCase(),
       }));
+    // Cap active (non-terminal) items to the concurrency limit; always keep failed/done
+    const terminalItems = allItems.filter(i => ['done', 'failed'].includes(i.status));
+    const activeItems = allItems.filter(i => !['done', 'failed'].includes(i.status));
+    const items = [...activeItems.slice(0, concurrency), ...terminalItems];
     return {
       running: Boolean(run.running),
-      total: Number.isFinite(Number(run.total)) ? Number(run.total) : items.length,
-      completed: Number.isFinite(Number(run.completed)) ? Number(run.completed) : items.filter((item) => item.status === 'done').length,
-      failed: Number.isFinite(Number(run.failed)) ? Number(run.failed) : items.filter((item) => item.status === 'failed').length,
+      total: Number.isFinite(Number(run.total)) ? Number(run.total) : allItems.length,
+      completed: Number.isFinite(Number(run.completed)) ? Number(run.completed) : allItems.filter((item) => item.status === 'done').length,
+      failed: Number.isFinite(Number(run.failed)) ? Number(run.failed) : allItems.filter((item) => item.status === 'failed').length,
       startedAt: run.started_at || null,
       updatedAt: run.updated_at || null,
       completedAt: run.completed_at || null,
@@ -2771,8 +2776,12 @@ function renderAutoProvisionStatus() {
   `;
 
   // Show only actively in-progress items (cloning / configuring / waiting / failed)
-  // Done items drop off the list — concurrency controls how many appear at once.
-  const activeItems = run.items.filter(item => item.status !== 'done');
+  // Done items drop off the list. Cap in-progress items to the configured concurrency
+  // limit so we never display more simultaneous slots than the setting allows.
+  const concurrency = Math.max(1, parseInt(currentSettings.reclone_concurrency, 10) || 1);
+  const failedItems = run.items.filter(item => item.status === 'failed');
+  const inProgressItems = run.items.filter(item => !['done', 'failed'].includes(item.status));
+  const activeItems = [...inProgressItems.slice(0, concurrency), ...failedItems];
   logEl.innerHTML = activeItems.map((item) => {
     const meta = autoProvisionStatusMeta(item.status);
     // vm_name is the Proxmox VM name which equals the assigned hostname (e.g. amoran-90014).

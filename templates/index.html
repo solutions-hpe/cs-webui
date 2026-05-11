@@ -113,156 +113,175 @@
 
   <div id="hub-root" class="hub-only">
     <!-- ── Dashboard (public) ── -->
-      <main id="tab-hub-dashboard" class="page tab-content">
-          <div class="page-toolbar">
-            <div class="toolbar-stats">
-              <span class="stat-pill" id="dash-spokes-pill">— spokes</span>
-              <span class="stat-pill" id="dash-clients-pill">— clients</span>
-              <span class="stat-pill" id="dash-online-pill">— online</span>
-            </div>
-            <div class="toolbar-actions">
-              <button id="refresh-dashboard-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
-            </div>
-          </div>
-          <div id="dashboard-grid"></div>
-          <div id="dashboard-empty" class="empty-state hidden">No spokes registered yet.</div>
-        </div>
-
-        <div id="hub-tenant-detail" class="tenant-detail-view hidden">
-          <div class="tenant-detail-header-row">
-            <button id="tenant-detail-back-btn" class="btn btn-secondary btn-small" type="button">← Back to Tenants</button>
-            <div class="tenant-detail-heading">
-              <h2 id="tenant-detail-title">Tenant</h2>
-              <p id="tenant-detail-subtitle" class="muted">—</p>
-            </div>
-            <div id="tenant-detail-pills" class="tenant-detail-inline-stats"></div>
-          </div>
-          <nav class="setup-subnav tenant-detail-subnav">
-            <button class="setup-subtab tenant-detail-tab active" data-tenant-detail-tab="dashboard" type="button">Dashboard</button>
-            <button class="setup-subtab tenant-detail-tab" data-tenant-detail-tab="spokes" type="button">Spokes</button>
-            <button class="setup-subtab tenant-detail-tab" data-tenant-detail-tab="commands" type="button">Commands</button>
-            <button class="setup-subtab tenant-detail-tab" data-tenant-detail-tab="setup" type="button">Setup</button>
-            <button class="setup-subtab tenant-detail-tab" data-tenant-detail-tab="config" type="button">Config</button>
-          </nav>
-          <section id="tenant-detail-dashboard-panel" class="tenant-detail-panel"></section>
-          <section id="tenant-detail-spokes-panel" class="tenant-detail-panel hidden"></section>
-          <section id="tenant-detail-commands-panel" class="tenant-detail-panel hidden"></section>
-          <section id="tenant-detail-setup-panel" class="tenant-detail-panel hidden"></section>
-          <section id="tenant-detail-config-panel" class="tenant-detail-panel hidden"></section>
-        </div>
-      </main>
-
-      <main id="tab-hub-simulations" class="page tab-content hidden">— simulations</span>
-            <span class="stat-pill" id="hub-simulation-clients-pill">— clients</span>
-            <span class="stat-pill" id="hub-simulation-spokes-pill">— spokes</span>
+    <main id="tab-hub-dashboard" class="page tab-content">
+      <div id="hub-dashboard-overview">
+        <div class="page-toolbar">
+          <div class="toolbar-stats">
+            <span class="stat-pill" id="dash-spokes-pill">— spokes</span>
+            <span class="stat-pill" id="dash-clients-pill">— clients</span>
+            <span class="stat-pill" id="dash-online-pill">— online</span>
           </div>
           <div class="toolbar-actions">
-            <input id="hub-simulations-search" type="search" class="form-input form-input-sm" placeholder="Filter simulations…">
-            <button id="refresh-simulations-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+            <button id="refresh-dashboard-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
           </div>
         </div>
-        <div class="setup-card">
-          <div class="table-scroll">
-            <table class="data-table">
-              <thead><tr><th>Spoke</th><th>Simulation</th><th>Status</th><th>Client Count</th></tr></thead>
-              <tbody id="hub-simulations-tbody"></tbody>
-            </table>
-          </div>
-        </div>
-      </main>
+        <div id="dashboard-grid"></div>
+        <div id="dashboard-empty" class="empty-state hidden">No spokes registered yet.</div>
+      </div>
 
-      <main id="tab-hub-clients" class="page tab-content hidden">— clients</span>
-            <span class="stat-pill" id="hub-clients-online-pill">— online</span>
-            <span class="stat-pill" id="hub-clients-spokes-pill">— spokes</span>
+      <div id="hub-tenant-detail" class="tenant-detail-view hidden">
+        <div class="tenant-detail-header-row">
+          <button id="tenant-detail-back-btn" class="btn btn-secondary btn-small" type="button">← Back to Tenants</button>
+          <div class="tenant-detail-heading">
+            <h2 id="tenant-detail-title">Tenant</h2>
+            <p id="tenant-detail-subtitle" class="muted">—</p>
           </div>
-          <div class="toolbar-actions">
-            <input id="hub-clients-search" type="search" class="form-input form-input-sm" placeholder="Search clients…">
-            <select id="hub-clients-status-filter" class="form-input form-input-sm">
-              <option value="all">All statuses</option>
-              <option value="online">Online</option>
-              <option value="offline">Offline</option>
-            </select>
-            <select id="hub-clients-spoke-filter" class="form-input form-input-sm">
-              <option value="all">All spokes</option>
-            </select>
-            <button id="refresh-clients-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
-          </div>
+          <div id="tenant-detail-pills" class="tenant-detail-inline-stats"></div>
         </div>
-        <div class="setup-card">
-          <div class="table-scroll">
-            <table class="data-table">
-              <thead><tr><th>Status</th><th>Hostname</th><th>Spoke</th><th>Platform</th><th>SIM Bucket</th><th>SSID</th><th>Active Simulations</th><th>Aruba Central Impact</th><th>Last Seen</th><th>Errors</th></tr></thead>
-              <tbody id="hub-clients-tbody"></tbody>
-            </table>
-          </div>
-        </div>
-      </main>
+        <nav class="setup-subnav tenant-detail-subnav">
+          <button class="setup-subtab tenant-detail-tab active" data-tenant-detail-tab="dashboard" type="button">Dashboard</button>
+          <button class="setup-subtab tenant-detail-tab" data-tenant-detail-tab="spokes" type="button">Spokes</button>
+          <button class="setup-subtab tenant-detail-tab" data-tenant-detail-tab="commands" type="button">Commands</button>
+          <button class="setup-subtab tenant-detail-tab" data-tenant-detail-tab="setup" type="button">Setup</button>
+          <button class="setup-subtab tenant-detail-tab" data-tenant-detail-tab="config" type="button">Config</button>
+        </nav>
+        <section id="tenant-detail-dashboard-panel" class="tenant-detail-panel"></section>
+        <section id="tenant-detail-spokes-panel" class="tenant-detail-panel hidden"></section>
+        <section id="tenant-detail-commands-panel" class="tenant-detail-panel hidden"></section>
+        <section id="tenant-detail-setup-panel" class="tenant-detail-panel hidden"></section>
+        <section id="tenant-detail-config-panel" class="tenant-detail-panel hidden"></section>
+      </div>
+    </main>
 
-      <!-- ── Islands tab (auth required) ── -->
-      <main id="tab-hub-spokes" class="page tab-content hidden">— spokes</span>
-            <span class="stat-pill" id="spokes-online-pill">— online</span>
-            <span class="stat-pill" id="spokes-clients-pill">— clients</span>
-          </div>
-          <div class="toolbar-actions">
-            <input id="spoke-search" type="search" class="form-input form-input-sm" placeholder="Search spokes…">
-            <button id="collapse-all-btn" class="btn btn-secondary btn-small" type="button">Collapse All</button>
-            <button id="expand-all-btn" class="btn btn-secondary btn-small" type="button">Expand All</button>
-            <button id="refresh-spokes-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
-          </div>
+    <main id="tab-hub-simulations" class="page tab-content hidden">
+      <div class="page-toolbar">
+        <div class="toolbar-stats">
+          <span class="stat-pill" id="hub-simulations-pill">— simulations</span>
+          <span class="stat-pill" id="hub-simulation-clients-pill">— clients</span>
+          <span class="stat-pill" id="hub-simulation-spokes-pill">— spokes</span>
         </div>
-        <div id="spokes-list"></div>
-        <div id="spokes-empty" class="empty-state hidden">No spokes in this tenant.</div>
-      </main>
-
-      <main id="tab-hub-commands" class="page tab-content hidden">— queued</span>
-          <button id="refresh-commands-btn" class="btn btn-secondary btn-small" style="margin-left:auto;" type="button">Refresh</button>
+        <div class="toolbar-actions">
+          <input id="hub-simulations-search" type="search" class="form-input form-input-sm" placeholder="Filter simulations…">
+          <button id="refresh-simulations-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
         </div>
-        <div class="setup-card" style="max-width:520px;">
-          <div class="setup-card-header"><h2>Send Command</h2></div>
-          <div class="setup-form">
-            <div class="form-group">
-              <label class="form-label" for="cmd-spoke">Spoke</label>
-              <select id="cmd-spoke" class="form-input"></select>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="cmd-type">Command</label>
-              <select id="cmd-type" class="form-input">
-                <option value="kill_switch">Kill Switch</option>
-                <option value="restart_sim">Restart Simulation</option>
-                <option value="reclone">Reclone VMs</option>
-                <option value="reboot">Reboot</option>
-                <option value="repo_sync">Repo Sync</option>
-                <option value="update_now">Update Now</option>
-              </select>
-            </div>
-            <div class="form-actions">
-              <button id="send-command-btn" class="btn btn-primary" type="button">Send Command</button>
-              <span id="cmd-msg" class="form-msg"></span>
-            </div>
-          </div>
-        </div>
-        <div class="setup-card setup-section-gap">
-          <div class="setup-card-header"><h2>Command Queue</h2></div>
-          <table class="data-table" id="commands-table">
-            <thead><tr><th>Spoke</th><th>Command</th><th>Status</th><th>Created</th><th>Expires</th></tr></thead>
-            <tbody id="commands-tbody"></tbody>
+      </div>
+      <div class="setup-card">
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th>Spoke</th><th>Simulation</th><th>Status</th><th>Client Count</th></tr></thead>
+            <tbody id="hub-simulations-tbody"></tbody>
           </table>
         </div>
-      </main>
+      </div>
+    </main>
 
-      <main id="tab-hub-config" class="page tab-content hidden"><button id="refresh-config-btn" class="btn btn-secondary btn-small" style="margin-left:auto;" type="button">Refresh</button></div>
-        <div id="hub-config-content"></div>
-      </main>
+    <main id="tab-hub-clients" class="page tab-content hidden">
+      <div class="page-toolbar">
+        <div class="toolbar-stats">
+          <span class="stat-pill" id="hub-clients-pill">— clients</span>
+          <span class="stat-pill" id="hub-clients-online-pill">— online</span>
+          <span class="stat-pill" id="hub-clients-spokes-pill">— spokes</span>
+        </div>
+        <div class="toolbar-actions">
+          <input id="hub-clients-search" type="search" class="form-input form-input-sm" placeholder="Search clients…">
+          <select id="hub-clients-status-filter" class="form-input form-input-sm">
+            <option value="all">All statuses</option>
+            <option value="online">Online</option>
+            <option value="offline">Offline</option>
+          </select>
+          <select id="hub-clients-spoke-filter" class="form-input form-input-sm">
+            <option value="all">All spokes</option>
+          </select>
+          <button id="refresh-clients-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+        </div>
+      </div>
+      <div class="setup-card">
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th>Status</th><th>Hostname</th><th>Spoke</th><th>Platform</th><th>SIM Bucket</th><th>SSID</th><th>Active Simulations</th><th>Aruba Central Impact</th><th>Last Seen</th><th>Errors</th></tr></thead>
+            <tbody id="hub-clients-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
 
-      <main id="tab-hub-setup" class="page tab-content hidden"></div>
-        <nav class="setup-subnav">
-          <button class="setup-subtab settings-subtab active" data-subtab="settings-account" type="button">Account</button>
-          <button class="setup-subtab settings-subtab" data-subtab="settings-aruba" type="button">Aruba Central</button>
-          <button class="setup-subtab settings-subtab" data-subtab="settings-notifications" type="button">Notifications</button>
-          <button class="setup-subtab settings-subtab" data-subtab="settings-api" type="button">API Info</button>
-          <button class="setup-subtab settings-subtab" data-subtab="settings-tls" type="button">TLS Certificate</button>
-          <button class="setup-subtab settings-subtab" data-subtab="settings-pending-spokes" id="settings-pending-tab-btn" type="button" style="display:none;">Pending Spokes <span id="settings-pending-count" class="badge-count">0</span></button>
-        </nav>
+    <!-- ── Islands tab (auth required) ── -->
+    <main id="tab-hub-spokes" class="page tab-content hidden">
+      <div class="page-toolbar">
+        <div class="toolbar-stats">
+          <span class="stat-pill" id="spokes-count-pill">— spokes</span>
+          <span class="stat-pill" id="spokes-online-pill">— online</span>
+          <span class="stat-pill" id="spokes-clients-pill">— clients</span>
+        </div>
+        <div class="toolbar-actions">
+          <input id="spoke-search" type="search" class="form-input form-input-sm" placeholder="Search spokes…">
+          <button id="collapse-all-btn" class="btn btn-secondary btn-small" type="button">Collapse All</button>
+          <button id="expand-all-btn" class="btn btn-secondary btn-small" type="button">Expand All</button>
+          <button id="refresh-spokes-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+        </div>
+      </div>
+      <div id="spokes-list"></div>
+      <div id="spokes-empty" class="empty-state hidden">No spokes in this tenant.</div>
+    </main>
+
+    <!-- ── Commands tab ── -->
+    <main id="tab-hub-commands" class="page tab-content hidden">
+      <div class="page-toolbar">
+        <span class="stat-pill" id="commands-count-pill">— queued</span>
+        <button id="refresh-commands-btn" class="btn btn-secondary btn-small" style="margin-left:auto;" type="button">Refresh</button>
+      </div>
+      <div class="setup-card" style="max-width:520px;">
+        <div class="setup-card-header"><h2>Send Command</h2></div>
+        <div class="setup-form">
+          <div class="form-group">
+            <label class="form-label" for="cmd-spoke">Spoke</label>
+            <select id="cmd-spoke" class="form-input"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="cmd-type">Command</label>
+            <select id="cmd-type" class="form-input">
+              <option value="kill_switch">Kill Switch</option>
+              <option value="restart_sim">Restart Simulation</option>
+              <option value="reclone">Reclone VMs</option>
+              <option value="reboot">Reboot</option>
+              <option value="repo_sync">Repo Sync</option>
+              <option value="update_now">Update Now</option>
+            </select>
+          </div>
+          <div class="form-actions">
+            <button id="send-command-btn" class="btn btn-primary" type="button">Send Command</button>
+            <span id="cmd-msg" class="form-msg"></span>
+          </div>
+        </div>
+      </div>
+      <div class="setup-card setup-section-gap">
+        <div class="setup-card-header"><h2>Command Queue</h2></div>
+        <table class="data-table" id="commands-table">
+          <thead><tr><th>Spoke</th><th>Command</th><th>Status</th><th>Created</th><th>Expires</th></tr></thead>
+          <tbody id="commands-tbody"></tbody>
+        </table>
+      </div>
+    </main>
+
+    <main id="tab-hub-config" class="page tab-content hidden">
+      <div class="page-toolbar">
+        <span class="server-node-name">Config</span>
+        <button id="refresh-config-btn" class="btn btn-secondary btn-small" style="margin-left:auto;" type="button">Refresh</button>
+      </div>
+      <div id="hub-config-content"></div>
+    </main>
+
+    <!-- ── Setup tab ── -->
+    <main id="tab-hub-setup" class="page tab-content hidden">
+      <div class="page-toolbar"><span class="server-node-name">Setup</span></div>
+      <nav class="setup-subnav">
+        <button class="setup-subtab settings-subtab active" data-subtab="settings-account" type="button">Account</button>
+        <button class="setup-subtab settings-subtab" data-subtab="settings-aruba" type="button">Aruba Central</button>
+        <button class="setup-subtab settings-subtab" data-subtab="settings-notifications" type="button">Notifications</button>
+        <button class="setup-subtab settings-subtab" data-subtab="settings-api" type="button">API Info</button>
+        <button class="setup-subtab settings-subtab" data-subtab="settings-tls" type="button">TLS Certificate</button>
+        <button class="setup-subtab settings-subtab" data-subtab="settings-pending-spokes" id="settings-pending-tab-btn" type="button" style="display:none;">Pending Spokes <span id="settings-pending-count" class="badge-count">0</span></button>
+      </nav>
 
         <div id="settings-account" class="setup-subpanel" style="margin-top:16px;">
           <div class="setup-card" style="max-width:480px;">

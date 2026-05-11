@@ -6357,7 +6357,7 @@ document.getElementById('wifi-fix-btn')?.addEventListener('click', async () => {
 });
 
 document.getElementById('server-clear-cache-btn')?.addEventListener('click', async () => {
-  if (!confirm('Clear all server-side cache?\n\nThis resets Proxmox state, VM list, command history, and reclone logs. No restart is required.')) return;
+  if (!confirm('Clear all server-side cache?\n\nThis resets Proxmox state, VM list, pending auto-provisioning queue, command history, and reclone logs. No restart is required.')) return;
   try {
     const r = await fetch('/api/server/clear-cache', { method: 'POST' });
     if (!r.ok) throw new Error(await r.text());

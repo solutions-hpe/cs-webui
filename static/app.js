@@ -496,22 +496,35 @@ function setRelayStatus(data = {}) {
   const stateText = document.getElementById('relay-state-text');
   const lastTime = document.getElementById('relay-last-time');
   const lastError = document.getElementById('relay-last-error');
-  const dot = document.getElementById('relay-indicator');
   const spokeIdDisplay = document.getElementById('relay-spoke-id-display');
   const apikeyStatus = document.getElementById('relay-apikey-status');
 
   const isNameConflict = data.registration_status === 'name_conflict' || (data.error || '').startsWith('name_conflict:');
+  const isPending = (data.registration_status === 'pending' || !data.api_key_configured) && !data.connected && !isNameConflict;
+
   if (stateText) stateText.textContent = !data.enabled ? 'Disabled' : data.connected ? '✓ Connected' : isNameConflict ? '✗ Name conflict' : data.error ? '✗ Error' : data.registration_status === 'pending' ? 'Pending approval' : 'Enabled';
   if (lastTime) lastTime.textContent = data.last_sync ? new Date(data.last_sync * 1000).toLocaleTimeString() : '—';
   if (lastError) lastError.textContent = data.error || '—';
-  if (spokeIdDisplay) spokeIdDisplay.textContent = data.spoke_id || data.spoke_id || '—';
+  if (spokeIdDisplay) spokeIdDisplay.textContent = data.spoke_id || '—';
   if (apikeyStatus) apikeyStatus.textContent = data.api_key_configured ? '✓ Received' : 'Pending approval';
 
-  if (dot) {
-    dot.className = data.connected ? 'ind-dot green' : 'ind-dot red';
-    dot.title = data.connected
-      ? `Hub connected — last sync: ${new Date((data.last_sync || 0) * 1000).toLocaleTimeString()}`
-      : `Hub disconnected: ${data.error || 'unknown'}`;
+  const dotEl = document.getElementById('relay-indicator-dot');
+  const textEl = document.getElementById('relay-indicator-text');
+  if (dotEl) {
+    if (data.connected) {
+      dotEl.className = 'ind-dot green';
+      dotEl.title = `Hub connected — last sync: ${new Date((data.last_sync || 0) * 1000).toLocaleTimeString()}`;
+    } else if (isPending) {
+      dotEl.className = 'ind-dot grey';
+      dotEl.title = 'Awaiting hub approval';
+    } else {
+      dotEl.className = 'ind-dot red';
+      dotEl.title = `Hub disconnected: ${data.error || 'unknown'}`;
+    }
+  }
+  if (textEl) {
+    textEl.textContent = isPending ? 'Hub: Pending' : '';
+    textEl.style.display = isPending ? '' : 'none';
   }
 }
 

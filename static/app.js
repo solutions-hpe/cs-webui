@@ -2418,6 +2418,7 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
     }).join('');
 
     const tr = document.createElement('tr');
+    const available = Math.max(0, total - activeEntries.length);
     const missingHtml = missing
       ? `<div class="usb-missing-list">${missingEntries.map((item) => {
           const mvm = vmMap.get(Number(item.vmid));
@@ -2431,6 +2432,7 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
       <td class="usb-type-${device.type || 'wireless'}">${device.type || 'wireless'}</td>
       <td>${activeVmHtml}</td>
       <td>${missingHtml}</td>
+      <td>${available > 0 ? `<span class="badge badge-green">${available}</span>` : '<span class="muted">—</span>'}</td>
       <td>${total}</td>
     `;
     usbSummaryTbody.appendChild(tr);

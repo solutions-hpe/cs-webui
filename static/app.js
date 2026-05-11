@@ -2605,7 +2605,7 @@ function getAutoProvisionRunState(proxmoxData = latestProxmoxData) {
   const usbState = Array.isArray(proxmoxData?.usb_state) ? proxmoxData.usb_state : [];
   const vms = Array.isArray(proxmoxData?.vms) ? proxmoxData.vms : [];
   const vmByVmid = new Map(vms.map((vm) => [String(vm?.vmid), vm || {}]));
-  const items = usbState
+  const provisioningItems = usbState
     .filter((entry) => entry && entry.vmid != null && entry.prov_status === 'provisioning')
     .map((entry) => {
       const vm = vmByVmid.get(String(entry.vmid)) || {};
@@ -2618,6 +2618,23 @@ function getAutoProvisionRunState(proxmoxData = latestProxmoxData) {
         status: vm.status === 'running' ? 'configuring' : 'cloning',
       };
     });
+
+  // Also include VMs that finished cloning but haven't checked into the API yet.
+  // This keeps the live panel and "provisioning" badge visible through the
+  // boot-up gap between clone-complete and first API check-in.
+  const provisioningVmids = new Set(provisioningItems.map((i) => String(i.vmid)));
+  const pendingCheckinItems = vms
+    .filter((vm) => vm && vm.pending_checkin === true && !provisioningVmids.has(String(vm.vmid)))
+    .map((vm) => ({
+      vmid: vm.vmid,
+      vm_name: vm.name || null,
+      usb_name: null,
+      bus_path: null,
+      vidpid: null,
+      status: 'pending_checkin',
+    }));
+
+  const items = [...provisioningItems, ...pendingCheckinItems];
 
   return {
     running: items.length > 0,
@@ -2637,6 +2654,8 @@ function autoProvisionStatusMeta(status) {
       return { label: 'Cloning', className: 'autoprov-phase-cloning' };
     case 'configuring':
       return { label: 'Configuring', className: 'autoprov-phase-configuring' };
+    case 'pending_checkin':
+      return { label: 'Waiting for check-in', className: 'autoprov-phase-configuring' };
     case 'done':
       return { label: 'Done', className: 'autoprov-phase-done' };
     case 'failed':

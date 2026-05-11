@@ -261,6 +261,31 @@ function resetTabDrilldowns(tabName) {
   }
 }
 
+function hydrateSetupSubtab(subtabId) {
+  if (!subtabId) return;
+
+  if (subtabId === 'setup-troubleshoot') {
+    loadSystemHealth();
+    return;
+  }
+
+  if (subtabId === 'setup-tls') {
+    loadSpokeAcmeSettings().catch(() => {});
+    return;
+  }
+
+  loadSettings().catch(() => {});
+
+  if (subtabId === 'setup-relay') {
+    requestJson('/api/relay/status').then(setRelayStatus).catch(() => {});
+    return;
+  }
+
+  if (subtabId === 'setup-central') {
+    loadCentralStatus().catch(() => {});
+  }
+}
+
 function activateSetupSubtab(subtabId = 'setup-github') {
   setupSubtabButtons.forEach((button) => {
     button.classList.toggle('active', button.dataset.subtab === subtabId);
@@ -270,6 +295,7 @@ function activateSetupSubtab(subtabId = 'setup-github') {
     panel.classList.toggle('active', isActive);
     panel.classList.toggle('hidden', !isActive);
   });
+  hydrateSetupSubtab(subtabId);
 }
 
 function activateConfigSubtab(subtabId = 'config-general') {
@@ -530,7 +556,6 @@ const repoUrlInput = document.getElementById('repo-url-input');
 const centralTabButton = document.querySelector('#tab-nav .spoke-only .tab[data-tab="central"]');
 const configTabButton = document.querySelector('#tab-nav .spoke-only .tab[data-tab="config"]');
 const simTabButton = document.querySelector('#tab-nav .spoke-only .tab[data-tab="simulations"]');
-const setupTabButton = document.querySelector('#tab-nav .spoke-only .tab[data-tab="setup"]');
 const setupSubtabButtons = spokeRoot?.querySelectorAll('.setup-subtab:not(.server-subtab):not(.sim-subtab):not(.central-subtab):not(.simtop-subtab)') || [];
 const setupSubpanels = spokeRoot?.querySelectorAll('.setup-subpanel:not(#server-vms):not(#server-usb):not(#server-node):not(#server-commands)') || [];
 const centralOverview = document.getElementById('central-overview');
@@ -5090,17 +5115,7 @@ if (setupSubtabButtons.length) {
   setupSubtabButtons.forEach((btn) => {
     btn.addEventListener('click', () => {
       activateSetupSubtab(btn.dataset.subtab);
-      if (btn.dataset.subtab === 'setup-tls') loadSpokeAcmeSettings().catch(() => {});
     });
-  });
-}
-
-if (setupTabButton) {
-  setupTabButton.addEventListener('click', () => {
-    activateSetupSubtab('setup-github');
-    if (!currentSettings.repo_url && !currentSettings.repo_branch) {
-      loadSettings();
-    }
   });
 }
 
@@ -5842,12 +5857,6 @@ async function loadSystemHealth() {
   } catch (_) {}
 }
 
-// Load health when Troubleshooting tab is activated
-document.querySelectorAll('.setup-subtab').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    if (btn.dataset.subtab === 'setup-troubleshoot') loadSystemHealth();
-  });
-});
 document.getElementById('syshealth-refresh-btn')?.addEventListener('click', loadSystemHealth);
 
 // Service control

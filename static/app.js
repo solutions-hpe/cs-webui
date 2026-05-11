@@ -856,6 +856,8 @@ function renderServerTab(data) {
   };
 
   setEl('server-node-name', node.hostname || 'Proxmox');
+  updateCmdTargetDropdown();
+  if (Array.isArray(window._lastCommands)) renderCommandTable(window._lastCommands);
   setEl('server-cpu', node.cpu_percent != null && !Number.isNaN(Number(node.cpu_percent)) ? Number(node.cpu_percent).toFixed(1) : '—');
   const ramUsed  = node.mem_used_kb  ? fmtSizeKB(node.mem_used_kb)  : '—';
   const ramTotal = node.mem_total_kb ? fmtSizeKB(node.mem_total_kb) : '—';
@@ -3656,8 +3658,15 @@ const CMD_STATUS_LABELS = {
   expired:   { text: 'Expired',   cls: 'badge-grey' },
 };
 
+function proxmoxTargetLabel() {
+  const hostname = String(latestProxmoxData?.hostname || latestProxmoxData?.node?.hostname || '').trim();
+  return hostname || 'Proxmox Host';
+}
+
 function updateCmdTargetDropdown(clientList = [...clients.values()]) {
   if (!cmdTarget) return;
+  const proxmoxOption = [...cmdTarget.options].find((option) => option.value === 'proxmox');
+  if (proxmoxOption) proxmoxOption.textContent = proxmoxTargetLabel();
   [...cmdTarget.options].forEach((option) => {
     if (option.value !== 'all' && option.value !== 'proxmox') option.remove();
   });
@@ -3715,7 +3724,7 @@ function cmdTargetLabel(cmd) {
     return name || `VM ${vmid}`;
   }
   if (target === 'all') return 'All Clients';
-  if (target === 'proxmox') return 'Proxmox Host';
+  if (target === 'proxmox') return proxmoxTargetLabel();
   return target;
 }
 
@@ -3818,7 +3827,10 @@ if (cmdClearBtn) {
   });
 }
 
-requestJson('/api/commands').then(renderCommandTable).catch(() => {});
+requestJson('/api/commands').then((commands) => {
+  window._lastCommands = commands || [];
+  renderCommandTable(commands);
+}).catch(() => {});
 
 async function renderServiceStatus() {
   const tbody = document.getElementById('services-tbody');

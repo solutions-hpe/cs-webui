@@ -3506,12 +3506,17 @@ window.requestSpokeAcmeCert = requestSpokeAcmeCert;
 
 async function loadCentralStatus() {
   centralStatusInitialized = true;
+  const centralStatusErrorPrefix = 'Could not load Central status:';
   try {
     const data = await requestJson('/api/central/status');
-    mergeSettings({
+    applySettingsToUI({
       site_mappings: data.site_mappings || {},
-      monitored_checks: data.monitored_checks || []
+      monitored_checks: data.monitored_checks || [],
+      central_api: data.central_api || currentSettings.central_api || defaultCentralApiSettings(),
     });
+    if (centralConfigMsg?.textContent?.startsWith(centralStatusErrorPrefix)) {
+      showInlineMessage(centralConfigMsg, '', false, 0);
+    }
     centralTokenValid = Boolean(data.token_valid);
     setCentralApiStatus(centralTokenValid, data.token_state);
     handleCentralUpdate(
@@ -3527,9 +3532,9 @@ async function loadCentralStatus() {
     centralTokenValid = false;
     setCentralApiStatus(false);
     updateCentralToolbar();
+    showInlineMessage(centralConfigMsg, `${centralStatusErrorPrefix} ${error.message}`, true, 0);
     if (centralEmpty) {
-      centralEmpty.textContent = `Could not load Central status: ${error.message}`;
-      centralEmpty.classList.remove('hidden');
+      centralEmpty.classList.add('hidden');
     }
   }
 }
@@ -6051,10 +6056,14 @@ function fmtUptime(secs) {
 }
 
 async function loadSystemHealth() {
+  const systemHealthMsg = document.getElementById('syshealth-msg');
   try {
     const r = await fetch('/api/system/health');
-    if (!r.ok) return;
+    if (!r.ok) {
+      throw new Error(`HTTP ${r.status}${r.statusText ? ` ${r.statusText}` : ''}`);
+    }
     const d = await r.json();
+    showInlineMessage(systemHealthMsg, '', false, 0);
 
     // Service status dot
     const dot = document.getElementById('svc-status-dot');
@@ -6094,7 +6103,9 @@ async function loadSystemHealth() {
     // Proxmox install command
     const cmdEl = document.getElementById('proxmox-install-cmd');
     if (cmdEl && d.proxmox_install_cmd) cmdEl.textContent = d.proxmox_install_cmd;
-  } catch (_) {}
+  } catch (error) {
+    showInlineMessage(systemHealthMsg, `Could not load system health: ${error.message}`, true, 0);
+  }
 }
 
 document.getElementById('syshealth-refresh-btn')?.addEventListener('click', loadSystemHealth);

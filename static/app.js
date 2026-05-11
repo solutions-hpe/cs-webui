@@ -1113,6 +1113,19 @@ function renderServerTab(data) {
     Array.isArray(latestProxmoxData.approved_proxmox) ? latestProxmoxData.approved_proxmox : []
   );
 
+  // Update footer agent version pill
+  const agentVer = latestProxmoxData.agent_version;
+  const fAgent = document.getElementById('footer-agent-version');
+  if (fAgent) {
+    if (agentVer) {
+      fAgent.textContent = `agent v${agentVer}`;
+      fAgent.title = `Proxmox agent version: v${agentVer}`;
+      fAgent.style.display = '';
+    } else {
+      fAgent.style.display = 'none';
+    }
+  }
+
   const tabBtn = document.getElementById('tab-server-btn');
   const tabPanel = document.getElementById('tab-server');
   if (tabBtn) tabBtn.style.display = '';
@@ -7137,10 +7150,10 @@ async function pingApi() {
   updateApiStatus(ok, ok ? "Connected" : "Disconnected");
   if (ok) {
     const data = await res.json().catch(() => null);
-    const footerVersion = $("#footer-version");
+    const footerVersion = $("#footer-cswebui-version");
     if (footerVersion && data?.version) {
-      footerVersion.textContent = `v${data.version}`;
-      footerVersion.title = `WebUI version: v${data.version} | Branch: ${data.branch || "?"} | SHA: ${data.sha || "?"}`;
+      footerVersion.textContent = `cs-webui v${data.version}`;
+      footerVersion.title = `cs-webui version: v${data.version} | Branch: ${data.branch || "?"} | SHA: ${data.sha || "?"}`;
     }
   }
 }

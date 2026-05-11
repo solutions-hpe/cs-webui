@@ -1465,6 +1465,10 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   border-color: rgba(100, 116, 139, 0.28);
   color: #94a3b8;
 }
+.autoprov-status-bar:hover {
+  filter: brightness(1.15);
+  box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.25);
+}
 .autoprov-status-icon { display:flex; align-items:center; }
 .autoprov-spinner {
   width: 12px;

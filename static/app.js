@@ -2706,6 +2706,28 @@ function autoProvisionStatusMeta(status) {
   }
 }
 
+async function toggleAutoProvisioning() {
+  const nowOn = currentSettings.usb_auto_provision === 'on';
+  const newVal = nowOn ? 'off' : 'on';
+  currentSettings.usb_auto_provision = newVal;
+  if (usbAutoProvisionInput) usbAutoProvisionInput.checked = newVal === 'on';
+  renderAutoProvisionStatus();
+  try {
+    await requestJson('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(collectUsbSettingsPayload()),
+    });
+    showNotification(`VM Auto-Provisioning ${newVal === 'on' ? 'enabled' : 'disabled'}`, 'success');
+  } catch (e) {
+    // Revert on failure
+    currentSettings.usb_auto_provision = nowOn ? 'on' : 'off';
+    if (usbAutoProvisionInput) usbAutoProvisionInput.checked = nowOn;
+    renderAutoProvisionStatus();
+    showNotification('Failed to save setting', 'error');
+  }
+}
+
 function renderAutoProvisionStatus() {
   const autoProv = currentSettings.usb_auto_provision === 'on';
   const run = getAutoProvisionRunState(latestProxmoxData);
@@ -2737,6 +2759,14 @@ function renderAutoProvisionStatus() {
       bar.classList.add('is-idle');
       if (iconEl) iconEl.innerHTML = '<span class="autoprov-dot" aria-hidden="true"></span>';
       if (textEl) textEl.textContent = 'VM Auto-Provisioning: Idle';
+    }
+
+    // Make the status bar a clickable toggle (attach once)
+    if (!bar._autoProvClickAttached) {
+      bar._autoProvClickAttached = true;
+      bar.style.cursor = 'pointer';
+      bar.title = 'Click to enable/disable VM Auto-Provisioning';
+      bar.addEventListener('click', toggleAutoProvisioning);
     }
   }
 

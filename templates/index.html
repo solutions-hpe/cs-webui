@@ -92,14 +92,14 @@
   <!-- ── Unified tab nav ── -->
   <nav id="tab-nav" class="tab-nav" role="tablist">
     <div class="hub-only">
-      <button class="tab active" data-tab="dashboard" type="button">Dashboard</button>
-      <button class="tab auth-tab hidden" data-tab="simulations" type="button">Simulations</button>
-      <button class="tab auth-tab hidden" data-tab="clients" type="button">Clients</button>
-      <button class="tab auth-tab hidden" data-tab="spokes" type="button">Spokes</button>
+      <button class="tab active" data-tab="hub-dashboard" type="button">Dashboard</button>
+      <button class="tab auth-tab hidden" data-tab="hub-simulations" type="button">Simulations</button>
+      <button class="tab auth-tab hidden" data-tab="hub-clients" type="button">Clients</button>
+      <button class="tab auth-tab hidden" data-tab="hub-spokes" type="button">Spokes</button>
       <div class="tab-nav-spacer" aria-hidden="true"></div>
-      <button class="tab auth-tab hidden" data-tab="setup" type="button">⚙ Setup</button>
-      <button class="tab auth-tab hidden" data-tab="config" type="button">⚙ Config</button>
-      <button class="tab superadmin-tab hidden" data-tab="superadmin" type="button">Superadmin</button>
+      <button class="tab auth-tab hidden" data-tab="hub-setup" type="button">⚙ Setup</button>
+      <button class="tab auth-tab hidden" data-tab="hub-config" type="button">⚙ Config</button>
+      <button class="tab superadmin-tab hidden" data-tab="hub-superadmin" type="button">Superadmin</button>
     </div>
     <span class="spoke-only">
       <button class="tab active" role="tab" aria-selected="true" data-tab="simulations" type="button">Simulations</button>
@@ -115,8 +115,7 @@
 
   <div id="hub-root" class="hub-only">
     <!-- ── Dashboard (public) ── -->
-      <main id="tab-dashboard" class="page tab-content">
-        <div id="hub-dashboard-overview">
+      <main id="tab-hub-dashboard" class="page tab-content">
           <div class="page-toolbar">
             <div class="toolbar-stats">
               <span class="stat-pill" id="dash-spokes-pill">— spokes</span>
@@ -155,10 +154,7 @@
         </div>
       </main>
 
-      <main id="tab-simulations" class="page tab-content hidden">
-        <div class="page-toolbar">
-          <div class="toolbar-stats">
-            <span class="stat-pill" id="hub-simulations-pill">— simulations</span>
+      <main id="tab-hub-simulations" class="page tab-content hidden">— simulations</span>
             <span class="stat-pill" id="hub-simulation-clients-pill">— clients</span>
             <span class="stat-pill" id="hub-simulation-spokes-pill">— spokes</span>
           </div>
@@ -177,10 +173,7 @@
         </div>
       </main>
 
-      <main id="tab-clients" class="page tab-content hidden">
-        <div class="page-toolbar">
-          <div class="toolbar-stats">
-            <span class="stat-pill" id="hub-clients-pill">— clients</span>
+      <main id="tab-hub-clients" class="page tab-content hidden">— clients</span>
             <span class="stat-pill" id="hub-clients-online-pill">— online</span>
             <span class="stat-pill" id="hub-clients-spokes-pill">— spokes</span>
           </div>
@@ -208,10 +201,7 @@
       </main>
 
       <!-- ── Islands tab (auth required) ── -->
-      <main id="tab-spokes" class="page tab-content hidden">
-        <div class="page-toolbar">
-          <div class="toolbar-stats">
-            <span class="stat-pill" id="spokes-count-pill">— spokes</span>
+      <main id="tab-hub-spokes" class="page tab-content hidden">— spokes</span>
             <span class="stat-pill" id="spokes-online-pill">— online</span>
             <span class="stat-pill" id="spokes-clients-pill">— clients</span>
           </div>
@@ -226,10 +216,7 @@
         <div id="spokes-empty" class="empty-state hidden">No spokes in this tenant.</div>
       </main>
 
-      <!-- ── Commands tab ── -->
-      <main id="tab-commands" class="page tab-content hidden">
-        <div class="page-toolbar">
-          <span class="stat-pill" id="commands-count-pill">— queued</span>
+      <main id="tab-hub-commands" class="page tab-content hidden">— queued</span>
           <button id="refresh-commands-btn" class="btn btn-secondary btn-small" style="margin-left:auto;" type="button">Refresh</button>
         </div>
         <div class="setup-card" style="max-width:520px;">
@@ -265,14 +252,11 @@
         </div>
       </main>
 
-      <main id="tab-config" class="page tab-content hidden">
-        <div class="page-toolbar"><span class="server-node-name">Config</span><button id="refresh-config-btn" class="btn btn-secondary btn-small" style="margin-left:auto;" type="button">Refresh</button></div>
+      <main id="tab-hub-config" class="page tab-content hidden"><button id="refresh-config-btn" class="btn btn-secondary btn-small" style="margin-left:auto;" type="button">Refresh</button></div>
         <div id="hub-config-content"></div>
       </main>
 
-      <!-- ── Setup tab ── -->
-      <main id="tab-setup" class="page tab-content hidden">
-        <div class="page-toolbar"><span class="server-node-name">Setup</span></div>
+      <main id="tab-hub-setup" class="page tab-content hidden"></div>
         <nav class="setup-subnav">
           <button class="setup-subtab settings-subtab active" data-subtab="settings-account" type="button">Account</button>
           <button class="setup-subtab settings-subtab" data-subtab="settings-aruba" type="button">Aruba Central</button>
@@ -433,7 +417,7 @@
           </div>
         </div>
       </main>
-      <main id="tab-superadmin" class="page tab-content hidden">
+      <main id="tab-hub-superadmin" class="page tab-content hidden">
         <nav class="setup-subnav">
           <button class="setup-subtab sa-subtab active" data-subtab="sa-pending" type="button">Pending Spokes</button>
           <button class="setup-subtab sa-subtab" data-subtab="sa-tenants" type="button">Tenants</button>

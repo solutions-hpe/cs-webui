@@ -6985,20 +6985,21 @@ async function setCurrentTenant(tenantId, reload = true) {
   if (reload && ["dashboard", "simulations", "clients", "spokes", "setup", "config", "commands"].includes(activeTab)) await refreshCurrentView(true);
 }
 
-function showTab(tabId, opts = {}) {
+function showTab(rawTabId, opts = {}) {
+  const tabId = rawTabId.startsWith('hub-') ? rawTabId.slice(4) : rawTabId;
   if (["simulations", "clients", "spokes", "setup", "config", "commands", "superadmin"].includes(tabId) && !currentUser) {
     openLoginModal();
     return;
   }
   activeTab = tabId;
   $("#hub-root")?.querySelectorAll(".tab-content").forEach(panel => panel.classList.add("hidden"));
-  const panel = $("#hub-root")?.querySelector(`#tab-${CSS.escape(tabId)}`);
+  const panel = $("#hub-root")?.querySelector(`#tab-hub-${CSS.escape(tabId)}`);
   if (panel) panel.classList.remove("hidden");
   $$("#tab-nav .hub-only .tab").forEach(button => button.classList.remove("active"));
   if (opts.button) {
     opts.button.classList.add("active");
   } else {
-    $(`#tab-nav .hub-only .tab[data-tab="${tabId}"]`)?.classList.add("active");
+    $(`#tab-nav .hub-only .tab[data-tab="hub-${tabId}"]`)?.classList.add("active");
   }
   updateRefreshPausedState();
   refreshCurrentView();

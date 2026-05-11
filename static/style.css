@@ -253,6 +253,9 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 
 /* ── Aruba Impact + Simulation badges ──────────────────────────── */
 .badge-cell {
+  /* td stays display:table-cell so border-bottom aligns with neighbours */
+}
+.badge-cell-inner {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;

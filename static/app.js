@@ -1995,17 +1995,20 @@ function ensureRow(hostname) {
 
 function renderBadges(container, activeSimulations) {
   container.textContent = '';
+  const inner = document.createElement('div');
+  inner.className = 'badge-cell-inner';
   if (!activeSimulations || !activeSimulations.length) {
-    container.textContent = '—';
+    inner.textContent = '—';
+    container.appendChild(inner);
     return;
   }
-
   activeSimulations.forEach((simulation) => {
     const badge = document.createElement('span');
     badge.className = badgeClass(simulation);
     badge.textContent = simulation;
-    container.appendChild(badge);
+    inner.appendChild(badge);
   });
+  container.appendChild(inner);
 }
 
 function refreshClientWatchdogBadges() {

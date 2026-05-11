@@ -2425,7 +2425,7 @@ function renderAutoProvisionStatus() {
   logEl.innerHTML = inFlight.map((e) => {
     const isStarting = e.prov_status === 'active';
     const icon  = isStarting ? '🔄' : e.prov_status === 'provisioning' ? '⏳' : e.prov_status === 'tearing_down' ? '🗑️' : '⚠️';
-    const label = isStarting ? 'Starting Up' : e.prov_status === 'provisioning' ? 'Cloning' : e.prov_status === 'tearing_down' ? 'Tearing Down' : 'USB Missing';
+    const label = isStarting ? 'Starting Up' : e.prov_status === 'provisioning' ? 'Cloning' : e.prov_status === 'tearing_down' ? 'Tearing Down' : 'Missing Dongle';
     const name  = e.name || `USB ${e.bus_path || ''}`;
     let detail = '';
     if (e.prov_status === 'missing' && e.missing_since) {

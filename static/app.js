@@ -7220,7 +7220,7 @@ async function refreshAfterSpokeApproval(tenantId = currentTenantId) {
     }
     await loadDashboard(true);
     if (tenantId === currentTenantId) {
-      await loadSimulations(true);
+      await loadHubSimulations(true);
       await loadClients(true);
       await loadVmServer(true);
       await loadApiServer(true);
@@ -7568,7 +7568,7 @@ async function refreshCurrentView(force = false) {
   if (activeTab === "dashboard") {
     await loadDashboard(force);
   } else if (activeTab === "simulations") {
-    await loadSimulations(force);
+    await loadHubSimulations(force);
   } else if (activeTab === "clients") {
     await loadClients(force);
   } else if (activeTab === "vm-server") {
@@ -8029,7 +8029,7 @@ async function loadDashboard(force = false) {
   }
 }
 
-async function loadSimulations(force = false) {
+async function loadHubSimulations(force = false) {
   if (!currentTenantId) {
     aggregateSimulationRows = [];
     renderSimulationRows();
@@ -9549,7 +9549,7 @@ function connectHubWebSocket() {
     const data = JSON.parse(event.data);
     if (data.type === "telemetry") {
       if (activeTab === "dashboard") scheduleReload("ws-dashboard", () => loadDashboard(true));
-      if (activeTab === "simulations") scheduleReload("ws-simulations", () => loadSimulations(true));
+      if (activeTab === "simulations") scheduleReload("ws-simulations", () => loadHubSimulations(true));
       if (activeTab === "clients") scheduleReload("ws-clients", () => loadClients(true));
       if (activeTab === "vm-server") scheduleReload("ws-vm-server", () => loadVmServer(true));
       if (activeTab === "api-server") scheduleReload("ws-api-server", () => loadApiServer(true));
@@ -9716,7 +9716,7 @@ function bindEvents() {
   $("#login-password")?.addEventListener("keydown", event => { if (event.key === "Enter") submitLogin(); });
   $("#refresh-dashboard-btn")?.addEventListener("click", () => loadDashboard(true));
   $("#dashboard-add-tenant-btn")?.addEventListener("click", openSuperadminTenantForm);
-  $("#refresh-simulations-btn")?.addEventListener("click", () => loadSimulations(true));
+  $("#refresh-simulations-btn")?.addEventListener("click", () => loadHubSimulations(true));
   $("#refresh-clients-btn")?.addEventListener("click", () => loadClients(true));
   $("#refresh-vm-server-btn")?.addEventListener("click", () => loadVmServer(true));
   $("#refresh-api-server-btn")?.addEventListener("click", () => loadApiServer(true));

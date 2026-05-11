@@ -6576,6 +6576,40 @@ function scheduleReload(key, callback, delay = 250) {
   }, delay);
 }
 
+async function refreshAfterSpokeApproval(tenantId = currentTenantId) {
+  const refresh = async () => {
+    if (currentUser?.is_superadmin) {
+      await loadSuperadmin();
+    } else if (tenantId && canManageTenant(tenantId)) {
+      await loadTenantPendingSpokes();
+    }
+
+    if (tenantId) {
+      await ensureTenantSpokesFor(tenantId, true);
+    }
+    await loadDashboard(true);
+    if (tenantId === currentTenantId) {
+      await loadSpokes(true);
+    }
+    if (tenantDetailState.open && tenantDetailState.tenantId === tenantId) {
+      const data = await loadTenantDetailData(true);
+      renderTenantDetail(data);
+    }
+    if (activeSpokeModal?.tenant_id === tenantId) {
+      const latest = getSpokeFromCache(tenantId, activeSpokeModal.spoke.id);
+      if (latest) activeSpokeModal.spoke = latest;
+      renderSpokeClientsTab();
+    }
+  };
+
+  await refresh();
+  [1500, 5000].forEach((delay, index) => {
+    scheduleReload(`approval-refresh-${tenantId || "all"}-${index}`, () => {
+      refresh().catch(() => {});
+    }, delay);
+  });
+}
+
 async function apiFetch(url, options = {}) {
   const headers = { ...(options.headers || {}) };
   const init = { ...options, headers };
@@ -7924,7 +7958,8 @@ function renderTenantPendingSpokes(items) {
         banner.classList.remove("hidden");
         setTimeout(() => banner.classList.add("hidden"), 30000);
       }
-      loadTenantPendingSpokes();
+      showToast("Spoke approved.", "ok");
+      await refreshAfterSpokeApproval(currentTenantId);
     });
   });
   tbody.querySelectorAll("[data-tenant-reject-id]").forEach(btn => {
@@ -8022,7 +8057,7 @@ async function approvePendingSpoke(id) {
   const data = await res.json();
   showKeyBanner(data.api_key, data.spoke_id);
   showToast("Spoke approved.", "ok");
-  await Promise.all([loadSuperadmin(), loadSpokes(true), loadDashboard()]);
+  await refreshAfterSpokeApproval(tenantId);
 }
 
 async function rejectPendingSpoke(id) {
@@ -8240,6 +8275,10 @@ function connectWebSocket() {
         loadTenantPendingSpokes();
         showToast(`New spoke '${data.spoke_name || data.hostname}' is pending approval.`, "ok");
       }
+    } else if (data.type === "spoke_approved") {
+      scheduleReload(`ws-approved-${data.tenant_id || "all"}`, () => {
+        refreshAfterSpokeApproval(data.tenant_id || currentTenantId).catch(() => {});
+      });
     } else if (data.type === "task_result") {
       showToast(`Spoke ${data.spoke_id}: ${data.task_type} ${data.status}`, data.status === "success" ? "ok" : "err");
       if (activeSpokeModal && data.spoke_id === activeSpokeModal.spoke.id) {

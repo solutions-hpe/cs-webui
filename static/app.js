@@ -7026,43 +7026,22 @@ function summarizeTenantAlerts(summary, aggregate) {
 
 function renderTenantCard(cardData) {
   const { id, name, summary, alert } = cardData;
-  const card = document.createElement("article");
-  card.className = "spoke-card tenant-card";
-  card.dataset.enterTenant = id;
-  card.tabIndex = 0;
-  card.setAttribute("role", "button");
-  card.innerHTML = `
-    <div class="tenant-card-top">
-      <div class="tenant-card-title-wrap">
-        <h2 class="tenant-card-title">${escHtml(name || id)}</h2>
-        <div class="tenant-card-subtitle">Tenant ID: ${escHtml(id)}</div>
-      </div>
-      <div class="spoke-card-status">${statusDot(summary.onlineCount > 0 || summary.approvedCount === 0)}</div>
-    </div>
-    <div class="tenant-card-metrics">
-      <div class="tenant-card-metric">
-        <span class="tenant-card-metric-label">Spokes</span>
-        <strong class="tenant-card-metric-value">${summary.approvedCount}</strong>
-      </div>
-      <div class="tenant-card-metric">
-        <span class="tenant-card-metric-label">Clients</span>
-        <strong class="tenant-card-metric-value">${summary.clientCount}</strong>
-      </div>
-      <div class="tenant-card-metric">
-        <span class="tenant-card-metric-label">VMs</span>
-        <strong class="tenant-card-metric-value">${summary.vmCount}</strong>
-      </div>
-      <div class="tenant-card-metric">
-        <span class="tenant-card-metric-label">Last Sync</span>
-        <strong class="tenant-card-metric-value">${escHtml(relativeTime(summary.lastSync))}</strong>
-      </div>
-    </div>
-    <div class="tenant-card-alert">
-      <span class="tenant-alert-pill ${alert.tone}">${escHtml(alert.text)}</span>
-      <span class="tenant-card-cta">Open tenant →</span>
-    </div>
+  const row = document.createElement("tr");
+  row.className = "tenant-list-row";
+  row.dataset.enterTenant = id;
+  row.tabIndex = 0;
+  row.setAttribute("role", "button");
+  row.innerHTML = `
+    <td>${statusDot(summary.onlineCount > 0 || summary.approvedCount === 0)}</td>
+    <td><strong>${escHtml(name || id)}</strong><div class="tenant-card-subtitle">${escHtml(id)}</div></td>
+    <td>${summary.approvedCount}</td>
+    <td>${summary.clientCount}</td>
+    <td>${summary.vmCount}</td>
+    <td>${escHtml(relativeTime(summary.lastSync))}</td>
+    <td><span class="tenant-alert-pill ${alert.tone}">${escHtml(alert.text)}</span></td>
+    <td class="tenant-card-cta">Open →</td>
   `;
-  return card;
+  return row;
 }
 
 function renderTenantDashboardEmptyState() {
@@ -7217,8 +7196,15 @@ function compareTenantDashboardValues(a, b) {
 }
 
 function tenantDashboardSortValue(row, key) {
+  if (key === "approvedCount") return row.summary?.approvedCount ?? row.approvedSpokes ?? -1;
+  if (key === "clientCount") return row.summary?.clientCount ?? -1;
+  if (key === "vmCount") return row.summary?.vmCount ?? -1;
   if (key === "approvedSpokes" || key === "userCount") return row[key] ?? -1;
-  if (key === "createdAt" || key === "lastSync") return row[key] ? new Date(row[key]).getTime() : 0;
+  if (key === "lastSync") {
+    const v = row.summary?.lastSync ?? row.lastSync;
+    return v ? new Date(v).getTime() : 0;
+  }
+  if (key === "createdAt") return row.createdAt ? new Date(row.createdAt).getTime() : 0;
   return String(row[key] || "").toLowerCase();
 }
 
@@ -7240,39 +7226,36 @@ function renderDashboardTenantSortHeader(label, key) {
 
 function renderDashboardTenantTable(rows) {
   const sortedRows = sortDashboardTenantRows(rows);
-  const body = sortedRows.length ? sortedRows.map(row => `
-    <tr>
-      <td><button class="btn btn-link tenant-link-btn" data-open-tenant="${escHtml(row.id)}" type="button">${escHtml(row.name)}</button></td>
-      <td><code>${escHtml(row.id)}</code></td>
-      <td>${row.approvedSpokes}</td>
-      <td>${row.userCount ?? '<span class="muted">—</span>'}</td>
-      <td>${row.createdAt ? escHtml(fmtDate(row.createdAt)) : '<span class="muted">—</span>'}</td>
-      <td title="${escHtml(row.lastSync ? fmtDate(row.lastSync) : "—")}">${row.lastSync ? escHtml(relativeTime(row.lastSync)) : '<span class="muted">—</span>'}</td>
-      <td>
-        <div class="tenant-table-actions">
-          <button class="btn btn-secondary btn-small" data-open-tenant="${escHtml(row.id)}" type="button">Manage</button>
-          ${currentUser?.is_superadmin ? `<button class="btn btn-danger btn-small" data-delete-tenant="${escHtml(row.id)}" type="button">Delete</button>` : ""}
-        </div>
-      </td>
+  const body = sortedRows.length ? sortedRows.map(row => {
+    const summary = row.summary || {};
+    const alert = row.alert || {};
+    const lastSync = summary.lastSync ?? row.lastSync;
+    return `
+    <tr class="tenant-list-row" data-enter-tenant="${escHtml(row.id)}" tabindex="0" role="button">
+      <td>${statusDot((summary.onlineCount ?? 0) > 0 || (summary.approvedCount ?? 0) === 0)}</td>
+      <td><strong>${escHtml(row.name || row.id)}</strong><div class="tenant-card-subtitle">${escHtml(row.id)}</div></td>
+      <td>${summary.approvedCount ?? row.approvedSpokes ?? '—'}</td>
+      <td>${summary.clientCount ?? '—'}</td>
+      <td>${summary.vmCount ?? '—'}</td>
+      <td>${lastSync ? escHtml(relativeTime(lastSync)) : '<span class="muted">—</span>'}</td>
+      <td>${alert.text ? `<span class="tenant-alert-pill ${alert.tone}">${escHtml(alert.text)}</span>` : ''}</td>
+      <td class="tenant-card-cta">Open →</td>
     </tr>
-  `).join("") : '<tr><td colspan="7" class="empty-state">No tenants available.</td></tr>';
+  `;}).join("") : '<tr><td colspan="8" class="empty-state">No tenants available.</td></tr>';
   return `
     <section class="setup-card tenant-list-card">
-      <div class="setup-card-header">
-        <h2>Tenants</h2>
-        <p>Tenant overview for the hub. Open a tenant to view its dashboard, spokes, commands, and configuration.</p>
-      </div>
       <div class="table-scroll">
         <table class="data-table">
           <thead>
             <tr>
-              <th>${renderDashboardTenantSortHeader("Tenant Name", "name")}</th>
-              <th>${renderDashboardTenantSortHeader("Tenant ID", "id")}</th>
-              <th>${renderDashboardTenantSortHeader("Approved Spokes", "approvedSpokes")}</th>
-              <th>${renderDashboardTenantSortHeader("Users", "userCount")}</th>
-              <th>${renderDashboardTenantSortHeader("Created", "createdAt")}</th>
+              <th></th>
+              <th>${renderDashboardTenantSortHeader("Tenant", "name")}</th>
+              <th>${renderDashboardTenantSortHeader("Spokes", "approvedCount")}</th>
+              <th>${renderDashboardTenantSortHeader("Clients", "clientCount")}</th>
+              <th>${renderDashboardTenantSortHeader("VMs", "vmCount")}</th>
               <th>${renderDashboardTenantSortHeader("Last Sync", "lastSync")}</th>
-              <th>Actions</th>
+              <th>Status</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>${body}</tbody>
@@ -8117,10 +8100,10 @@ async function loadDashboard(force = false) {
     $("#dash-spokes-pill") && ($("#dash-spokes-pill").textContent = `${totalSpokes} spokes`);
     $("#dash-clients-pill") && ($("#dash-clients-pill").textContent = `${totalClients} clients`);
     $("#dash-online-pill") && ($("#dash-online-pill").textContent = totalAlerts ? `${totalAlerts} tenants need attention` : 'All tenants OK');
-    grid.classList.add("spoke-grid", "tenant-card-grid");
+    grid.classList.remove("spoke-grid", "tenant-card-grid");
     empty.classList.toggle("hidden", rows.length > 0);
     empty.innerHTML = rows.length ? "" : renderTenantDashboardEmptyState();
-    renderInBatches("dashboard", grid, rows, renderTenantCard, 24);
+    grid.innerHTML = renderDashboardTenantTable(rows);
     return;
   }
 }

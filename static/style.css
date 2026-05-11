@@ -2227,6 +2227,8 @@ details[open] > summary.panel-header { margin-bottom: 16px; }
 .tenant-card-cta { font-size: 0.85rem; font-weight: 600; color: var(--hpe-green-dark); }
 .tenant-empty-action { margin-top: 12px; }
 .tenant-list-card { margin-top: 16px; }
+.tenant-list-row { cursor: pointer; }
+.tenant-list-row:hover td { background: var(--row-hover, rgba(0,0,0,0.04)); }
 .tenant-link-btn { padding: 0; border: none; background: none; color: var(--hpe-green-dark); font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
 .tenant-link-btn:hover { text-decoration: underline; }
 .tenant-table-actions { display: flex; gap: 8px; flex-wrap: wrap; }

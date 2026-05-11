@@ -8314,7 +8314,7 @@ async function loadCentral(force = false) {
 }
 
 async function loadSetup() {
-  await loadSettings();
+  await loadHubSettings();
 }
 
 async function loadTenantSetup(force = false) {
@@ -8746,7 +8746,7 @@ async function sendSpokeCommand(type) {
 }
 window.sendSpokeCommand = sendSpokeCommand;
 
-async function loadSettings() {
+async function loadHubSettings() {
   if (!currentTenantId) return;
   const apiBase = `${window.location.origin}/api/${currentTenantId}/spokes/{id}`;
   $("#api-register-url") && ($("#api-register-url").textContent = `${window.location.origin}/api/spokes/register`);
@@ -8818,7 +8818,7 @@ async function saveArubaSettings() {
     return;
   }
   setFormMessage("aruba-msg", "Aruba settings saved.", true);
-  await loadSettings();
+  await loadHubSettings();
 }
 
 async function saveNotificationSettings() {
@@ -8842,7 +8842,7 @@ async function saveNotificationSettings() {
     return;
   }
   setFormMessage("notif-msg", "Notifications saved.", true);
-  await loadSettings();
+  await loadHubSettings();
 }
 
 function showKeyBanner(apiKey, spokeId) {

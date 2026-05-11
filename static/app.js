@@ -2748,7 +2748,6 @@ function renderAutoProvisionStatus() {
 
   // ── Right-side live panel ───────────────────────────────────────────────────
   const livePanel = document.getElementById('autoprov-live-panel');
-  const liveBadge = document.getElementById('autoprov-live-badge');
   const liveSummary = document.getElementById('autoprov-live-summary');
   const logEl = document.getElementById('auto-prov-log');
   if (!livePanel || !liveSummary || !logEl) return;
@@ -2758,10 +2757,6 @@ function renderAutoProvisionStatus() {
 
   const showPanel = run.running && total > 0;
   if (!showPanel) {
-    if (liveBadge) {
-      liveBadge.textContent = autoProv ? 'Idle' : 'Off';
-      liveBadge.className = autoProv ? 'badge badge-grey' : 'badge badge-red';
-    }
     liveSummary.innerHTML = `<div class="muted" style="padding:12px 0;">${
       autoProv
         ? 'No provisioning in progress. Dongles inserted will trigger auto-provisioning.'
@@ -2769,11 +2764,6 @@ function renderAutoProvisionStatus() {
     }</div>`;
     logEl.innerHTML = '';
     return;
-  }
-
-  if (liveBadge) {
-    liveBadge.textContent = `Provisioning ${completed}/${total}`;
-    liveBadge.className = 'badge badge-blue';
   }
 
   const completedPct = total > 0 ? Math.round((completed / total) * 100) : 0;
@@ -2789,12 +2779,17 @@ function renderAutoProvisionStatus() {
     <div class="autoprov-live-summary-sub">${escHtml(startedText)}</div>
   `;
 
-  logEl.innerHTML = run.items.map((item) => {
+  // Show only actively in-progress items (cloning / configuring / waiting / failed)
+  // Done items drop off the list — concurrency controls how many appear at once.
+  const activeItems = run.items.filter(item => item.status !== 'done');
+  logEl.innerHTML = activeItems.map((item) => {
     const meta = autoProvisionStatusMeta(item.status);
-    const vmName = item.vm_name || `VM ${item.vmid ?? '—'}`;
+    // vm_name is the Proxmox VM name which equals the assigned hostname (e.g. amoran-90014).
+    // Fall back to the slot number only before the clone command has named the VM.
+    const hostname = item.vm_name || `Slot ${item.vmid ?? '—'}`;
     return `
       <div class="autoprov-live-item">
-        <span class="autoprov-live-item-name">${escHtml(vmName)}</span>
+        <span class="autoprov-live-item-name">${escHtml(hostname)}</span>
         <span class="autoprov-phase ${meta.className}">${meta.label}</span>
       </div>
     `;

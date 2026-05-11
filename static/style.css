@@ -1622,6 +1622,20 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   background: linear-gradient(90deg, #01a982, #38bdf8);
 }
 
+.autoprov-two-col {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.autoprov-left {
+  flex: 0 0 auto;
+  min-width: 140px;
+}
+.autoprov-right {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .autoprov-live-list {
   display: flex;
   flex-direction: column;
@@ -1629,7 +1643,6 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   max-height: 320px;
   overflow-y: auto;
   border-top: 1px solid var(--border);
-  margin-top: 8px;
 }
 
 .autoprov-live-item {

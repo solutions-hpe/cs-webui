@@ -7079,7 +7079,7 @@ function renderDashboardAggregate(data) {
   return `
     <div class="tenant-metrics-grid">
       <article class="tenant-metric-card"><span class="tenant-metric-label">Total Clients</span><strong class="tenant-metric-value">${data.client_count ?? 0}</strong><span class="tenant-metric-hint">Across approved spokes</span></article>
-      <article class="tenant-metric-card"><span class="tenant-metric-label">Spoke Health</span><strong class="tenant-metric-value">${data.spokes_online ?? 0} / ${data.spokes_total ?? 0}</strong><span class="tenant-metric-hint">Online within last 120s</span></article>
+      <article class="tenant-metric-card"><span class="tenant-metric-label">Spoke Health</span><strong class="tenant-metric-value">${data.spokes_online ?? 0} / ${data.spokes_total ?? 0}</strong><span class="tenant-metric-hint">Online within last 180s</span></article>
       <article class="tenant-metric-card"><span class="tenant-metric-label">Checks Passing</span><strong class="tenant-metric-value">${checks.pass ?? 0}</strong><span class="tenant-metric-hint">Warnings ${checks.warning ?? 0} · Failing ${checks.fail ?? 0}</span></article>
       <article class="tenant-metric-card"><span class="tenant-metric-label">Hardware Types</span><strong class="tenant-metric-value">${Object.keys(data.hardware_breakdown || {}).length}</strong><span class="tenant-metric-hint">Observed client platforms</span></article>
     </div>
@@ -7831,7 +7831,7 @@ function renderTenantDashboardPanel(data, summary) {
   return `
     <div class="tenant-metrics-grid">
       <article class="tenant-metric-card"><span class="tenant-metric-label">Approved Spokes</span><strong class="tenant-metric-value">${summary.approvedCount}</strong><span class="tenant-metric-hint">${summary.pendingCount} pending</span></article>
-      <article class="tenant-metric-card"><span class="tenant-metric-label">Online / Offline</span><strong class="tenant-metric-value">${summary.onlineCount} / ${summary.offlineCount}</strong><span class="tenant-metric-hint">Based on 120s heartbeat</span></article>
+      <article class="tenant-metric-card"><span class="tenant-metric-label">Online / Offline</span><strong class="tenant-metric-value">${summary.onlineCount} / ${summary.offlineCount}</strong><span class="tenant-metric-hint">Based on 180s heartbeat</span></article>
       <article class="tenant-metric-card"><span class="tenant-metric-label">Sim Clients</span><strong class="tenant-metric-value">${summary.clientCount}</strong><span class="tenant-metric-hint">Across approved spokes</span></article>
       <article class="tenant-metric-card"><span class="tenant-metric-label">VM Footprint</span><strong class="tenant-metric-value">${summary.vmCount}</strong><span class="tenant-metric-hint">${summary.runningVmCount} running · ${summary.usbCount} USB devices</span></article>
     </div>

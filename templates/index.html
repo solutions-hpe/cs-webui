@@ -1200,7 +1200,8 @@
                     <span class="form-hint" id="github-token-status"></span>
                   </div>
 
-                  <div class="form-actions" style="display:flex;justify-content:flex-end">
+                  <div class="form-actions" style="display:flex; justify-content:flex-end; gap:8px;">
+                    <button id="github-clear-config-btn" class="btn btn-secondary" type="button">Clear Config</button>
                     <button id="sync-now-btn" class="btn btn-primary" type="button">⬇ Sync from GitHub Now</button>
                   </div>
 
@@ -1270,7 +1271,7 @@
                   </div>
                 </div>
                 <div class="setup-form">
-                  <div class="form-actions" style="display:flex;justify-content:flex-end">
+                  <div class="form-actions" style="display:flex; justify-content:flex-end; gap:8px;">
                     <button id="check-update-btn" class="btn btn-primary" type="button">🔄 Check &amp; Update Now</button>
                   </div>
                   <div id="update-message" class="settings-message hidden" role="alert"></div>
@@ -1549,7 +1550,8 @@
                   </div>
                 </div>
                 <!-- Registration Diagnostics -->
-                <div style="margin-top:14px;">
+                <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+                  <button id="relay-clear-config-btn" class="btn btn-secondary" type="button">Clear Config</button>
                   <button id="relay-diag-btn" class="btn btn-secondary btn-small" type="button">🔍 Run Registration Diagnostics</button>
                 </div>
                 <div id="relay-diag-panel" class="hidden diag-panel">

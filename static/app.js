@@ -429,6 +429,7 @@ const githubTokenStatus = document.getElementById('github-token-status');
 const syncNowBtn = document.getElementById('sync-now-btn');
 const syncNowMsg = document.getElementById('sync-now-message');
 const settingsMsg = document.getElementById('settings-message');
+const githubClearConfigBtn = document.getElementById('github-clear-config-btn');
 const checkUpdateBtn = document.getElementById('check-update-btn');
 const updateMsg = document.getElementById('update-message');
 const versionCurrent = document.getElementById('version-current');
@@ -476,6 +477,7 @@ const relaySpokeName = document.getElementById('relay-spoke-name-input');
 const relayServerUrlInput = document.getElementById('relay-server-url-input');
 const relayTenantHintInput = document.getElementById('relay-tenant-hint-input');
 const relayMsg = document.getElementById('relay-message');
+const relayClearConfigBtn = document.getElementById('relay-clear-config-btn');
 
 // Notifications + sync interval
 const syncIntervalInput  = document.getElementById('sync-interval-input');
@@ -1269,6 +1271,30 @@ function showSettingsMessage(text, isError) {
   }, 5000);
 }
 
+async function clearSettingsProvider(provider, { button, messageEl, successText, extraDataHandler } = {}) {
+  const originalText = button?.textContent || 'Clear Config';
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Clearing…';
+  }
+  try {
+    const data = await requestJson(`/api/settings/clear/${encodeURIComponent(provider)}`, { method: 'POST' });
+    applySettingsToUI(data.settings || {});
+    if (typeof extraDataHandler === 'function') extraDataHandler(data);
+    if (messageEl === settingsMsg) showSettingsMessage(successText, false);
+    else showInlineMessage(messageEl, successText, false);
+  } catch (error) {
+    await loadSettings().catch(() => {});
+    if (messageEl === settingsMsg) showSettingsMessage(`Error: ${error.message}`, true);
+    else showInlineMessage(messageEl, `Error: ${error.message}`, true);
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
+}
+
 if (branchInput) {
   branchInput.addEventListener('blur', async () => {
     const branch = branchInput.value.trim();
@@ -1303,6 +1329,14 @@ if (githubTokenInput) {
       showSettingsMessage(`Error: ${err.message}`, true);
     }
   });
+}
+
+if (githubClearConfigBtn) {
+  githubClearConfigBtn.addEventListener('click', () => clearSettingsProvider('github', {
+    button: githubClearConfigBtn,
+    messageEl: settingsMsg,
+    successText: 'GitHub config cleared.'
+  }));
 }
 
 syncNowBtn.addEventListener('click', async () => {
@@ -4969,6 +5003,14 @@ if (relayEnabledSelect) relayEnabledSelect.addEventListener('change', _autoSaveR
 [relayServerUrlInput, relaySpokeName, relayTenantHintInput].forEach((el) => {
   if (el) el.addEventListener('blur', _autoSaveRelay);
 });
+if (relayClearConfigBtn) {
+  relayClearConfigBtn.addEventListener('click', () => clearSettingsProvider('relay', {
+    button: relayClearConfigBtn,
+    messageEl: relayMsg,
+    successText: 'Hub config cleared.',
+    extraDataHandler: (data) => setRelayStatus(data.relay_status || { enabled: false, connected: false, last_sync: null, error: null, registration_status: 'unregistered' })
+  }));
+}
 
 // Registration diagnostics button
 const relayDiagBtn = document.getElementById('relay-diag-btn');

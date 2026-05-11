@@ -2377,14 +2377,27 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
   const usbState = Array.isArray(latestProxmoxData.usb_state) ? latestProxmoxData.usb_state : [];
   const missingTimeoutSeconds = (parseInt(currentSettings.usb_missing_timeout, 10) || 60) * 60;
 
-  // Running VM stats pill
+  // Compute present bus set first so the stat pill count is accurate
+  const presentUsb = Array.isArray(latestProxmoxData.present_usb) ? latestProxmoxData.present_usb : [];
+  const presentBusSet = new Set(presentUsb.map((item) => String(item?.bus_path || '').trim()).filter(Boolean));
+
+  // VMs whose dongles are missing (removed) — exclude from running count since they
+  // are being torn down and no longer represent an active provisioned client
+  const missingVmids = new Set(
+    usbState
+      .filter((item) => item.missing_since && !presentBusSet.has(String(item?.bus_path || '').trim()))
+      .map((item) => Number(item.vmid))
+      .filter(Boolean)
+  );
+
+  // Running VM stats pill — only count provisioned VMs with their dongles still present
   const allVms = Array.isArray(latestProxmoxData.vms) ? latestProxmoxData.vms : [];
-  const runningVms = allVms.filter((v) => v.status === 'running' && !v.is_template);
+  const runningVms = allVms.filter((v) => v.status === 'running' && !v.is_template && !missingVmids.has(Number(v.vmid)));
   const usbStatPills = document.getElementById('usb-vm-stat-pills');
   if (usbStatPills) {
     const simRunning = runningVms.filter((v) => v.name && v.name.startsWith('client-sim-')).length;
     const totalRunning = runningVms.length;
-    usbStatPills.innerHTML = `<span class="server-stat-pill" title="Total non-template VMs currently running">🟢 ${totalRunning} running VM${totalRunning !== 1 ? 's' : ''}</span>`
+    usbStatPills.innerHTML = `<span class="server-stat-pill" title="Running VMs with dongles present">🟢 ${totalRunning} running VM${totalRunning !== 1 ? 's' : ''}</span>`
       + (simRunning > 0 ? `<span class="server-stat-pill" title="client-sim-* VMs running">${simRunning} sim client${simRunning !== 1 ? 's' : ''}</span>` : '');
   }
 
@@ -2399,8 +2412,6 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
     });
 
   usbSummaryTbody.innerHTML = '';
-  const presentUsb = Array.isArray(latestProxmoxData.present_usb) ? latestProxmoxData.present_usb : [];
-  const presentBusSet = new Set(presentUsb.map((item) => String(item?.bus_path || '').trim()).filter(Boolean));
   certified.forEach((device) => {
     const entries = usbState.filter((item) => (item.vidpid || '').toLowerCase() === String(device.vidpid || '').toLowerCase());
     const missingEntries = entries.filter((item) => item.missing_since && !presentBusSet.has(String(item?.bus_path || '').trim()));

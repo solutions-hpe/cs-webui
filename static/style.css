@@ -1434,9 +1434,9 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 #vm-maintenance-card label { display:flex; gap:8px; align-items:center; margin:10px 0; }
 #usb-vidpid-table, #usb-summary-table, #unknown-usb-table { margin-top:10px; }
 
-/* Certified / USB summary tables — fixed layout prevents content overflow */
+/* Certified / USB summary tables */
 #usb-vidpid-table  { table-layout: fixed; }
-#usb-summary-table { table-layout: fixed; }
+#usb-summary-table { table-layout: auto; }
 #unknown-usb-table { table-layout: fixed; }
 
 /* VID:PID table column widths: VID:PID | Type | Label | Actions */
@@ -1445,23 +1445,53 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 #usb-vidpid-table  th:nth-child(4), #usb-vidpid-table  td:nth-child(4) { width: 10%; text-align: center; }
 
 /* USB summary table column widths: Device | VID:PID | Type | Active | Missing | Count */
-#usb-summary-table th:nth-child(2), #usb-summary-table td:nth-child(2) { width: 16%; }
-#usb-summary-table th:nth-child(3), #usb-summary-table td:nth-child(3) { width: 12%; }
-#usb-summary-table th:nth-child(4), #usb-summary-table td:nth-child(4) { width: 12%; }
-#usb-summary-table th:nth-child(6), #usb-summary-table td:nth-child(6) { width: 10%; }
+#usb-summary-table th:nth-child(2), #usb-summary-table td:nth-child(2) {
+  width: 80px;
+  min-width: 80px;
+  white-space: nowrap;
+}
+#usb-summary-table th:nth-child(3), #usb-summary-table td:nth-child(3) {
+  width: 96px;
+  min-width: 96px;
+}
+#usb-summary-table th:nth-child(4), #usb-summary-table td:nth-child(4),
+#usb-summary-table th:nth-child(5), #usb-summary-table td:nth-child(5) {
+  width: 180px;
+  min-width: 180px;
+}
+#usb-summary-table th:nth-child(4),
+#usb-summary-table th:nth-child(5),
+#usb-summary-table th:nth-child(6),
+#unknown-usb-table th:nth-child(2),
+#unknown-usb-table td:nth-child(2) {
+  white-space: nowrap;
+}
+#usb-summary-table th:nth-child(6), #usb-summary-table td:nth-child(6) {
+  width: 72px;
+  min-width: 72px;
+}
 
 /* Unknown USB table: Device | VID:PID | Actions */
 #unknown-usb-table th:nth-child(2), #unknown-usb-table td:nth-child(2) { width: 18%; }
 #unknown-usb-table th:nth-child(3), #unknown-usb-table td:nth-child(3) { width: 28%; }
 
-/* Truncate long text in all three tables */
-#usb-vidpid-table td, #usb-summary-table td, #unknown-usb-table td {
+/* Truncate long text in fixed-width USB tables */
+#usb-vidpid-table td, #unknown-usb-table td {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Missing column can wrap (may contain multiple VM countdown entries) */
-#usb-summary-table td:nth-child(5) { white-space: normal; }
+#usb-summary-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#usb-summary-table td:nth-child(4),
+#usb-summary-table td:nth-child(5) {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
 #usb-ignored-list { display:flex; flex-wrap:wrap; gap:8px; }
 #usb-ignored-list .badge button { border:none; background:none; color:inherit; cursor:pointer; }
 .reclone-header { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:8px; }

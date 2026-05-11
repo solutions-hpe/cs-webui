@@ -43,14 +43,8 @@
           <span id="auto-refresh-countdown" class="auto-refresh-countdown">10s</span>
         </div>
         <div id="gkill-badge" class="gkill-badge hidden hub-only" title="Global Kill Switch is ON">⚠ GKILL ON</div>
-        <div id="hub-admin-topbar-nav" class="hub-admin-topbar-nav hidden hub-only" aria-label="Hub admin navigation">
-          <button class="btn btn-secondary btn-small hub-admin-shortcut" data-admin-tab="hub-dashboard" type="button">Tenants</button>
-          <button class="btn btn-secondary btn-small hub-admin-shortcut" data-admin-tab="hub-spokes" type="button">Spokes</button>
-          <button class="btn btn-secondary btn-small hub-admin-shortcut" data-admin-tab="hub-setup" type="button">Hub Setup</button>
-          <button class="btn btn-secondary btn-small hub-admin-shortcut superadmin-tab hidden" data-admin-tab="hub-superadmin" type="button">Superadmin</button>
-        </div>
         <div id="tenant-context-indicator" class="tenant-context-indicator hidden hub-only">
-          <span class="tenant-context-label">Tenant:</span>
+          <span class="tenant-context-label">TENANT:</span>
           <strong id="tenant-context-name">—</strong>
           <button id="tenant-context-change-btn" class="btn btn-secondary btn-small" type="button">Change</button>
         </div>
@@ -107,13 +101,21 @@
         <button class="tab superadmin-tab hidden" data-tab="hub-superadmin" type="button">Superadmin</button>
       </div>
       <div id="tenant-context-nav" class="tenant-context-nav hidden">
-        <button class="tab active" data-tab="hub-simulations" type="button">Simulations</button>
-        <button class="tab" data-tab="hub-clients" type="button">Clients</button>
-        <button class="tab" data-tab="hub-vm-server" type="button">VM Server</button>
-        <button class="tab" data-tab="hub-api-server" type="button">API Server</button>
-        <button class="tab" data-tab="hub-central" type="button">Central</button>
-        <button class="tab" data-tab="hub-config" type="button">Config</button>
-        <button class="tab" data-tab="hub-tenant-setup" type="button">⚙ Setup</button>
+        <div class="tenant-context-nav-row1">
+          <button class="tab tab-back" data-tab="hub-dashboard" type="button">← Tenants</button>
+          <button class="tab auth-tab hidden tab-back" data-tab="hub-spokes" type="button">Spokes</button>
+          <button class="tab auth-tab hidden tab-back" data-tab="hub-setup" type="button">⚙ Hub Setup</button>
+          <button class="tab superadmin-tab hidden tab-back" data-tab="hub-superadmin" type="button">Superadmin</button>
+        </div>
+        <div class="tenant-context-nav-row2">
+          <button class="tab active" data-tab="hub-simulations" type="button">Simulations</button>
+          <button class="tab" data-tab="hub-clients" type="button">Clients</button>
+          <button class="tab" data-tab="hub-vm-server" type="button">VM Server</button>
+          <button class="tab" data-tab="hub-api-server" type="button">API Server</button>
+          <button class="tab" data-tab="hub-central" type="button">Central</button>
+          <button class="tab" data-tab="hub-config" type="button">Config</button>
+          <button class="tab" data-tab="hub-tenant-setup" type="button">⚙ Setup</button>
+        </div>
       </div>
     </div>
     <span class="spoke-only">

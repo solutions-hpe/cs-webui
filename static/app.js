@@ -7430,7 +7430,6 @@ function syncTenantContextChrome() {
   const active = Boolean(currentUser && authToken && tenantContextActive && currentTenantId);
   $("#hub-admin-nav")?.classList.toggle("hidden", active);
   $("#tenant-context-nav")?.classList.toggle("hidden", !active);
-  $("#hub-admin-topbar-nav")?.classList.toggle("hidden", !active);
   $("#tenant-context-indicator")?.classList.toggle("hidden", !active);
   $("#tenant-context-name") && ($("#tenant-context-name").textContent = tenantName(currentTenantId) || currentTenantId || "—");
   document.body.classList.toggle("tenant-context-active", active);
@@ -7440,7 +7439,7 @@ function syncHubPermissionUI() {
   const canManageCurrent = Boolean(currentUser && currentTenantId && (canManageTenant() || currentUser.is_superadmin));
   [
     '#hub-admin-nav .tab[data-tab="hub-setup"]',
-    '#hub-admin-topbar-nav [data-admin-tab="hub-setup"]',
+    '#tenant-context-nav .tab-back[data-tab="hub-setup"]',
   ].forEach(selector => {
     $$(selector).forEach(el => el.classList.toggle("hidden", !canManageCurrent));
   });
@@ -9868,7 +9867,11 @@ function bindEvents() {
     const tabButton = event.target.closest("#tab-nav .tab");
     if (tabButton) {
       if (tabButton.dataset.tenantId) setCurrentTenant(tabButton.dataset.tenantId, false);
-      showTab(tabButton.dataset.tab, { button: tabButton, source: tabButton.closest("#tenant-context-nav") ? "tenant" : "admin" });
+      // Row-1 back-nav buttons in tenant context exit tenant context first
+      if (tabButton.classList.contains("tab-back") && tenantContextActive) {
+        exitTenantContext();
+      }
+      showTab(tabButton.dataset.tab, { button: tabButton, source: tabButton.closest("#tenant-context-nav .tenant-context-nav-row2") ? "tenant" : "admin" });
       return;
     }
 

@@ -1463,14 +1463,24 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 
 /* ── Reclone + Auto-Provisioning 2-col layout ─────────── */
 .reclone-autoprov-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
 }
+
+.vm-server-status-tile {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 360px;
+}
+
 @media (max-width: 900px) {
-  .reclone-autoprov-grid { grid-template-columns: 1fr; }
+  .vm-server-status-tile {
+    flex-basis: 100%;
+  }
 }
+
 .autoprov-live-summary { margin-bottom: 8px; }
 #autoprov-live-panel .reclone-log { max-height: 300px; }
 

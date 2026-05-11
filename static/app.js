@@ -31,18 +31,34 @@ function consumeInitPayload() {
   return init;
 }
 
-async function detectWebuiMode() {
+const MODE_DETECTION_TIMEOUT_MS = 1500;
+
+async function fetchInitPayload(timeoutMs = 0) {
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const timeoutId = controller && timeoutMs > 0
+    ? window.setTimeout(() => controller.abort(), timeoutMs)
+    : null;
   try {
-    const response = await fetch('/api/init', { headers: { Accept: 'application/json' } });
-    if (response?.ok) {
-      const init = await response.json().catch(() => ({}));
-      const mode = String(init?.mode || '').trim().toLowerCase();
-      if (mode === 'hub' || mode === 'spoke') {
-        window.__CS_WEBUI_INIT__ = init;
-        return setWebuiMode(mode);
-      }
-    }
-  } catch (_) { /* ignore */ }
+    const response = await fetch('/api/init', {
+      headers: { Accept: 'application/json' },
+      signal: controller?.signal,
+    });
+    if (!response?.ok) return null;
+    return await response.json().catch(() => ({}));
+  } catch (_) {
+    return null;
+  } finally {
+    if (timeoutId) window.clearTimeout(timeoutId);
+  }
+}
+
+async function detectWebuiMode() {
+  const init = await fetchInitPayload(MODE_DETECTION_TIMEOUT_MS);
+  const mode = String(init?.mode || '').trim().toLowerCase();
+  if (mode === 'hub' || mode === 'spoke') {
+    window.__CS_WEBUI_INIT__ = init;
+    return setWebuiMode(mode);
+  }
   return setWebuiMode(WEBUI_MODE === 'hub' ? 'hub' : 'spoke');
 }
 
@@ -9691,7 +9707,7 @@ document.getElementById("acme-dns-provider")?.addEventListener("change", toggleA
 
 async function setFooterVersions() {
   try {
-    const init = await fetch('/api/init').then(r => r.json()).catch(() => null);
+    const init = window.__CS_WEBUI_INIT__ || await fetchInitPayload();
     if (!init) return;
     const fWebui = document.getElementById('footer-cswebui-version');
     const fRepo  = document.getElementById('footer-repo-version');

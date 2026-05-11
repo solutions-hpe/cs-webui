@@ -91,14 +91,16 @@
 
   <!-- ── Unified tab nav ── -->
   <nav id="tab-nav" class="tab-nav" role="tablist">
-    <span class="hub-only">
+    <div class="hub-only">
       <button class="tab active" data-tab="dashboard" type="button">Dashboard</button>
+      <button class="tab auth-tab hidden" data-tab="simulations" type="button">Simulations</button>
+      <button class="tab auth-tab hidden" data-tab="clients" type="button">Clients</button>
       <button class="tab auth-tab hidden" data-tab="spokes" type="button">Spokes</button>
-      <button class="tab auth-tab hidden" data-tab="commands" type="button">Commands</button>
-      <span class="tab-nav-sep" aria-hidden="true"></span>
-      <button class="tab auth-tab hidden" data-tab="settings" type="button">⚙ Settings</button>
+      <div class="tab-nav-spacer" aria-hidden="true"></div>
+      <button class="tab auth-tab hidden" data-tab="setup" type="button">⚙ Setup</button>
+      <button class="tab auth-tab hidden" data-tab="config" type="button">⚙ Config</button>
       <button class="tab superadmin-tab hidden" data-tab="superadmin" type="button">Superadmin</button>
-    </span>
+    </div>
     <span class="spoke-only">
       <button class="tab active" role="tab" aria-selected="true" data-tab="simulations" type="button">Simulations</button>
       <button class="tab" role="tab" aria-selected="false" data-tab="dashboard" type="button">Clients</button>
@@ -150,6 +152,58 @@
           <section id="tenant-detail-commands-panel" class="tenant-detail-panel hidden"></section>
           <section id="tenant-detail-setup-panel" class="tenant-detail-panel hidden"></section>
           <section id="tenant-detail-config-panel" class="tenant-detail-panel hidden"></section>
+        </div>
+      </main>
+
+      <main id="tab-simulations" class="page tab-content hidden">
+        <div class="page-toolbar">
+          <div class="toolbar-stats">
+            <span class="stat-pill" id="hub-simulations-pill">— simulations</span>
+            <span class="stat-pill" id="hub-simulation-clients-pill">— clients</span>
+            <span class="stat-pill" id="hub-simulation-spokes-pill">— spokes</span>
+          </div>
+          <div class="toolbar-actions">
+            <input id="hub-simulations-search" type="search" class="form-input form-input-sm" placeholder="Filter simulations…">
+            <button id="refresh-simulations-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+          </div>
+        </div>
+        <div class="setup-card">
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead><tr><th>Spoke</th><th>Simulation</th><th>Status</th><th>Client Count</th></tr></thead>
+              <tbody id="hub-simulations-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+
+      <main id="tab-clients" class="page tab-content hidden">
+        <div class="page-toolbar">
+          <div class="toolbar-stats">
+            <span class="stat-pill" id="hub-clients-pill">— clients</span>
+            <span class="stat-pill" id="hub-clients-online-pill">— online</span>
+            <span class="stat-pill" id="hub-clients-spokes-pill">— spokes</span>
+          </div>
+          <div class="toolbar-actions">
+            <input id="hub-clients-search" type="search" class="form-input form-input-sm" placeholder="Search clients…">
+            <select id="hub-clients-status-filter" class="form-input form-input-sm">
+              <option value="all">All statuses</option>
+              <option value="online">Online</option>
+              <option value="offline">Offline</option>
+            </select>
+            <select id="hub-clients-spoke-filter" class="form-input form-input-sm">
+              <option value="all">All spokes</option>
+            </select>
+            <button id="refresh-clients-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+          </div>
+        </div>
+        <div class="setup-card">
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead><tr><th>Status</th><th>Hostname</th><th>Spoke</th><th>Platform</th><th>SIM Bucket</th><th>SSID</th><th>Active Simulations</th><th>Aruba Central Impact</th><th>Last Seen</th><th>Errors</th></tr></thead>
+              <tbody id="hub-clients-tbody"></tbody>
+            </table>
+          </div>
         </div>
       </main>
 
@@ -211,9 +265,14 @@
         </div>
       </main>
 
-      <!-- ── Settings tab ── -->
-      <main id="tab-settings" class="page tab-content hidden">
-        <div class="page-toolbar"><span class="server-node-name">Settings</span></div>
+      <main id="tab-config" class="page tab-content hidden">
+        <div class="page-toolbar"><span class="server-node-name">Config</span><button id="refresh-config-btn" class="btn btn-secondary btn-small" style="margin-left:auto;" type="button">Refresh</button></div>
+        <div id="hub-config-content"></div>
+      </main>
+
+      <!-- ── Setup tab ── -->
+      <main id="tab-setup" class="page tab-content hidden">
+        <div class="page-toolbar"><span class="server-node-name">Setup</span></div>
         <nav class="setup-subnav">
           <button class="setup-subtab settings-subtab active" data-subtab="settings-account" type="button">Account</button>
           <button class="setup-subtab settings-subtab" data-subtab="settings-aruba" type="button">Aruba Central</button>

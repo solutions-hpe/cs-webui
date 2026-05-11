@@ -564,6 +564,9 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 .tab-nav-right {
   margin-left: 0;
 }
+.tab-nav-spacer {
+  margin-left: auto;
+}
 .tab-nav-sep {
   flex: 1;
   min-width: 16px;

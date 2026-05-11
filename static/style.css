@@ -502,14 +502,6 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   gap: 20px;
 }
 
-.installer-version-badge {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: rgba(255,255,255,0.5);
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-}
-
 .repo-status {
   display: flex;
   align-items: center;
@@ -557,7 +549,17 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   flex-shrink: 0;
+}
+
+.footer-version {
+  margin-left: auto;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--muted);
+  white-space: nowrap;
+  text-align: right;
 }
 
 /* ── Empty state ────────────────────────────────────────────────── */
@@ -1918,14 +1920,6 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   .setup-card { padding: 20px; }
   .setup-card .data-table { margin: 0 -20px; width: calc(100% + 40px); }
   .data-table th, .data-table td { padding-left: 20px; padding-right: 20px; }
-}
-
-.build-version {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: rgba(255,255,255,0.5);
-  letter-spacing: 0.04em;
-  white-space: nowrap;
 }
 
 /* ── Mode gating ─────────────────────────────────────── */

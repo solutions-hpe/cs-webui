@@ -53,7 +53,6 @@
           <button id="logout-btn" class="btn btn-secondary btn-small" type="button">Logout</button>
         </div>
         <button id="login-btn" class="btn btn-secondary btn-small hub-only" type="button">Login</button>
-        <span id="build-version" class="build-version hub-only" title="Build version"></span>
 
         <div id="repo-status" class="repo-status spoke-only" title="GitHub sync status">
           <span id="repo-dot" class="status-dot offline"></span>
@@ -83,7 +82,6 @@
           </select>
           <span id="refresh-countdown" class="auto-refresh-countdown">10s</span>
         </div>
-        <span id="installer-version" class="installer-version-badge spoke-only" title="Installer version"></span>
         <button id="update-all-btn" class="btn btn-primary spoke-only" title="Update all Proxmox agents then the WebUI server" style="font-size:13px;padding:5px 12px;">⬆ Update All</button>
       </div>
     </div>
@@ -2014,7 +2012,7 @@
 
   <footer class="page-footer">
     <span>© Hewlett Packard Enterprise · Client Simulator</span>
-    <span id="footer-version">v0.1</span>
+    <span id="footer-version" class="footer-version" title="WebUI version">—</span>
   </footer>
 
   <div id="toast-container" style="position:fixed;top:72px;right:24px;z-index:400;display:flex;flex-direction:column;gap:8px;"></div>

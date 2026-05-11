@@ -6061,9 +6061,12 @@ loadSimulations();
       simDisabledState.local = init.local_kill_switch === 'on';
       renderSimDisabledBanner();
     }
-    // Version badge — prefer app_version (VERSION file), fall back to installer_version
-    const badge = document.getElementById('installer-version');
-    if (badge) badge.textContent = `v${init.app_version || init.installer_version || '—'}`;
+    // Footer version — prefer app_version (VERSION file), fall back to installer_version
+    const footerVersion = document.getElementById('footer-version');
+    if (footerVersion) {
+      footerVersion.textContent = `v${init.app_version || init.installer_version || '—'}`;
+      footerVersion.title = `WebUI version: v${init.app_version || init.installer_version || '—'}`;
+    }
   } catch (_) { /* silent — WS will provide live state */ }
 })();
 
@@ -6870,10 +6873,10 @@ async function pingApi() {
   updateApiStatus(ok, ok ? "Connected" : "Disconnected");
   if (ok) {
     const data = await res.json().catch(() => null);
-    const badge = $("#build-version");
-    if (badge && data?.version) {
-      badge.textContent = `v${data.version}`;
-      badge.title = `Branch: ${data.branch || "?"} | SHA: ${data.sha || "?"}`;
+    const footerVersion = $("#footer-version");
+    if (footerVersion && data?.version) {
+      footerVersion.textContent = `v${data.version}`;
+      footerVersion.title = `WebUI version: v${data.version} | Branch: ${data.branch || "?"} | SHA: ${data.sha || "?"}`;
     }
   }
 }

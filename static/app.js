@@ -7196,7 +7196,7 @@ function resetTenantDetail() {
   tenantDetailState.tenantId = null;
   tenantDetailState.activeTab = "dashboard";
   setTenantDetailVisible(false);
-  updateRefreshPausedState();
+  updateHubRefreshPausedState();
 }
 
 function scheduleReload(key, callback, delay = 250) {
@@ -7474,7 +7474,7 @@ async function submitLogin() {
   authToken = payload.access_token;
   localStorage.setItem("hub_token", authToken);
   await loadUserContext();
-  connectWebSocket();
+  connectHubWebSocket();
   await refreshCurrentView(true);
   showToast("Signed in successfully.", "ok");
 }
@@ -7560,7 +7560,7 @@ function showTab(rawTabId, opts = {}) {
   }
   syncTenantContextChrome();
   syncHubPermissionUI();
-  updateRefreshPausedState();
+  updateHubRefreshPausedState();
   refreshCurrentView();
 }
 
@@ -7958,7 +7958,7 @@ function renderTenantDetail(data = tenantDetailState.data[tenantDetailState.tena
     $("#tenant-detail-" + tabId + "-panel")?.classList.toggle("hidden", tenantDetailState.activeTab !== tabId);
   });
   setTenantDetailVisible(true);
-  updateRefreshPausedState();
+  updateHubRefreshPausedState();
 }
 
 async function openTenantDetail(tenantId, tabId = "dashboard", force = false) {
@@ -7968,7 +7968,7 @@ async function openTenantDetail(tenantId, tabId = "dashboard", force = false) {
   tenantDetailState.tenantId = tenantId;
   tenantDetailState.activeTab = tabId;
   setTenantDetailVisible(true);
-  updateRefreshPausedState();
+  updateHubRefreshPausedState();
   ["dashboard", "spokes", "commands", "setup", "config"].forEach(panelId => {
     const panel = $("#tenant-detail-" + panelId + "-panel");
     if (panel) panel.innerHTML = '<div class="empty-state">Loading…</div>';
@@ -9470,7 +9470,7 @@ function updateAutoRefreshCountdownDisplay(text, paused = false) {
   countdown.classList.toggle("paused", paused);
 }
 
-function computeRefreshPaused() {
+function computeHubRefreshPaused() {
   if (!currentUser) return true;
   if (activeTab !== "dashboard") {
     return !autoRefreshActiveTabs.has(activeTab);
@@ -9522,9 +9522,9 @@ function syncAutoRefreshState() {
   }, seconds * 1000);
 }
 
-function updateRefreshPausedState() {
+function updateHubRefreshPausedState() {
   const wasPaused = refreshPaused;
-  refreshPaused = computeRefreshPaused();
+  refreshPaused = computeHubRefreshPaused();
   syncAutoRefreshState();
   if (wasPaused && !refreshPaused) {
     refreshCurrentView(true).catch(() => {});
@@ -9532,10 +9532,10 @@ function updateRefreshPausedState() {
 }
 
 function startAutoRefresh() {
-  updateRefreshPausedState();
+  updateHubRefreshPausedState();
 }
 
-function connectWebSocket() {
+function connectHubWebSocket() {
   if (!authToken) return;
   if (ws && [WebSocket.OPEN, WebSocket.CONNECTING].includes(ws.readyState)) return;
   if (wsReconnectTimer) {
@@ -9591,7 +9591,7 @@ function connectWebSocket() {
     updateApiStatus(false, "Disconnected");
     ws = null;
     if (!authToken) return;
-    wsReconnectTimer = window.setTimeout(connectWebSocket, 3000);
+    wsReconnectTimer = window.setTimeout(connectHubWebSocket, 3000);
   };
   ws.onerror = () => {
     if (ws && ws.readyState !== WebSocket.CLOSED) ws.close();
@@ -9772,7 +9772,7 @@ function bindEvents() {
   await pingApi();
   await loadUserContext();
   if (currentUser) {
-    connectWebSocket();
+    connectHubWebSocket();
     if (currentTenantId) await ensureSpokes(true);
     syncTenantContextChrome();
     syncHubPermissionUI();

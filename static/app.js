@@ -2753,13 +2753,20 @@ function renderAutoProvisionStatus() {
   const logEl = document.getElementById('auto-prov-log');
   if (!livePanel || !liveSummary || !logEl) return;
 
-  // Show panel whenever provisioning is running — regardless of the auto-prov setting
-  // (provisioning can be triggered manually even when the toggle is off)
+  // Panel is always visible — show idle/off state when not provisioning
+  livePanel.classList.remove('hidden');
+
   const showPanel = run.running && total > 0;
-  livePanel.classList.toggle('hidden', !showPanel);
   if (!showPanel) {
-    if (liveBadge) { liveBadge.textContent = autoProv ? 'Idle' : 'Off'; liveBadge.className = 'badge badge-grey'; }
-    liveSummary.innerHTML = '';
+    if (liveBadge) {
+      liveBadge.textContent = autoProv ? 'Idle' : 'Off';
+      liveBadge.className = autoProv ? 'badge badge-grey' : 'badge badge-red';
+    }
+    liveSummary.innerHTML = `<div class="muted" style="padding:12px 0;">${
+      autoProv
+        ? 'No provisioning in progress. Dongles inserted will trigger auto-provisioning.'
+        : 'Auto-provisioning is disabled. Enable it in the USB settings below.'
+    }</div>`;
     logEl.innerHTML = '';
     return;
   }

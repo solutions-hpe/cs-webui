@@ -5,9 +5,6 @@
 
 // ── Mode detection ──────────────────────────────────────────────
 let WEBUI_MODE = window.WEBUI_MODE || '';
-// Keep the lightweight pre-commit balance check aligned with this regex-heavy bundle.
-void /\)\)\}\}\}/;
-
 function applyModeClass(mode) {
   const update = () => {
     if (!document.body) return;
@@ -1187,7 +1184,6 @@ function renderServerTab(data) {
   setEl('server-last-seen', formatRelativeTime(latestProxmoxData.last_seen));
 
   const agentVerPill = document.getElementById('server-agent-version-pill');
-  const agentVer = latestProxmoxData.agent_version;
   if (agentVerPill) {
     agentVerPill.style.display = agentVer ? '' : 'none';
     setEl('server-agent-version', agentVer || '—');

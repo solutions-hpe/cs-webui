@@ -1625,20 +1625,21 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 .autoprov-live-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
   max-height: 320px;
   overflow-y: auto;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
 }
 
 .autoprov-live-item {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: rgba(15, 23, 42, 0.38);
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  padding: 6px 2px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
 }
 
 .autoprov-live-item-main { min-width: 0; }
@@ -1655,11 +1656,11 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 92px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 0.74rem;
-  font-weight: 700;
+  min-width: 80px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -1699,8 +1700,7 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
     flex-basis: 100%;
   }
 
-  .autoprov-live-summary-main,
-  .autoprov-live-item {
+  .autoprov-live-summary-main {
     flex-direction: column;
     align-items: flex-start;
   }

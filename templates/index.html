@@ -247,7 +247,7 @@
               </div>
               <div class="form-group"><label class="form-label" for="aruba-cluster-url">Cluster URL</label><input id="aruba-cluster-url" type="url" class="form-input" placeholder="https://apigw-prod2.central.arubanetworks.com"></div>
               <div class="form-group"><label class="form-label" for="aruba-client-id">Client ID</label><input id="aruba-client-id" type="text" class="form-input"></div>
-              <div class="form-group"><label class="form-label" for="aruba-client-secret">Client Secret</label><input id="aruba-client-secret" type="password" class="form-input" placeholder="Leave blank to keep existing"></div>
+              <div class="form-group"><label class="form-label" for="aruba-client-secret">Client Secret</label><input id="aruba-client-secret" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true"></div>
               <div class="form-group"><label class="form-label" for="aruba-customer-id">Customer ID (CID)</label><input id="aruba-customer-id" type="text" class="form-input"></div>
               <div class="form-actions">
                 <button id="aruba-save-btn" class="btn btn-primary" type="button">Save Config</button>
@@ -264,11 +264,11 @@
               <div class="form-group">
                 <label class="form-label"><input id="notif-enabled" type="checkbox"> Enable notifications</label>
               </div>
-              <div class="form-group"><label class="form-label" for="notif-teams">Teams Webhook URL</label><input id="notif-teams" type="url" class="form-input" placeholder="https://outlook.office.com/webhook/…"></div>
+              <div class="form-group"><label class="form-label" for="notif-teams">Teams Webhook URL</label><input id="notif-teams" type="url" class="form-input" placeholder="https://outlook.office.com/webhook/…" data-secret-field="true"></div>
               <div class="form-group"><label class="form-label" for="notif-smtp-host">SMTP Host</label><input id="notif-smtp-host" type="text" class="form-input"></div>
               <div class="form-group"><label class="form-label" for="notif-smtp-port">SMTP Port</label><input id="notif-smtp-port" type="number" class="form-input" value="587"></div>
               <div class="form-group"><label class="form-label" for="notif-smtp-user">SMTP User</label><input id="notif-smtp-user" type="text" class="form-input"></div>
-              <div class="form-group"><label class="form-label" for="notif-smtp-pass">SMTP Password</label><input id="notif-smtp-pass" type="password" class="form-input" placeholder="Leave blank to keep existing"></div>
+              <div class="form-group"><label class="form-label" for="notif-smtp-pass">SMTP Password</label><input id="notif-smtp-pass" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true"></div>
               <div class="form-group"><label class="form-label" for="notif-to-emails">To Emails (comma-separated)</label><input id="notif-to-emails" type="text" class="form-input"></div>
               <div class="form-actions">
                 <button id="notif-save-btn" class="btn btn-primary" type="button">Save Notifications</button>
@@ -334,13 +334,13 @@
                 <div id="acme-cloudflare-fields">
                   <div class="form-group">
                     <label class="form-label">Cloudflare API Token</label>
-                    <input id="acme-cf-token" type="password" class="form-input" placeholder="Leave blank to keep existing">
+                    <input id="acme-cf-token" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
                   </div>
                 </div>
                 <div id="acme-he-fields" class="hidden">
                   <div class="form-group">
                     <label class="form-label">HE DDNS Key</label>
-                    <input id="acme-he-ddns-key" type="password" class="form-input" placeholder="Leave blank to keep existing">
+                    <input id="acme-he-ddns-key" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
                     <p class="form-hint">In dns.he.net: create a TXT record for <code>_acme-challenge.yourdomain</code>, enable DDNS on it, then paste the generated key here.</p>
                   </div>
                 </div>
@@ -1196,7 +1196,7 @@
                   <div class="form-group">
                     <label class="form-label" for="github-token-input">GitHub Token</label>
                     <input id="github-token-input" class="form-input" type="password"
-                           placeholder="Paste token — leave blank to keep current" autocomplete="new-password">
+                           placeholder="Paste token — leave blank to keep current" autocomplete="new-password" data-secret-field="true">
                     <span class="form-hint" id="github-token-status"></span>
                   </div>
 
@@ -1519,7 +1519,7 @@
                     <div class="form-row">
                       <div class="form-group" style="flex:2;">
                         <label>Tenant ID <span class="form-hint-inline">(optional — pre-register with a specific tenant)</span></label>
-                        <input id="relay-tenant-hint-input" type="text" data-key="relay_tenant_hint" placeholder="e.g. abc123-tenant-id">
+                        <input id="relay-tenant-id-input" type="text" data-key="relay_tenant_id" placeholder="e.g. abc123-tenant-id">
                       </div>
                     </div>
                   </div>
@@ -1610,7 +1610,7 @@
                     <div class="form-group">
                       <label class="form-label" for="central-classic-password">Password</label>
                       <input id="central-classic-password" class="form-input" type="password"
-                             placeholder="Leave blank to keep current" autocomplete="new-password">
+                             placeholder="Leave blank to keep current" autocomplete="new-password" data-secret-field="true">
                       <span class="form-hint" id="central-classic-password-status"></span>
                     </div>
                   </div>
@@ -1635,7 +1635,7 @@
                     <div class="form-group">
                       <label class="form-label" for="central-client-secret">Client Secret</label>
                       <input id="central-client-secret" class="form-input" type="password"
-                             placeholder="Leave blank to keep current" autocomplete="new-password">
+                             placeholder="Leave blank to keep current" autocomplete="new-password" data-secret-field="true">
                       <span class="form-hint" id="central-client-secret-status"></span>
                     </div>
 
@@ -1748,7 +1748,7 @@
                   </div>
                   <div class="form-row">
                     <label class="form-label" for="smtp-password">Password</label>
-                    <input id="smtp-password" class="form-input" type="password" placeholder="••••••••" autocomplete="new-password" />
+                    <input id="smtp-password" class="form-input" type="password" placeholder="••••••••" autocomplete="new-password" data-secret-field="true" />
                   </div>
                   <div class="form-row">
                     <label class="form-label" for="smtp-from">From address</label>
@@ -1778,7 +1778,7 @@
                   </div>
                   <div class="form-row">
                     <label class="form-label" for="teams-webhook-url">Webhook URL</label>
-                    <input id="teams-webhook-url" class="form-input" type="url" placeholder="https://outlook.office.com/webhook/..." />
+                    <input id="teams-webhook-url" class="form-input" type="url" placeholder="https://outlook.office.com/webhook/..." data-secret-field="true" />
                   </div>
                   <button id="test-teams-btn" class="btn btn-secondary" type="button">Send Test</button>
                   <div id="teams-notif-msg" class="settings-message hidden" role="alert"></div>
@@ -1832,12 +1832,12 @@
                 </div>
                 <div id="spoke-acme-cloudflare-fields" class="form-group">
                   <label class="form-label">Cloudflare API Token</label>
-                  <input id="spoke-acme-cf-token" type="password" class="form-input" placeholder="Leave blank to keep existing">
+                  <input id="spoke-acme-cf-token" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
                 </div>
                 <div id="spoke-acme-he-fields" class="hidden">
                   <div class="form-group">
                     <label class="form-label">HE DDNS Key</label>
-                    <input id="spoke-acme-he-ddns-key" type="password" class="form-input" placeholder="Leave blank to keep existing">
+                    <input id="spoke-acme-he-ddns-key" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
                     <p class="form-hint">In dns.he.net: create a TXT record for <code>_acme-challenge.yourdomain</code>, enable DDNS on it, then paste the generated key here.</p>
                   </div>
                 </div>

@@ -93,9 +93,22 @@ let currentSettings = {
   relay_enabled: 'off',
   relay_server_url: '',
   relay_spoke_name: '',
+  relay_tenant_hint: '',
+  relay_tenant_id: '',
   relay_spoke_id: '',
   relay_poll_interval: 60,
   relay_api_key_configured: false,
+  notifications: {
+    email_enabled: false,
+    smtp_host: '',
+    smtp_port: 587,
+    smtp_user: '',
+    smtp_from: '',
+    smtp_to: [],
+    smtp_password_configured: false,
+    teams_enabled: false,
+    teams_webhook_url_configured: false,
+  },
   usb_vidpids: '[]',
   usb_missing_timeout: '60',
   vm_image_1_template_id: '100',
@@ -127,7 +140,77 @@ let refreshPaused = false;
 let refreshCountdownTimer = null;
 let refreshSecondsLeft = 10;
 let refreshIntervalSeconds = 10;
+const SECRET_CONFIGURED_PLACEHOLDER = '**********';
 const refreshActiveTabs = new Set(['dashboard', 'api-server']);
+
+function getSecretInputDefaultPlaceholder(input) {
+  if (!input) return '';
+  if (!('placeholderDefault' in input.dataset)) {
+    input.dataset.placeholderDefault = input.getAttribute('placeholder') || '';
+  }
+  return input.dataset.placeholderDefault;
+}
+
+function isMaskedSecretValue(value) {
+  return typeof value === 'string' && value.trim() !== '' && /^[*•]+$/.test(value.trim());
+}
+
+function isConfiguredSecretValue(value) {
+  return value === true || value === 'true' || isMaskedSecretValue(value);
+}
+
+function setSecretInputConfigured(input, configured) {
+  if (!input) return;
+  const defaultPlaceholder = getSecretInputDefaultPlaceholder(input);
+  input.value = '';
+  input.dataset.dirty = 'false';
+  input.classList.toggle('secret-configured', Boolean(configured));
+  if (configured) {
+    input.dataset.configured = 'true';
+    input.placeholder = SECRET_CONFIGURED_PLACEHOLDER;
+    return;
+  }
+  delete input.dataset.configured;
+  input.placeholder = defaultPlaceholder;
+}
+
+function getSecretInputPayload(input) {
+  if (!input) return { include: false, value: '' };
+  const value = input.value ?? '';
+  if (value === '' && input.dataset.configured === 'true' && input.dataset.dirty !== 'true') {
+    return { include: false, value: '' };
+  }
+  return { include: true, value };
+}
+
+function resetSecretInput(input) {
+  if (!input) return;
+  input.value = '';
+  input.dataset.dirty = 'false';
+  input.placeholder = input.dataset.configured === 'true'
+    ? SECRET_CONFIGURED_PLACEHOLDER
+    : getSecretInputDefaultPlaceholder(input);
+}
+
+function bindSecretInput(input) {
+  if (!input || input.dataset.secretBound === 'true') return;
+  getSecretInputDefaultPlaceholder(input);
+  input.dataset.secretBound = 'true';
+  input.addEventListener('focus', () => {
+    if (input.dataset.configured === 'true') {
+      input.placeholder = getSecretInputDefaultPlaceholder(input);
+    }
+  });
+  input.addEventListener('input', () => {
+    input.dataset.dirty = 'true';
+    input.placeholder = getSecretInputDefaultPlaceholder(input);
+  });
+  input.addEventListener('blur', () => {
+    if (input.dataset.configured === 'true' && input.dataset.dirty !== 'true' && !input.value) {
+      input.placeholder = SECRET_CONFIGURED_PLACEHOLDER;
+    }
+  });
+}
 const refreshActiveServerSubtabs = new Set(['server-vms', 'server-commands']);
 
 // ── Tab navigation ────────────────────────────────────────────────
@@ -480,9 +563,10 @@ const centralNewFields = document.getElementById('central-new-fields');
 const relayEnabledSelect = document.getElementById('relay-enabled-select');
 const relaySpokeName = document.getElementById('relay-spoke-name-input');
 const relayServerUrlInput = document.getElementById('relay-server-url-input');
-const relayTenantHintInput = document.getElementById('relay-tenant-hint-input');
+const relayTenantIdInput = document.getElementById('relay-tenant-id-input');
 const relayMsg = document.getElementById('relay-message');
 const relayClearConfigBtn = document.getElementById('relay-clear-config-btn');
+document.querySelectorAll('input[data-secret-field="true"]').forEach(bindSecretInput);
 
 // Notifications + sync interval
 const syncIntervalInput  = document.getElementById('sync-interval-input');
@@ -636,9 +720,22 @@ function mergeSettings(next = {}) {
     relay_enabled: next.relay_enabled ?? currentSettings.relay_enabled ?? 'off',
     relay_server_url: next.relay_server_url ?? currentSettings.relay_server_url ?? '',
     relay_spoke_name: next.relay_spoke_name ?? currentSettings.relay_spoke_name ?? '',
+    relay_tenant_hint: next.relay_tenant_hint ?? next.relay_tenant_id ?? currentSettings.relay_tenant_hint ?? currentSettings.relay_tenant_id ?? '',
+    relay_tenant_id: next.relay_tenant_id ?? next.relay_tenant_hint ?? currentSettings.relay_tenant_id ?? currentSettings.relay_tenant_hint ?? '',
     relay_spoke_id: next.relay_spoke_id ?? currentSettings.relay_spoke_id ?? '',
     relay_poll_interval: next.relay_poll_interval ?? currentSettings.relay_poll_interval ?? 60,
     relay_api_key_configured: next.relay_api_key_configured ?? currentSettings.relay_api_key_configured ?? false,
+    notifications: {
+      email_enabled: next.notifications?.email_enabled ?? currentSettings.notifications?.email_enabled ?? false,
+      smtp_host: next.notifications?.smtp_host ?? currentSettings.notifications?.smtp_host ?? '',
+      smtp_port: next.notifications?.smtp_port ?? currentSettings.notifications?.smtp_port ?? 587,
+      smtp_user: next.notifications?.smtp_user ?? currentSettings.notifications?.smtp_user ?? '',
+      smtp_from: next.notifications?.smtp_from ?? currentSettings.notifications?.smtp_from ?? '',
+      smtp_to: next.notifications?.smtp_to ?? currentSettings.notifications?.smtp_to ?? [],
+      smtp_password_configured: next.notifications?.smtp_password_configured ?? currentSettings.notifications?.smtp_password_configured ?? false,
+      teams_enabled: next.notifications?.teams_enabled ?? currentSettings.notifications?.teams_enabled ?? false,
+      teams_webhook_url_configured: next.notifications?.teams_webhook_url_configured ?? currentSettings.notifications?.teams_webhook_url_configured ?? false,
+    },
     usb_vidpids: next.usb_vidpids ?? currentSettings.usb_vidpids ?? '[]',
     usb_missing_timeout: next.usb_missing_timeout ?? currentSettings.usb_missing_timeout ?? '60',
     vm_image_1_template_id: next.vm_image_1_template_id ?? currentSettings.vm_image_1_template_id ?? '100',
@@ -1202,6 +1299,7 @@ function applySettingsToUI(s) {
   if (repoUrlInput) repoUrlInput.value = settings.repo_url || repoUrlInput.value;
   if (branchInput && !branchInput.matches(':focus')) branchInput.value = settings.repo_branch || '';
   if (setupActiveBranch) setupActiveBranch.textContent = settings.repo_branch || '—';
+  setSecretInputConfigured(githubTokenInput, settings.github_token_configured);
   if (githubTokenStatus) githubTokenStatus.textContent = settings.github_token_configured ? '✓ Token configured' : 'Not configured';
   const centralApi = settings.central_api || defaultCentralApiSettings();
   setInputValueIfIdle(centralClassicUrlInput, centralApi.classic.url || '');
@@ -1212,12 +1310,14 @@ function applySettingsToUI(s) {
   applyCentralModeUI(centralApi.mode || 'classic');
 
   const csStatus = document.getElementById('central-client-secret-status');
-  if (centralClassicPasswordStatus) centralClassicPasswordStatus.textContent = centralApi.classic.password_configured ? '✓ Password configured — leave blank to keep current.' : '';
-  if (csStatus) csStatus.textContent = centralApi.central.client_secret_configured ? '✓ Secret configured — leave blank to keep current.' : '';
+  setSecretInputConfigured(centralClassicPasswordInput, centralApi.classic.password_configured);
+  setSecretInputConfigured(centralClientSecretInput, centralApi.central.client_secret_configured);
+  if (centralClassicPasswordStatus) centralClassicPasswordStatus.textContent = centralApi.classic.password_configured ? '✓ Password configured' : '';
+  if (csStatus) csStatus.textContent = centralApi.central.client_secret_configured ? '✓ Secret configured' : '';
   if (relayEnabledSelect && !relayEnabledSelect.matches(':focus')) relayEnabledSelect.value = settings.relay_enabled || 'off';
   setInputValueIfIdle(relayServerUrlInput, settings.relay_server_url || '');
   setInputValueIfIdle(relaySpokeName, settings.relay_spoke_name || '');
-  setInputValueIfIdle(relayTenantHintInput, settings.relay_tenant_hint || '');
+  setInputValueIfIdle(relayTenantIdInput, settings.relay_tenant_id || settings.relay_tenant_hint || '');
   const spokeIdDisplay = document.getElementById('relay-spoke-id-display');
   if (spokeIdDisplay) spokeIdDisplay.textContent = settings.relay_spoke_id || '—';
   const apikeyStatus = document.getElementById('relay-apikey-status');
@@ -1271,10 +1371,11 @@ function applySettingsToUI(s) {
   setInputValueIfIdle(smtpUser, notif.smtp_user || '');
   setInputValueIfIdle(smtpFrom, notif.smtp_from || '');
   setInputValueIfIdle(smtpTo, Array.isArray(notif.smtp_to) ? notif.smtp_to.join(', ') : (notif.smtp_to || ''));
+  setSecretInputConfigured(smtpPassword, notif.smtp_password_configured);
 
   // Teams
   if (teamsEnabledToggle) teamsEnabledToggle.checked = !!notif.teams_enabled;
-  setInputValueIfIdle(teamsWebhookUrl, notif.teams_webhook_url || '');
+  setSecretInputConfigured(teamsWebhookUrl, notif.teams_webhook_url_configured);
 }
 
 function showSettingsMessage(text, isError) {
@@ -1330,16 +1431,18 @@ if (branchInput) {
 
 if (githubTokenInput) {
   githubTokenInput.addEventListener('blur', async () => {
-    const token = githubTokenInput.value.trim();
-    if (!token) return;
+    const { include, value } = getSecretInputPayload(githubTokenInput);
+    if (!include) return;
+    const token = value.trim();
     try {
-      await requestJson('/api/settings', {
+      const response = await requestJson('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ github_token: token })
       });
-      showSettingsMessage('GitHub token saved.', false);
-      githubTokenInput.value = '';
+      showSettingsMessage(token ? 'GitHub token saved.' : 'GitHub token cleared.', false);
+      applySettingsToUI(response.settings || { github_token_configured: Boolean(token) });
+      resetSecretInput(githubTokenInput);
     } catch (err) {
       showSettingsMessage(`Error: ${err.message}`, true);
     }
@@ -2394,16 +2497,16 @@ function buildCentralApiPayload() {
       customer_id: centralCustomerIdInput?.value.trim() || '',
     }
   };
-  const classicPassword = centralClassicPasswordInput?.value ?? '';
-  if (classicPassword) payload.classic.password = classicPassword;
-  const clientSecret = centralClientSecretInput?.value ?? '';
-  if (clientSecret) payload.central.client_secret = clientSecret;
+  const classicPassword = getSecretInputPayload(centralClassicPasswordInput);
+  if (classicPassword.include) payload.classic.password = classicPassword.value;
+  const clientSecret = getSecretInputPayload(centralClientSecretInput);
+  if (clientSecret.include) payload.central.client_secret = clientSecret.value;
   return payload;
 }
 
 function resetCentralSecretInputs() {
-  if (centralClassicPasswordInput) centralClassicPasswordInput.value = '';
-  if (centralClientSecretInput) centralClientSecretInput.value = '';
+  resetSecretInput(centralClassicPasswordInput);
+  resetSecretInput(centralClientSecretInput);
 }
 
 async function persistCentralApiConfig() {
@@ -3021,12 +3124,18 @@ async function loadSpokeAcmeSettings() {
   const tlsEnabled = document.getElementById('spoke-tls-enabled');
   if (tlsEnabled) tlsEnabled.checked = data.spoke_tls === 'on';
   const token = document.getElementById('spoke-acme-cf-token');
-  if (token) token.value = '';
+  const heKey = document.getElementById('spoke-acme-he-ddns-key');
+  setSecretInputConfigured(token, isConfiguredSecretValue(data.cf_api_token_set ?? data.dns_credentials_configured?.cf_api_token ?? data.dns_credentials?.cf_api_token));
+  setSecretInputConfigured(heKey, isConfiguredSecretValue(data.he_ddns_key_set ?? data.dns_credentials_configured?.he_ddns_key ?? data.dns_credentials?.he_ddns_key));
   toggleSpokeAcmeDnsSection();
   renderSpokeAcmeStatus(data.cert_info || {}, data);
 }
 
 async function saveSpokeAcmeConfig() {
+  const cfTokenInput = document.getElementById('spoke-acme-cf-token');
+  const heKeyInput = document.getElementById('spoke-acme-he-ddns-key');
+  const cfToken = getSecretInputPayload(cfTokenInput);
+  const heKey = getSecretInputPayload(heKeyInput);
   const payload = {
     enabled: !!document.getElementById('spoke-acme-enabled')?.checked,
     domain: document.getElementById('spoke-acme-domain')?.value.trim() || '',
@@ -3034,12 +3143,11 @@ async function saveSpokeAcmeConfig() {
     ca: document.getElementById('spoke-acme-ca')?.value || 'letsencrypt',
     challenge: document.getElementById('spoke-acme-challenge')?.value || 'http-01',
     dns_provider: document.getElementById('spoke-acme-dns-provider')?.value || '',
-    dns_credentials: {
-      cf_api_token: document.getElementById('spoke-acme-cf-token')?.value || '',
-      he_ddns_key: document.getElementById('spoke-acme-he-ddns-key')?.value || '',
-    },
+    dns_credentials: {},
     spoke_tls: document.getElementById('spoke-tls-enabled')?.checked ? 'on' : 'off'
   };
+  if (cfToken.include) payload.dns_credentials.cf_api_token = cfToken.value;
+  if (heKey.include) payload.dns_credentials.he_ddns_key = heKey.value;
   try {
     const data = await requestJson('/api/acme', {
       method: 'POST',
@@ -3052,10 +3160,8 @@ async function saveSpokeAcmeConfig() {
       msg.className = 'form-msg msg-ok';
     }
     renderSpokeAcmeStatus(data.cert_info || {}, data);
-    const token = document.getElementById('spoke-acme-cf-token');
-    if (token) token.value = '';
-    const heKey = document.getElementById('spoke-acme-he-ddns-key');
-    if (heKey) heKey.value = '';
+    setSecretInputConfigured(cfTokenInput, isConfiguredSecretValue(data.cf_api_token_set ?? data.dns_credentials_configured?.cf_api_token ?? data.dns_credentials?.cf_api_token));
+    setSecretInputConfigured(heKeyInput, isConfiguredSecretValue(data.he_ddns_key_set ?? data.dns_credentials_configured?.he_ddns_key ?? data.dns_credentials?.he_ddns_key));
   } catch (error) {
     const msg = document.getElementById('spoke-acme-msg');
     if (msg) {
@@ -4995,11 +5101,13 @@ if (setupTabButton) {
 }
 
 async function _autoSaveRelay() {
+  const tenantId = relayTenantIdInput?.value?.trim() || '';
   const payload = {
     relay_enabled: relayEnabledSelect?.value || 'off',
     relay_server_url: relayServerUrlInput?.value?.trim() || '',
     relay_spoke_name: relaySpokeName?.value?.trim() || '',
-    relay_tenant_hint: relayTenantHintInput?.value?.trim() || '',
+    relay_tenant_hint: tenantId,
+    relay_tenant_id: tenantId,
   };
   try {
     await requestJson('/api/settings', {
@@ -5016,7 +5124,7 @@ async function _autoSaveRelay() {
 }
 
 if (relayEnabledSelect) relayEnabledSelect.addEventListener('change', _autoSaveRelay);
-[relayServerUrlInput, relaySpokeName, relayTenantHintInput].forEach((el) => {
+[relayServerUrlInput, relaySpokeName, relayTenantIdInput].forEach((el) => {
   if (el) el.addEventListener('blur', _autoSaveRelay);
 });
 if (relayClearConfigBtn) {
@@ -5563,26 +5671,29 @@ if (syncIntervalInput) {
 
 // ── Email notifications ────────────────────────────────────────────────────
 function collectEmailPayload() {
-  return {
+  const payload = {
     email_enabled: emailEnabledToggle?.checked ?? false,
     smtp_host:     smtpHost?.value.trim() || '',
     smtp_port:     parseInt(smtpPort?.value, 10) || 587,
     smtp_user:     smtpUser?.value.trim() || '',
-    smtp_password: smtpPassword?.value || '',   // only sent if non-blank
     smtp_from:     smtpFrom?.value.trim() || '',
     smtp_to:       (smtpTo?.value || '').split(',').map(s => s.trim()).filter(Boolean),
   };
+  const smtpSecret = getSecretInputPayload(smtpPassword);
+  if (smtpSecret.include) payload.smtp_password = smtpSecret.value;
+  return payload;
 }
 
 async function _autoSaveEmail() {
   const payload = collectEmailPayload();
-  if (!payload.smtp_password) delete payload.smtp_password;
   try {
-    await requestJson('/api/settings', {
+    const response = await requestJson('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ notifications: payload })
     });
+    applySettingsToUI(response.settings || {});
+    resetSecretInput(smtpPassword);
     showInlineMessage(emailNotifMsg, 'Saved.', false, 1500);
   } catch (err) {
     showInlineMessage(emailNotifMsg, `Error: ${err.message}`, true);
@@ -5617,16 +5728,19 @@ if (testEmailBtn) {
 
 // ── Teams webhook ──────────────────────────────────────────────────────────
 async function _autoSaveTeams() {
+  const secret = getSecretInputPayload(teamsWebhookUrl);
   const payload = {
     teams_enabled:     teamsEnabledToggle?.checked ?? false,
-    teams_webhook_url: teamsWebhookUrl?.value.trim() || '',
   };
+  if (secret.include) payload.teams_webhook_url = secret.value.trim();
   try {
-    await requestJson('/api/settings', {
+    const response = await requestJson('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ notifications: payload })
     });
+    applySettingsToUI(response.settings || {});
+    resetSecretInput(teamsWebhookUrl);
     showInlineMessage(teamsNotifMsg, 'Saved.', false, 1500);
   } catch (err) {
     showInlineMessage(teamsNotifMsg, `Error: ${err.message}`, true);
@@ -7416,12 +7530,15 @@ async function loadSettings() {
   $("#aruba-cluster-url") && ($("#aruba-cluster-url").value = aruba.cluster_url || "");
   $("#aruba-client-id") && ($("#aruba-client-id").value = aruba.client_id || "");
   $("#aruba-customer-id") && ($("#aruba-customer-id").value = aruba.customer_id || data.tenant?.aruba_cid || "");
+  setSecretInputConfigured($("#aruba-client-secret"), isConfiguredSecretValue(aruba.client_secret_configured ?? aruba.client_secret_set ?? aruba.client_secret));
   $("#notif-enabled") && ($("#notif-enabled").checked = Boolean(notifications.enabled));
-  $("#notif-teams") && ($("#notif-teams").value = notifications.teams_webhook_url || "");
+  setSecretInputConfigured($("#notif-teams"), isConfiguredSecretValue(notifications.teams_webhook_url_configured ?? notifications.teams_webhook_url_set ?? notifications.teams_webhook_url));
   $("#notif-smtp-host") && ($("#notif-smtp-host").value = notifications.smtp_host || "");
   $("#notif-smtp-port") && ($("#notif-smtp-port").value = notifications.smtp_port || 587);
   $("#notif-smtp-user") && ($("#notif-smtp-user").value = notifications.smtp_user || "");
+  setSecretInputConfigured($("#notif-smtp-pass"), isConfiguredSecretValue(notifications.smtp_password_configured ?? notifications.smtp_pass_configured ?? notifications.smtp_pass_set ?? notifications.smtp_pass));
   $("#notif-to-emails") && ($("#notif-to-emails").value = (notifications.to_emails || []).join(", "));
+
   await loadAcmeSettings();
 }
 
@@ -7453,9 +7570,11 @@ async function saveArubaSettings() {
     api_version: $("#aruba-api-version")?.value || "classic",
     cluster_url: $("#aruba-cluster-url")?.value.trim() || "",
     client_id: $("#aruba-client-id")?.value.trim() || "",
-    client_secret: $("#aruba-client-secret")?.value || "",
     customer_id: $("#aruba-customer-id")?.value.trim() || "",
   };
+  const arubaSecret = getSecretInputPayload($("#aruba-client-secret"));
+  if (arubaSecret.include) payload.client_secret = arubaSecret.value;
+
   const res = await apiFetch(`/api/${encodeURIComponent(currentTenantId)}/settings/aruba`, { method: "POST", body: payload });
   if (!res || !res.ok) {
     const err = await readJson(res);
@@ -7463,20 +7582,23 @@ async function saveArubaSettings() {
     return;
   }
   setFormMessage("aruba-msg", "Aruba settings saved.", true);
-  $("#aruba-client-secret") && ($("#aruba-client-secret").value = "");
+  await loadSettings();
 }
 
 async function saveNotificationSettings() {
   if (!currentTenantId) return;
   const payload = {
     enabled: Boolean($("#notif-enabled")?.checked),
-    teams_webhook_url: $("#notif-teams")?.value.trim() || "",
     smtp_host: $("#notif-smtp-host")?.value.trim() || "",
     smtp_port: Number($("#notif-smtp-port")?.value || 587),
     smtp_user: $("#notif-smtp-user")?.value.trim() || "",
-    smtp_pass: $("#notif-smtp-pass")?.value || "",
     to_emails: $("#notif-to-emails")?.value || "",
   };
+  const teamsSecret = getSecretInputPayload($("#notif-teams"));
+  if (teamsSecret.include) payload.teams_webhook_url = teamsSecret.value.trim();
+  const smtpSecret = getSecretInputPayload($("#notif-smtp-pass"));
+  if (smtpSecret.include) payload.smtp_pass = smtpSecret.value;
+
   const res = await apiFetch(`/api/${encodeURIComponent(currentTenantId)}/settings/notifications`, { method: "POST", body: payload });
   if (!res || !res.ok) {
     const err = await readJson(res);
@@ -7484,7 +7606,7 @@ async function saveNotificationSettings() {
     return;
   }
   setFormMessage("notif-msg", "Notifications saved.", true);
-  $("#notif-smtp-pass") && ($("#notif-smtp-pass").value = "");
+  await loadSettings();
 }
 
 function showKeyBanner(apiKey, spokeId) {
@@ -7553,7 +7675,8 @@ async function loadAcmeSettings() {
   $("#acme-challenge") && ($("#acme-challenge").value = data.challenge || "http-01");
   $("#acme-dns-provider") && ($("#acme-dns-provider").value = data.dns_provider || "cloudflare");
   $("#acme-enabled") && ($("#acme-enabled").checked = Boolean(data.enabled));
-  $("#acme-cf-token") && ($("#acme-cf-token").value = "");
+  setSecretInputConfigured($("#acme-cf-token"), isConfiguredSecretValue(data.dns_credentials_configured?.cf_api_token ?? data.dns_credentials?.cf_api_token));
+  setSecretInputConfigured($("#acme-he-ddns-key"), isConfiguredSecretValue(data.dns_credentials_configured?.he_ddns_key ?? data.dns_credentials?.he_ddns_key));
   toggleAcmeDnsSection();
   renderAcmeStatus(data.cert_info || {}, data);
 }
@@ -7566,11 +7689,13 @@ async function saveAcmeConfig() {
     ca: $("#acme-ca")?.value || "letsencrypt",
     challenge: $("#acme-challenge")?.value || "http-01",
     dns_provider: $("#acme-dns-provider")?.value || "",
-    dns_credentials: {
-      cf_api_token: $("#acme-cf-token")?.value || "",
-      he_ddns_key: $("#acme-he-ddns-key")?.value || "",
-    },
+    dns_credentials: {},
   };
+  const acmeCfToken = getSecretInputPayload($("#acme-cf-token"));
+  if (acmeCfToken.include) payload.dns_credentials.cf_api_token = acmeCfToken.value;
+  const acmeHeKey = getSecretInputPayload($("#acme-he-ddns-key"));
+  if (acmeHeKey.include) payload.dns_credentials.he_ddns_key = acmeHeKey.value;
+
   const res = await apiFetch("/api/settings/acme", { method: "POST", body: payload });
   if (!res || !res.ok) {
     const err = await readJson(res);
@@ -7580,8 +7705,8 @@ async function saveAcmeConfig() {
   const data = await res.json();
   setFormMessage("acme-msg", "TLS certificate settings saved.", true);
   renderAcmeStatus(data.cert_info || {}, data);
-  $("#acme-cf-token") && ($("#acme-cf-token").value = "");
-  $("#acme-he-ddns-key") && ($("#acme-he-ddns-key").value = "");
+  setSecretInputConfigured($("#acme-cf-token"), isConfiguredSecretValue(data.dns_credentials_configured?.cf_api_token ?? data.dns_credentials?.cf_api_token));
+  setSecretInputConfigured($("#acme-he-ddns-key"), isConfiguredSecretValue(data.dns_credentials_configured?.he_ddns_key ?? data.dns_credentials?.he_ddns_key));
 }
 
 async function requestAcmeCert() {

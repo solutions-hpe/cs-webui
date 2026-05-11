@@ -3515,14 +3515,9 @@ function spokeAcmeBadgeClass(daysRemaining) {
 }
 
 function toggleSpokeAcmeDnsSection() {
-  const challenge = document.getElementById('spoke-acme-challenge')?.value || 'http-01';
-  const isDns = challenge === 'dns-01';
-  document.getElementById('spoke-acme-dns-section')?.classList.toggle('hidden', !isDns);
-  if (isDns) {
-    const provider = document.getElementById('spoke-acme-dns-provider')?.value || 'cloudflare';
-    document.getElementById('spoke-acme-cloudflare-fields')?.classList.toggle('hidden', provider !== 'cloudflare');
-    document.getElementById('spoke-acme-he-fields')?.classList.toggle('hidden', provider !== 'hurricane_electric');
-  }
+  const provider = document.getElementById('spoke-acme-dns-provider')?.value || 'cloudflare';
+  document.getElementById('spoke-acme-cloudflare-fields')?.classList.toggle('hidden', provider !== 'cloudflare');
+  document.getElementById('spoke-acme-he-fields')?.classList.toggle('hidden', provider !== 'hurricane_electric');
 }
 
 function renderSpokeAcmeStatus(certInfo = {}, cfg = {}) {
@@ -3531,7 +3526,7 @@ function renderSpokeAcmeStatus(certInfo = {}, cfg = {}) {
   if (!certInfo || certInfo.source === 'none') {
     container.innerHTML = `
       <div class="setup-status-item"><span class="setup-status-label">Certificate</span><span class="setup-status-value">Not configured</span></div>
-      <div class="setup-status-item"><span class="setup-status-label">Challenge</span><span class="setup-status-value">${escapeHtml(cfg.challenge || 'http-01')}</span></div>
+      <div class="setup-status-item"><span class="setup-status-label">Challenge</span><span class="setup-status-value">DNS-01</span></div>
       <div class="setup-status-item"><span class="setup-status-label">Authority</span><span class="setup-status-value">${escapeHtml(cfg.ca || 'letsencrypt')}</span></div>
       <div class="setup-status-item"><span class="setup-status-label">HTTPS Mode</span><span class="setup-status-value">${cfg.spoke_tls === 'on' ? 'Enabled on restart' : 'Disabled'}</span></div>
     `;
@@ -3555,7 +3550,6 @@ async function loadSpokeAcmeSettings() {
   setValue('spoke-acme-domain', data.domain || '');
   setValue('spoke-acme-email', data.email || '');
   setValue('spoke-acme-ca', data.ca || 'letsencrypt');
-  setValue('spoke-acme-challenge', data.challenge || 'http-01');
   setValue('spoke-acme-dns-provider', data.dns_provider || 'cloudflare');
   const enabled = document.getElementById('spoke-acme-enabled');
   if (enabled) enabled.checked = !!data.enabled;
@@ -3579,7 +3573,7 @@ async function saveSpokeAcmeConfig() {
     domain: document.getElementById('spoke-acme-domain')?.value.trim() || '',
     email: document.getElementById('spoke-acme-email')?.value.trim() || '',
     ca: document.getElementById('spoke-acme-ca')?.value || 'letsencrypt',
-    challenge: document.getElementById('spoke-acme-challenge')?.value || 'http-01',
+    challenge: 'dns-01',
     dns_provider: document.getElementById('spoke-acme-dns-provider')?.value || '',
     dns_credentials: {},
     spoke_tls: document.getElementById('spoke-tls-enabled')?.checked ? 'on' : 'off'
@@ -6751,7 +6745,6 @@ let loadServiceLogs = () => {};
   window._logsSetSource   = (src) => { if (sourceSelect) sourceSelect.value = src; };
 })();
 
-document.getElementById('spoke-acme-challenge')?.addEventListener('change', toggleSpokeAcmeDnsSection);
 document.getElementById('spoke-acme-dns-provider')?.addEventListener('change', toggleSpokeAcmeDnsSection);
 
 
@@ -9142,14 +9135,9 @@ function acmeBadgeClass(daysRemaining) {
 }
 
 function toggleAcmeDnsSection() {
-  const challenge = $("#acme-challenge")?.value || "http-01";
-  const isDns = challenge === "dns-01";
-  $("#acme-dns-section")?.classList.toggle("hidden", !isDns);
-  if (isDns) {
-    const provider = $("#acme-dns-provider")?.value || "cloudflare";
-    $("#acme-cloudflare-fields")?.classList.toggle("hidden", provider !== "cloudflare");
-    $("#acme-he-fields")?.classList.toggle("hidden", provider !== "hurricane_electric");
-  }
+  const provider = $("#acme-dns-provider")?.value || "cloudflare";
+  $("#acme-cloudflare-fields")?.classList.toggle("hidden", provider !== "cloudflare");
+  $("#acme-he-fields")?.classList.toggle("hidden", provider !== "hurricane_electric");
 }
 
 let hubAcmeSettings = null;
@@ -9197,7 +9185,7 @@ function renderAcmeStatus(certInfo = {}, cfg = {}, status = {}) {
   if (!certInfo || certInfo.source === "none") {
     container.innerHTML = `
       <div class="setup-status-item"><span class="setup-status-label">Certificate</span><span class="setup-status-value">Not configured</span></div>
-      <div class="setup-status-item"><span class="setup-status-label">Challenge</span><span class="setup-status-value">${escHtml(cfg.challenge || "http-01")}</span></div>
+      <div class="setup-status-item"><span class="setup-status-label">Challenge</span><span class="setup-status-value">DNS-01</span></div>
       <div class="setup-status-item"><span class="setup-status-label">Authority</span><span class="setup-status-value">${escHtml(cfg.ca || "letsencrypt")}</span></div>
       <div class="setup-status-item"><span class="setup-status-label">Request Status</span><span class="setup-status-value">${escHtml(requestStatusLabel)}</span></div>
       <div class="setup-status-item"><span class="setup-status-label">Log Updated</span><span class="setup-status-value">${lastLogValue}</span></div>
@@ -9295,7 +9283,7 @@ async function loadAcmeSettings() {
   $("#acme-domain") && ($("#acme-domain").value = data.domain || "");
   $("#acme-email") && ($("#acme-email").value = data.email || "");
   $("#acme-ca") && ($("#acme-ca").value = data.ca || "letsencrypt");
-  $("#acme-challenge") && ($("#acme-challenge").value = data.challenge || "http-01");
+  $("#acme-challenge") && ($("#acme-challenge").value = "dns-01");
   $("#acme-dns-provider") && ($("#acme-dns-provider").value = data.dns_provider || "cloudflare");
   $("#acme-enabled") && ($("#acme-enabled").checked = Boolean(data.enabled));
   setSecretInputConfigured($("#acme-cf-token"), isConfiguredSecretValue(data.dns_credentials_configured?.cf_api_token ?? data.dns_credentials?.cf_api_token));
@@ -9312,7 +9300,7 @@ async function saveAcmeConfig() {
     domain: $("#acme-domain")?.value.trim() || "",
     email: $("#acme-email")?.value.trim() || "",
     ca: $("#acme-ca")?.value || "letsencrypt",
-    challenge: $("#acme-challenge")?.value || "http-01",
+    challenge: "dns-01",
     dns_provider: $("#acme-dns-provider")?.value || "",
     dns_credentials: {},
   };
@@ -10121,7 +10109,6 @@ function bindEvents() {
   startAutoRefresh();
 })();
 
-document.getElementById("acme-challenge")?.addEventListener("change", toggleAcmeDnsSection);
 document.getElementById("acme-dns-provider")?.addEventListener("change", toggleAcmeDnsSection);
 
 

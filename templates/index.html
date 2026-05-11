@@ -460,12 +460,10 @@
               </div>
               <div class="form-group">
                 <label class="form-label">Challenge Type</label>
-                <select id="acme-challenge" class="form-input">
-                  <option value="http-01">HTTP-01 (port 80 must be open)</option>
-                  <option value="dns-01">DNS-01 (requires DNS provider)</option>
-                </select>
+                <input type="hidden" id="acme-challenge" value="dns-01">
+                <p class="form-hint">DNS-01 only — requires DNS provider credentials below.</p>
               </div>
-              <div id="acme-dns-section" class="hidden">
+              <div id="acme-dns-section">
                 <div class="form-group">
                   <label class="form-label">DNS Provider</label>
                   <select id="acme-dns-provider" class="form-input">
@@ -2064,12 +2062,10 @@
               </div>
               <div class="form-group">
                 <label class="form-label">Challenge Type</label>
-                <select id="spoke-acme-challenge" class="form-input">
-                  <option value="http-01">HTTP-01 (port 80 must be open)</option>
-                  <option value="dns-01">DNS-01 (requires DNS provider)</option>
-                </select>
+                <input type="hidden" id="spoke-acme-challenge" value="dns-01">
+                <p class="form-hint">DNS-01 only — requires DNS provider credentials below.</p>
               </div>
-              <div id="spoke-acme-dns-section" class="hidden">
+              <div id="spoke-acme-dns-section">
                 <div class="form-group">
                   <label class="form-label">DNS Provider</label>
                   <select id="spoke-acme-dns-provider" class="form-input">

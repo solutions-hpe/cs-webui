@@ -888,12 +888,23 @@ function scheduleProxmoxRefresh(delayMs = 4000) {
   }, delayMs);
 }
 
+function normalizeProxmoxHostname(hostname) {
+  return String(hostname || '').trim().replace(/\.+$/, '').toLowerCase();
+}
+
+function proxmoxHostnameMatches(left, right) {
+  const a = normalizeProxmoxHostname(left);
+  const b = normalizeProxmoxHostname(right);
+  if (!a || !b) return false;
+  return a === b || a.split('.', 1)[0] === b.split('.', 1)[0];
+}
+
 function syncAgentUpdateButtonState(data = latestProxmoxData) {
   const btn = document.getElementById('agent-update-btn');
   if (!btn || btn.dataset.busy === 'true') return;
   const host = String(data?.node?.hostname || '').trim();
   const approved = Array.isArray(data?.approved_proxmox) ? data.approved_proxmox : [];
-  const ready = Boolean(host) && approved.some((entry) => String(entry?.hostname || '').trim() === host);
+  const ready = Boolean(host) && approved.some((entry) => proxmoxHostnameMatches(entry?.hostname, host));
   btn.disabled = !ready;
   btn.title = ready
     ? 'Reinstall the Proxmox host agent from GitHub and restart it'
@@ -1227,23 +1238,25 @@ function renderProxmoxApproveState(pending, approved) {
   const currentHostname = (document.getElementById('server-node-name') || {}).textContent || '';
 
   // Determine if current tile host is pending or approved
-  const isPending = pending.some((a) => a.hostname === currentHostname);
-  const isApproved = approved.some((a) => a.hostname === currentHostname);
+  const isPending = pending.some((a) => proxmoxHostnameMatches(a.hostname, currentHostname));
+  const isApproved = approved.some((a) => proxmoxHostnameMatches(a.hostname, currentHostname));
 
   // Other pending agents (not the one shown in the tile)
-  const otherPending = pending.filter((a) => a.hostname !== currentHostname);
+  const otherPending = pending.filter((a) => !proxmoxHostnameMatches(a.hostname, currentHostname));
 
   btn._approveHostname = null;
 
   if (isPending) {
+    const match = pending.find((a) => proxmoxHostnameMatches(a.hostname, currentHostname));
     btn.textContent = '✓ Approve Agent';
     btn.style.display = '';
-    btn._approveHostname = currentHostname;
+    btn._approveHostname = match?.hostname || currentHostname;
     btn._action = 'approve';
   } else if (isApproved) {
+    const match = approved.find((a) => proxmoxHostnameMatches(a.hostname, currentHostname));
     btn.textContent = '✕ Revoke Agent';
     btn.style.display = '';
-    btn._approveHostname = currentHostname;
+    btn._approveHostname = match?.hostname || currentHostname;
     btn._action = 'revoke';
   } else if (pending.length > 0) {
     // No connected agent yet — show Approve for the first pending
@@ -6169,6 +6182,8 @@ let loadServiceLogs = () => {};
   if (!output) return;
 
   let evtSource = null;
+  let tailConnected = false;
+  let tailRequested = false;
   let historyLoaded = false;
   const MAX_LINES = 2000;
 
@@ -6219,19 +6234,42 @@ let loadServiceLogs = () => {};
     }
   }
 
+  function tailStreamUrl() {
+    const source = sourceSelect ? sourceSelect.value : 'journal';
+    return `/api/logs/stream?source=${encodeURIComponent(source)}`;
+  }
+
   function startTail() {
     if (evtSource) return;
-    evtSource = new EventSource('/api/logs/stream');
-    evtSource.onmessage = (e) => {
-      const line = JSON.parse(e.data);
-      if (line) appendLine(line);
+    tailRequested = true;
+    tailConnected = false;
+    evtSource = new EventSource(tailStreamUrl());
+    evtSource.onopen = () => {
+      tailConnected = true;
     };
-    evtSource.onerror = () => { appendLine('[stream disconnected — click Start Tail to reconnect]'); stopTail(); };
+    evtSource.onmessage = (e) => {
+      if (!e.data) return;
+      try {
+        const line = JSON.parse(e.data);
+        if (line) appendLine(line);
+      } catch {
+        appendLine(e.data);
+      }
+    };
+    evtSource.onerror = () => {
+      if (!evtSource || !tailRequested) return;
+      if (!tailConnected || evtSource.readyState === EventSource.CLOSED) {
+        appendLine('[stream disconnected — click Start Tail to reconnect]');
+        stopTail();
+      }
+    };
     tailBtn.classList.add('hidden');
     stopBtn.classList.remove('hidden');
   }
 
   function stopTail() {
+    tailRequested = false;
+    tailConnected = false;
     if (evtSource) { evtSource.close(); evtSource = null; }
     tailBtn.classList.remove('hidden');
     stopBtn.classList.add('hidden');
@@ -6241,7 +6279,12 @@ let loadServiceLogs = () => {};
   stopBtn.addEventListener('click', stopTail);
   refreshBtn.addEventListener('click', loadHistory);
   clearBtn.addEventListener('click', clearOutput);
-  if (sourceSelect) sourceSelect.addEventListener('change', loadHistory);
+  if (sourceSelect) sourceSelect.addEventListener('change', async () => {
+    const restartTail = Boolean(evtSource);
+    if (restartTail) stopTail();
+    await loadHistory();
+    if (restartTail) startTail();
+  });
 
   // Re-apply filter live
   filterInput.addEventListener('input', () => {

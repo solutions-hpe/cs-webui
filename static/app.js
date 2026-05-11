@@ -594,6 +594,11 @@ function setRepoStatus(synced, error, lastSync, repoVersion) {
     const d = new Date(lastKnownSyncTime * 1000);
     syncTime.textContent = d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'});
   }
+  // Update footer repo pill
+  if (repoVersion) {
+    const fRepo = document.getElementById('footer-repo-version');
+    if (fRepo) { fRepo.textContent = `repo v${repoVersion}`; fRepo.title = `Client-sim repo version: v${repoVersion}`; }
+  }
 }
 
 // ── Setup tab — settings form ─────────────────────────────────────
@@ -6230,11 +6235,18 @@ loadSimulations();
       simDisabledState.local = init.local_kill_switch === 'on';
       renderSimDisabledBanner();
     }
-    // Footer version — prefer app_version (VERSION file), fall back to installer_version
-    const footerVersion = document.getElementById('footer-version');
-    if (footerVersion) {
-      footerVersion.textContent = `v${init.app_version || init.installer_version || '—'}`;
-      footerVersion.title = `WebUI version: v${init.app_version || init.installer_version || '—'}`;
+    // Footer versions
+    const fWebui = document.getElementById('footer-cswebui-version');
+    const fRepo  = document.getElementById('footer-repo-version');
+    if (fWebui) {
+      const ver = init.app_version || init.installer_version || '—';
+      fWebui.textContent = `cs-webui v${ver}`;
+      fWebui.title = `cs-webui frontend version: v${ver}`;
+    }
+    if (fRepo) {
+      const rver = init.installer_version || '—';
+      fRepo.textContent = `repo v${rver}`;
+      fRepo.title = `Installer/repo version: v${rver}`;
     }
   } catch (_) { /* silent — WS will provide live state */ }
 })();
@@ -6507,7 +6519,7 @@ let autoRefreshCountdownTimer = null;
 let autoRefreshSecondsLeft = 10;
 let refreshPaused = false;
 let tenantContextActive = false;
-const autoRefreshActiveTabs = new Set(["dashboard", "simulations", "clients", "spokes", "config"]);
+const autoRefreshActiveTabs = new Set(["dashboard", "simulations", "clients", "vm-server", "api-server", "central", "spokes", "config", "tenant-setup"]);
 let tenantDetailState = { open: false, tenantId: null, activeTab: "dashboard", data: {} };
 const hubAdminTabIds = new Set(["dashboard", "spokes", "setup", "superadmin"]);
 let tenantUserCounts = {};
@@ -7050,7 +7062,11 @@ async function refreshAfterSpokeApproval(tenantId = currentTenantId) {
     if (tenantId === currentTenantId) {
       await loadSimulations(true);
       await loadClients(true);
+      await loadVmServer(true);
+      await loadApiServer(true);
+      await loadCentral(true);
       await loadSpokes(true);
+      await loadTenantSetup(true);
       await loadConfig(true);
     }
     if (tenantDetailState.open && tenantDetailState.tenantId === tenantId) {
@@ -7162,8 +7178,6 @@ function syncHubPermissionUI() {
   [
     '#hub-admin-nav .tab[data-tab="hub-setup"]',
     '#hub-admin-topbar-nav [data-admin-tab="hub-setup"]',
-    '#tenant-context-nav .tab[data-tab="hub-setup"]',
-    '#tenant-context-nav .tab[data-tab="hub-config"]',
   ].forEach(selector => {
     $$(selector).forEach(el => el.classList.toggle("hidden", !canManageCurrent));
   });
@@ -7203,6 +7217,13 @@ function applyAuthUI() {
     spokeCache = {};
     tenantUserCounts = {};
     dashboardTenantRows = [];
+    aggregateDashboardData = null;
+    aggregateSimulationRows = [];
+    aggregateClientRows = [];
+    aggregateProxmoxHosts = [];
+    aggregateApiServerRows = [];
+    aggregateCentralData = null;
+    hubConfigDraft = "";
     tenantDetailState.data = {};
     resetTenantDetail();
     syncTenantContextChrome();
@@ -7293,6 +7314,10 @@ function logout(showMessage = true) {
   aggregateDashboardData = null;
   aggregateSimulationRows = [];
   aggregateClientRows = [];
+  aggregateProxmoxHosts = [];
+  aggregateApiServerRows = [];
+  aggregateCentralData = null;
+  hubConfigDraft = "";
   tenantDetailState.data = {};
   tenantContextActive = false;
   resetTenantDetail();
@@ -7308,16 +7333,20 @@ async function setCurrentTenant(tenantId, reload = true) {
   aggregateDashboardData = null;
   aggregateSimulationRows = [];
   aggregateClientRows = [];
+  aggregateProxmoxHosts = [];
+  aggregateApiServerRows = [];
+  aggregateCentralData = null;
+  hubConfigDraft = "";
   syncRoleBadge();
   syncTenantContextChrome();
   syncHubPermissionUI();
   populateCommandSpokeSelect();
-  if (reload && ["simulations", "clients", "spokes", "setup", "config", "commands"].includes(activeTab)) await refreshCurrentView(true);
+  if (reload && ["simulations", "clients", "vm-server", "api-server", "central", "spokes", "setup", "tenant-setup", "config", "commands"].includes(activeTab)) await refreshCurrentView(true);
 }
 
 function showTab(rawTabId, opts = {}) {
   const tabId = rawTabId.startsWith('hub-') ? rawTabId.slice(4) : rawTabId;
-  if (["simulations", "clients", "spokes", "setup", "config", "commands", "superadmin"].includes(tabId) && !currentUser) {
+  if (["simulations", "clients", "vm-server", "api-server", "central", "spokes", "setup", "tenant-setup", "config", "commands", "superadmin"].includes(tabId) && !currentUser) {
     openLoginModal();
     return;
   }
@@ -7353,12 +7382,20 @@ async function refreshCurrentView(force = false) {
     await loadSimulations(force);
   } else if (activeTab === "clients") {
     await loadClients(force);
+  } else if (activeTab === "vm-server") {
+    await loadVmServer(force);
+  } else if (activeTab === "api-server") {
+    await loadApiServer(force);
+  } else if (activeTab === "central") {
+    await loadCentral(force);
   } else if (activeTab === "spokes") {
     await loadSpokes(force);
   } else if (activeTab === "commands") {
     await loadCommands();
   } else if (activeTab === "setup") {
     await loadSetup(force);
+  } else if (activeTab === "tenant-setup") {
+    await loadTenantSetup(force);
   } else if (activeTab === "config") {
     await loadConfig(force);
   } else if (activeTab === "superadmin") {
@@ -8283,7 +8320,10 @@ function renderSpokeBody(section, spoke) {
   const quickSelect = $(".quick-command-select", body);
   if (!canManageTenant(spoke.tenant_id)) {
     const modeButton = $('[data-action="mode"]', body);
+    const sendButton = $('[data-action="send"]', body);
     if (modeButton) modeButton.disabled = true;
+    if (quickSelect) quickSelect.disabled = true;
+    if (sendButton) sendButton.disabled = true;
   }
   body.addEventListener("click", async event => {
     const action = event.target.closest("[data-action]")?.dataset.action;
@@ -8537,6 +8577,18 @@ function openSpokeModal(spoke, tenantId, subtab = "spoke-clients") {
   loadSpokeCommands();
   loadSpokeProcessingMode();
   loadSpokeAudit();
+  const canManage = canManageTenant(tenantId);
+  [
+    '#spoke-clients .spoke-action-bar button',
+    '#spoke-clients .spoke-action-bar select',
+    '.spoke-subtab[data-subtab="spoke-mode"]',
+    '#mode-save-btn',
+  ].forEach(selector => {
+    $$(selector).forEach(el => {
+      el.disabled = !canManage;
+      el.classList.toggle('hidden', !canManage && selector.includes('spoke-mode'));
+    });
+  });
 }
 
 function closeSpokeModal() {
@@ -8555,7 +8607,7 @@ function activateSpokeSubtab(subtabId) {
 }
 
 async function sendSpokeCommand(type) {
-  if (!activeSpokeModal) return;
+  if (!activeSpokeModal || !canManageTenant(activeSpokeModal.tenant_id)) return;
   const ok = await sendCommandToSpoke(activeSpokeModal.tenant_id, activeSpokeModal.spoke.id, type);
   if (ok) {
     loadSpokeCommands();
@@ -9341,7 +9393,11 @@ function connectWebSocket() {
       if (activeTab === "dashboard") scheduleReload("ws-dashboard", () => loadDashboard(true));
       if (activeTab === "simulations") scheduleReload("ws-simulations", () => loadSimulations(true));
       if (activeTab === "clients") scheduleReload("ws-clients", () => loadClients(true));
+      if (activeTab === "vm-server") scheduleReload("ws-vm-server", () => loadVmServer(true));
+      if (activeTab === "api-server") scheduleReload("ws-api-server", () => loadApiServer(true));
+      if (activeTab === "central") scheduleReload("ws-central", () => loadCentral(true));
       if (activeTab === "spokes") scheduleReload("ws-spokes", () => loadSpokes(true));
+      if (activeTab === "tenant-setup") scheduleReload("ws-tenant-setup", () => loadTenantSetup(true));
       if (activeTab === "config") scheduleReload("ws-config", () => loadConfig(true));
       if (activeSpokeModal && data.tenant_id === activeSpokeModal.tenant_id && data.spoke_id === activeSpokeModal.spoke.id) {
         scheduleReload("ws-modal", () => loadSpokes(true).then(() => renderSpokeClientsTab()));
@@ -9484,6 +9540,14 @@ function bindEvents() {
     if (event.target.matches("[data-remove-role]")) {
       const [userId, tenantId] = event.target.dataset.removeRole.split(":");
       removeRole(userId, tenantId);
+      return;
+    }
+    if (event.target.closest("#save-central-btn")) {
+      saveCentralSettings();
+      return;
+    }
+    if (event.target.closest("#save-config-push-btn")) {
+      saveConfigPush();
     }
   });
 
@@ -9497,9 +9561,13 @@ function bindEvents() {
   $("#dashboard-add-tenant-btn")?.addEventListener("click", openSuperadminTenantForm);
   $("#refresh-simulations-btn")?.addEventListener("click", () => loadSimulations(true));
   $("#refresh-clients-btn")?.addEventListener("click", () => loadClients(true));
+  $("#refresh-vm-server-btn")?.addEventListener("click", () => loadVmServer(true));
+  $("#refresh-api-server-btn")?.addEventListener("click", () => loadApiServer(true));
+  $("#refresh-central-btn")?.addEventListener("click", () => loadCentral(true));
   $("#refresh-spokes-btn")?.addEventListener("click", () => loadSpokes(true));
   $("#refresh-commands-btn")?.addEventListener("click", loadCommands);
   $("#refresh-config-btn")?.addEventListener("click", () => loadConfig(true));
+  $("#refresh-tenant-setup-btn")?.addEventListener("click", () => loadTenantSetup(true));
   $("#auto-refresh-toggle")?.addEventListener("change", startAutoRefresh);
   $("#auto-refresh-interval")?.addEventListener("change", startAutoRefresh);
   $("#send-command-btn")?.addEventListener("click", sendCommandFromForm);

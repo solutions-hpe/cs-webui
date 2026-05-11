@@ -2074,7 +2074,11 @@
 
   <footer class="page-footer">
     <span>© Hewlett Packard Enterprise · Client Simulator</span>
-    <span id="footer-version" class="footer-version" title="WebUI version">—</span>
+    <span class="footer-versions">
+      <span id="footer-cswebui-version" class="footer-version-pill" title="cs-webui frontend version">cs-webui v—</span>
+      <span id="footer-agent-version" class="footer-version-pill" title="Proxmox agent version" style="display:none">agent v—</span>
+      <span id="footer-repo-version" class="footer-version-pill" title="Client-sim repo version">repo v—</span>
+    </span>
   </footer>
 
   <div id="toast-container" style="position:fixed;top:72px;right:24px;z-index:400;display:flex;flex-direction:column;gap:8px;"></div>

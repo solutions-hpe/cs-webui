@@ -555,13 +555,22 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   flex-shrink: 0;
 }
 
-.footer-version {
+.footer-versions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
   margin-left: auto;
+}
+
+.footer-version-pill {
   font-size: 0.75rem;
-  font-weight: 400;
-  color: var(--muted);
+  color: rgba(255,255,255,0.4);
   white-space: nowrap;
-  text-align: right;
+}
+
+.footer-version-pill + .footer-version-pill:not([style*="display:none"]) {
+  padding-left: 16px;
+  border-left: 1px solid rgba(255,255,255,0.15);
 }
 
 /* ── Empty state ────────────────────────────────────────────────── */
@@ -1875,6 +1884,15 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   gap: 16px;
   margin-bottom: 16px;
 }
+
+details > summary.panel-header {
+  cursor: pointer;
+  list-style: none;
+  margin-bottom: 0;
+}
+
+details > summary.panel-header::-webkit-details-marker { display: none; }
+details[open] > summary.panel-header { margin-bottom: 16px; }
 
 .panel-header h2 {
   margin: 0 0 2px;

@@ -2393,7 +2393,11 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
 
     const tr = document.createElement('tr');
     const missingHtml = missing
-      ? `<div class="usb-missing-list">${missingEntries.map((item) => `<div class="usb-missing-item">VM ${item.vmid} · <span data-missing-until="${Number(item.missing_since) + missingTimeoutSeconds}"></span></div>`).join('')}</div>`
+      ? `<div class="usb-missing-list">${missingEntries.map((item) => {
+          const mvm = vmMap.get(Number(item.vmid));
+          const mname = escHtml(mvm?.name || `VM ${item.vmid}`);
+          return `<div class="usb-missing-item">🔴 ${mname} · <span data-missing-until="${Number(item.missing_since) + missingTimeoutSeconds}"></span></div>`;
+        }).join('')}</div>`
       : '—';
     tr.innerHTML = `
       <td>${device.label || device.vidpid || '—'}</td>

@@ -7134,13 +7134,18 @@ const hubAdminTabIds = new Set(["dashboard", "spokes", "setup", "superadmin"]);
 let tenantUserCounts = {};
 let dashboardTenantRows = [];
 let aggregateDashboardData = null;
-let aggregateSimulationRows = [];
 let aggregateClientRows = [];
 let aggregateProxmoxHosts = [];
 let aggregateApiServerRows = [];
 let aggregateCentralData = null;
+let hubCentralData = null;
 let hubConfigDraft = "";
-const hubSimulationUiState = { search: "" };
+let hubSimActiveTab = "hub-simtop-checks";
+let hubSimChecksFilter = "failing";
+let hubSimChecksSearch = "";
+let hubSimOpenCheckId = null;
+let hubHwOpenCheckId = null;
+let hubCcOpenWsite = null;
 const hubClientUiState = { search: "", status: "all", expandedByTenant: {} };
 let hubClientTypeFilter = "all";
 const tenantDashboardSort = { key: "name", direction: "asc" };
@@ -7541,47 +7546,469 @@ function renderDashboardAggregate(data) {
   `;
 }
 
-function renderSimulationRows() {
-  const tbody = $("#hub-simulations-tbody");
-  if (!tbody) return;
-  const search = hubSimulationUiState.search.trim().toLowerCase();
-  const rows = aggregateSimulationRows.filter(row => !search
-    || String(hubClientSiteName(row)).toLowerCase().includes(search)
-    || String(row.simulation_name || "").toLowerCase().includes(search)
-    || String(row.status || "").toLowerCase().includes(search));
-  const groupedRows = new Map();
-  rows.forEach(row => {
-    const siteKey = hubClientSiteKey(row);
-    if (!groupedRows.has(siteKey)) groupedRows.set(siteKey, { name: hubClientSiteName(row), rows: [] });
-    groupedRows.get(siteKey).rows.push(row);
+const HUB_STATUS_PRIORITY = { fail: 3, warning: 2, degraded: 3, no_data: 2, pass: 1, ok: 1 };
+const hubSimTopPanels = ["hub-simtop-checks", "hub-simtop-hardware", "hub-simtop-clients"];
+
+function hubWorstStatus(a, b) {
+  const pa = HUB_STATUS_PRIORITY[String(a || "").toLowerCase()] || 0;
+  const pb = HUB_STATUS_PRIORITY[String(b || "").toLowerCase()] || 0;
+  if (pb > pa) return b;
+  return a || b || "unknown";
+}
+
+function hubStatusLabel(status) {
+  return String(status || "unknown").replace(/_/g, " ").toUpperCase();
+}
+
+function hubCheckStatusClass(status) {
+  const s = String(status || "").toLowerCase();
+  if (s === "fail" || s === "degraded") return "sim-fail";
+  if (s === "warning" || s === "no_data") return "sim-warn";
+  if (s === "pass" || s === "ok") return "sim-pass";
+  return "sim-unknown";
+}
+
+function hubCheckDotClass(status) {
+  const s = String(status || "").toLowerCase();
+  if (s === "fail" || s === "degraded") return "dot-err";
+  if (s === "warning" || s === "no_data") return "dot-warn";
+  if (s === "pass" || s === "ok") return "dot-ok";
+  return "dot-unknown";
+}
+
+function hubFormatCheckTs(ts) {
+  return ts ? new Date(ts * 1000).toLocaleTimeString() : "";
+}
+
+function hubAggregateChecks(spokes) {
+  const byCheckId = new Map();
+  for (const spoke of (spokes || [])) {
+    const statusMap = spoke?.central_status?.status || {};
+    for (const [wsite, checks] of Object.entries(statusMap)) {
+      if (!checks || typeof checks !== "object") continue;
+      for (const [checkId, info] of Object.entries(checks)) {
+        if (!info || typeof info !== "object") continue;
+        if (!byCheckId.has(checkId)) {
+          byCheckId.set(checkId, {
+            check_id: checkId,
+            check_name: info.check_name || checkId,
+            check_type: info.check_type || "simulation",
+            worst_status: info.status || "unknown",
+            ts: info.ts || null,
+            details: [],
+          });
+        }
+        const agg = byCheckId.get(checkId);
+        agg.worst_status = hubWorstStatus(agg.worst_status, info.status);
+        if (!agg.ts || (info.ts && info.ts > agg.ts)) agg.ts = info.ts;
+        agg.details.push({
+          spoke_id: spoke.spoke_id,
+          spoke_name: spoke.spoke_name || spoke.spoke_id || "Unknown spoke",
+          spoke_online: spoke.spoke_online,
+          wsite,
+          status: info.status || "unknown",
+          count: Number(info.count || 0),
+          ts: info.ts || null,
+        });
+      }
+    }
+  }
+  return [...byCheckId.values()].sort((left, right) => {
+    const statusDiff = (HUB_STATUS_PRIORITY[String(right.worst_status || "").toLowerCase()] || 0)
+      - (HUB_STATUS_PRIORITY[String(left.worst_status || "").toLowerCase()] || 0);
+    if (statusDiff) return statusDiff;
+    return String(left.check_name || left.check_id).localeCompare(String(right.check_name || right.check_id), undefined, { sensitivity: "base" });
   });
-  const sections = [...groupedRows.entries()]
-    .map(([siteKey, group]) => ({ siteKey, name: group.name, rows: group.rows.sort((left, right) => {
-      const statusDiff = simulationStatusSortValue(left.status) - simulationStatusSortValue(right.status);
-      if (statusDiff) return statusDiff;
-      return String(left.simulation_name || "").localeCompare(String(right.simulation_name || ""), undefined, { sensitivity: "base" });
-    }) }))
-    .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }));
-  const totalClients = rows.reduce((sum, row) => sum + Number(row.client_count || 0), 0);
-  $("#hub-simulations-pill") && ($("#hub-simulations-pill").textContent = `${rows.length} simulations`);
-  $("#hub-simulation-clients-pill") && ($("#hub-simulation-clients-pill").textContent = `${totalClients} clients`);
-  $("#hub-simulation-spokes-pill") && ($("#hub-simulation-spokes-pill").textContent = `${sections.length} spokes`);
-  if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="3" class="empty-state">${aggregateSimulationRows.length ? "No simulations match the current filter." : "No simulation telemetry reported for this tenant."}</td></tr>`;
+}
+
+function hubAggregateHardware(spokes) {
+  const byId = new Map();
+  for (const spoke of (spokes || [])) {
+    const hwAlerts = spoke?.central_status?.hardware_alerts || [];
+    for (const alert of hwAlerts) {
+      if (!alert || !alert.id) continue;
+      if (!byId.has(alert.id)) {
+        byId.set(alert.id, {
+          id: alert.id,
+          name: alert.name || alert.id,
+          device_type: alert.device_type || "",
+          total: 0,
+          spoke_breakdown: [],
+        });
+      }
+      const agg = byId.get(alert.id);
+      agg.total += Number(alert.total || 0);
+      agg.spoke_breakdown.push({
+        spoke_id: spoke.spoke_id,
+        spoke_name: spoke.spoke_name || spoke.spoke_id || "Unknown spoke",
+        spoke_online: spoke.spoke_online,
+        total: Number(alert.total || 0),
+        sites: alert.sites || {},
+      });
+    }
+  }
+  return [...byId.values()].sort((left, right) => right.total - left.total || String(left.name || left.id).localeCompare(String(right.name || right.id), undefined, { sensitivity: "base" }));
+}
+
+function hubAggregateClientCount(spokes) {
+  const byWsite = new Map();
+  for (const spoke of (spokes || [])) {
+    const ccStatus = spoke?.central_status?.client_count_status || {};
+    for (const [wsite, info] of Object.entries(ccStatus)) {
+      if (!info || typeof info !== "object") continue;
+      if (!byWsite.has(wsite)) {
+        byWsite.set(wsite, {
+          wsite,
+          site_name: info.site_name || wsite,
+          worst_status: info.status || "unknown",
+          ts: info.ts || null,
+          spoke_breakdown: [],
+        });
+      }
+      const agg = byWsite.get(wsite);
+      agg.worst_status = hubWorstStatus(agg.worst_status, info.status);
+      if (!agg.ts || (info.ts && info.ts > agg.ts)) agg.ts = info.ts;
+      agg.spoke_breakdown.push({
+        spoke_id: spoke.spoke_id,
+        spoke_name: spoke.spoke_name || spoke.spoke_id || "Unknown spoke",
+        spoke_online: spoke.spoke_online,
+        current: info.current,
+        hourly_avg: info.hourly_avg,
+        drop_pct: info.drop_pct,
+        status: info.status || "unknown",
+        ts: info.ts || null,
+        baseline_stale: Boolean(info.baseline_stale),
+      });
+    }
+  }
+  return [...byWsite.values()].sort((left, right) => {
+    const statusDiff = (HUB_STATUS_PRIORITY[String(right.worst_status || "").toLowerCase()] || 0)
+      - (HUB_STATUS_PRIORITY[String(left.worst_status || "").toLowerCase()] || 0);
+    if (statusDiff) return statusDiff;
+    return String(left.site_name || left.wsite).localeCompare(String(right.site_name || right.wsite), undefined, { sensitivity: "base" });
+  });
+}
+
+function activateHubSimTopTab(tabId = "hub-simtop-checks") {
+  document.querySelectorAll(".hub-simtop-subtab").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.hubsimtop === tabId);
+  });
+  hubSimTopPanels.forEach((id) => {
+    const panel = document.getElementById(id);
+    if (!panel) return;
+    panel.classList.toggle("active", id === tabId);
+    panel.classList.toggle("hidden", id !== tabId);
+  });
+  hubSimActiveTab = tabId;
+  if (tabId === "hub-simtop-checks") renderHubSimChecksList();
+  if (tabId === "hub-simtop-hardware") renderHubHwPanel();
+  if (tabId === "hub-simtop-clients") renderHubCcPanel();
+}
+
+function renderHubSimChecksList() {
+  const container = document.getElementById("hub-sim-checks-list");
+  const emptyEl = document.getElementById("hub-sim-checks-empty");
+  if (!container) return;
+
+  container.textContent = "";
+  if (emptyEl) {
+    emptyEl.textContent = "No check data reported by any spoke.";
+    emptyEl.classList.add("hidden");
+    container.appendChild(emptyEl);
+  }
+
+  const allChecks = hubAggregateChecks(hubCentralData?.spokes || []);
+  const failing = allChecks.filter((check) => String(check.worst_status || "").toLowerCase() === "fail").length;
+  const warning = allChecks.filter((check) => String(check.worst_status || "").toLowerCase() === "warning").length;
+  const functional = allChecks.filter((check) => ["pass", "ok"].includes(String(check.worst_status || "").toLowerCase())).length;
+  const countById = (id, count) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = count;
+  };
+  countById("hub-sim-tab-failing-count", failing);
+  countById("hub-sim-tab-warning-count", warning);
+  countById("hub-sim-tab-functional-count", functional);
+
+  let filtered = allChecks;
+  if (hubSimChecksFilter === "failing") filtered = allChecks.filter((check) => String(check.worst_status || "").toLowerCase() === "fail");
+  else if (hubSimChecksFilter === "warning") filtered = allChecks.filter((check) => String(check.worst_status || "").toLowerCase() === "warning");
+  else if (hubSimChecksFilter === "functional") filtered = allChecks.filter((check) => ["pass", "ok"].includes(String(check.worst_status || "").toLowerCase()));
+
+  if (hubSimChecksSearch) {
+    const q = hubSimChecksSearch.toLowerCase();
+    filtered = filtered.filter((check) => {
+      const detailText = check.details.map((detail) => `${detail.spoke_name} ${detail.wsite}`).join(" ").toLowerCase();
+      return String(check.check_name || check.check_id).toLowerCase().includes(q)
+        || String(check.check_type || "").toLowerCase().includes(q)
+        || detailText.includes(q);
+    });
+  }
+
+  const totalCount = document.getElementById("hub-checks-count");
+  if (totalCount) totalCount.textContent = `${filtered.length} check${filtered.length === 1 ? "" : "s"}`;
+
+  if (!filtered.length) {
+    if (emptyEl) {
+      emptyEl.textContent = allChecks.length ? "No checks match the current filter." : "No check data reported by any spoke.";
+      emptyEl.classList.remove("hidden");
+    }
     return;
   }
-  tbody.innerHTML = sections.map(section => `
-    <tr class="hub-table-section">
-      <td colspan="3"><strong>${escHtml(section.name)}</strong><span class="hub-table-section-meta">${section.rows.length} simulations</span></td>
-    </tr>
-    ${section.rows.map(row => `
-      <tr>
-        <td>${escHtml(row.simulation_name || "—")}</td>
-        <td>${simulationStatusBadge(row.status)}</td>
-        <td>${Number(row.client_count || 0)}</td>
-      </tr>
-    `).join("")}
-  `).join("");
+
+  for (const check of filtered) {
+    const row = document.createElement("div");
+    const uniqueSpokes = [...new Set(check.details.map((detail) => detail.spoke_name).filter(Boolean))];
+    row.className = "check-row";
+    row.tabIndex = 0;
+    row.setAttribute("role", "button");
+    row.innerHTML = `
+      <span class="check-dot ${hubCheckDotClass(check.worst_status)}"></span>
+      <span class="check-name">${escHtml(check.check_name || check.check_id)}</span>
+      <span class="check-badge ${hubCheckStatusClass(check.worst_status)}">${escHtml(hubStatusLabel(check.worst_status))}</span>
+      <span class="check-detail">${uniqueSpokes.length} spoke${uniqueSpokes.length === 1 ? "" : "s"} · ${check.details.length} site${check.details.length === 1 ? "" : "s"}</span>
+      <span class="check-ts">${escHtml(hubFormatCheckTs(check.ts))}</span>
+    `;
+    row.addEventListener("click", () => openHubSimDetail(check.check_id));
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openHubSimDetail(check.check_id);
+      }
+    });
+    container.appendChild(row);
+  }
+}
+
+function openHubSimDetail(checkId) {
+  const check = hubAggregateChecks(hubCentralData?.spokes || []).find((item) => item.check_id === checkId);
+  const overview = document.getElementById("hub-sim-overview");
+  const detail = document.getElementById("hub-sim-detail");
+  const title = document.getElementById("hub-sim-detail-title");
+  const sub = document.getElementById("hub-sim-detail-sub");
+  const badge = document.getElementById("hub-sim-detail-badge");
+  const siteList = document.getElementById("hub-sim-site-list");
+  if (!check || !overview || !detail || !siteList) return;
+  hubSimOpenCheckId = checkId;
+  overview.classList.add("hidden");
+  detail.classList.remove("hidden");
+  if (title) title.textContent = check.check_name || check.check_id;
+  if (sub) sub.textContent = `${check.details.length} spoke/site result${check.details.length === 1 ? "" : "s"}`;
+  if (badge) {
+    badge.textContent = hubStatusLabel(check.worst_status);
+    badge.className = `sim-status-badge ${hubCheckStatusClass(check.worst_status)}`;
+  }
+  siteList.textContent = "";
+  check.details
+    .slice()
+    .sort((left, right) => {
+      const statusDiff = (HUB_STATUS_PRIORITY[String(right.status || "").toLowerCase()] || 0)
+        - (HUB_STATUS_PRIORITY[String(left.status || "").toLowerCase()] || 0);
+      if (statusDiff) return statusDiff;
+      return `${left.spoke_name} ${left.wsite}`.localeCompare(`${right.spoke_name} ${right.wsite}`, undefined, { sensitivity: "base" });
+    })
+    .forEach((detailItem) => {
+      const row = document.createElement("div");
+      row.className = "sim-site-row";
+      row.style.display = "flex";
+      row.style.alignItems = "center";
+      row.style.justifyContent = "space-between";
+      row.style.gap = "12px";
+      row.style.padding = "12px 16px";
+      row.style.cursor = "default";
+      row.innerHTML = `
+        <span class="sim-site-name">${escHtml(detailItem.spoke_name)} — ${escHtml(detailItem.wsite)}</span>
+        <span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;">
+          <span style="font-size:0.82rem;color:var(--muted);">${detailItem.count} event${detailItem.count === 1 ? "" : "s"}</span>
+          <span class="sim-status-badge ${hubCheckStatusClass(detailItem.status)}">${escHtml(hubStatusLabel(detailItem.status))}</span>
+        </span>
+      `;
+      siteList.appendChild(row);
+    });
+}
+
+function renderHubHwPanel() {
+  const container = document.getElementById("hub-hw-checks-list");
+  if (!container) return;
+  container.textContent = "";
+  const hwChecks = hubAggregateHardware(hubCentralData?.spokes || []);
+  if (!hwChecks.length) {
+    container.innerHTML = '<div class="central-empty">No hardware alerts data from any spoke.</div>';
+    return;
+  }
+  for (const hw of hwChecks) {
+    const row = document.createElement("div");
+    const siteCount = hw.spoke_breakdown.reduce((sum, spoke) => sum + Object.keys(spoke.sites || {}).length, 0);
+    row.className = "check-row";
+    row.tabIndex = 0;
+    row.setAttribute("role", "button");
+    row.innerHTML = `
+      <span class="check-dot ${hw.total > 0 ? "dot-err" : "dot-ok"}"></span>
+      <span class="check-name">${escHtml(hw.name)}</span>
+      <span class="check-badge ${hw.total > 0 ? "sim-fail" : "sim-pass"}">${escHtml(hw.total > 0 ? `${hw.total} DOWN` : "CLEAR")}</span>
+      <span class="check-detail">${hw.spoke_breakdown.length} spoke${hw.spoke_breakdown.length === 1 ? "" : "s"} · ${siteCount} site${siteCount === 1 ? "" : "s"}</span>
+      <span class="check-ts"></span>
+    `;
+    row.addEventListener("click", () => openHubHwDetail(hw.id));
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openHubHwDetail(hw.id);
+      }
+    });
+    container.appendChild(row);
+  }
+}
+
+function openHubHwDetail(checkId) {
+  const hw = hubAggregateHardware(hubCentralData?.spokes || []).find((item) => item.id === checkId);
+  const overview = document.getElementById("hub-hw-overview");
+  const detail = document.getElementById("hub-hw-detail");
+  const title = document.getElementById("hub-hw-detail-title");
+  const sub = document.getElementById("hub-hw-detail-sub");
+  const badge = document.getElementById("hub-hw-detail-badge");
+  const siteList = document.getElementById("hub-hw-site-list");
+  if (!hw || !overview || !detail || !siteList) return;
+  hubHwOpenCheckId = checkId;
+  overview.classList.add("hidden");
+  detail.classList.remove("hidden");
+  if (title) title.textContent = hw.name;
+  if (sub) sub.textContent = hw.total > 0 ? `${hw.total} device(s) affected across ${hw.spoke_breakdown.length} spoke${hw.spoke_breakdown.length === 1 ? "" : "s"}` : "No active alerts";
+  if (badge) {
+    badge.textContent = hw.total > 0 ? `${hw.total} DOWN` : "CLEAR";
+    badge.className = `sim-status-badge ${hw.total > 0 ? "sim-fail" : "sim-pass"}`;
+  }
+  siteList.textContent = "";
+  if (!hw.spoke_breakdown.length) {
+    siteList.innerHTML = '<div class="central-empty">No device breakdown available.</div>';
+    return;
+  }
+  hw.spoke_breakdown
+    .slice()
+    .sort((left, right) => Number(right.total || 0) - Number(left.total || 0) || String(left.spoke_name || "").localeCompare(String(right.spoke_name || ""), undefined, { sensitivity: "base" }))
+    .forEach((spoke) => {
+      const spokeRow = document.createElement("div");
+      spokeRow.className = "sim-site-row";
+      spokeRow.style.display = "flex";
+      spokeRow.style.flexDirection = "column";
+      spokeRow.style.gap = "6px";
+      spokeRow.style.padding = "12px 16px";
+      spokeRow.style.cursor = "default";
+      spokeRow.innerHTML = `<strong>${escHtml(spoke.spoke_name)}</strong><span style="font-size:0.82rem;color:var(--muted);">${spoke.total} device(s) affected</span>`;
+      siteList.appendChild(spokeRow);
+      const siteEntries = Object.entries(spoke.sites || {});
+      if (!siteEntries.length) {
+        const empty = document.createElement("div");
+        empty.className = "sim-site-row";
+        empty.style.display = "flex";
+        empty.style.justifyContent = "space-between";
+        empty.style.padding = "10px 16px 10px 32px";
+        empty.style.cursor = "default";
+        empty.innerHTML = '<span class="sim-site-name">No site breakdown</span><span style="font-size:0.82rem;color:var(--muted);">—</span>';
+        siteList.appendChild(empty);
+        return;
+      }
+      siteEntries
+        .sort((left, right) => String(left[1]?.site_name || left[0]).localeCompare(String(right[1]?.site_name || right[0]), undefined, { sensitivity: "base" }))
+        .forEach(([wsite, info]) => {
+          const devices = Array.isArray(info?.devices) ? info.devices : [];
+          const siteRow = document.createElement("div");
+          siteRow.className = "sim-site-row";
+          siteRow.style.display = "flex";
+          siteRow.style.justifyContent = "space-between";
+          siteRow.style.alignItems = "center";
+          siteRow.style.gap = "12px";
+          siteRow.style.padding = "10px 16px 10px 32px";
+          siteRow.style.cursor = "default";
+          siteRow.innerHTML = `
+            <span class="sim-site-name">${escHtml(info?.site_name || wsite)}</span>
+            <span class="sim-status-badge sim-fail">${devices.length} device${devices.length === 1 ? "" : "s"}</span>
+          `;
+          siteList.appendChild(siteRow);
+        });
+    });
+}
+
+function renderHubCcPanel() {
+  const container = document.getElementById("hub-cc-checks-list");
+  if (!container) return;
+  container.textContent = "";
+  const ccData = hubAggregateClientCount(hubCentralData?.spokes || []);
+  if (!ccData.length) {
+    container.innerHTML = '<div class="central-empty">No client count data from any spoke.</div>';
+    return;
+  }
+  for (const site of ccData) {
+    const row = document.createElement("div");
+    row.className = "check-row";
+    row.tabIndex = 0;
+    row.setAttribute("role", "button");
+    row.innerHTML = `
+      <span class="check-dot ${hubCheckDotClass(site.worst_status)}"></span>
+      <span class="check-name">${escHtml(site.site_name || site.wsite)}</span>
+      <span class="check-badge ${hubCheckStatusClass(site.worst_status)}">${escHtml(hubStatusLabel(site.worst_status))}</span>
+      <span class="check-detail">${site.spoke_breakdown.length} spoke${site.spoke_breakdown.length === 1 ? "" : "s"} reporting</span>
+      <span class="check-ts">${escHtml(hubFormatCheckTs(site.ts))}</span>
+    `;
+    row.addEventListener("click", () => openHubCcDetail(site.wsite));
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openHubCcDetail(site.wsite);
+      }
+    });
+    container.appendChild(row);
+  }
+}
+
+function openHubCcDetail(wsite) {
+  const site = hubAggregateClientCount(hubCentralData?.spokes || []).find((item) => item.wsite === wsite);
+  const overview = document.getElementById("hub-cc-overview");
+  const detail = document.getElementById("hub-cc-detail");
+  const title = document.getElementById("hub-cc-detail-title");
+  const sub = document.getElementById("hub-cc-detail-sub");
+  const badge = document.getElementById("hub-cc-detail-badge");
+  const siteDetail = document.getElementById("hub-cc-site-detail");
+  if (!site || !overview || !detail || !siteDetail) return;
+  hubCcOpenWsite = wsite;
+  overview.classList.add("hidden");
+  detail.classList.remove("hidden");
+  if (title) title.textContent = site.site_name || site.wsite;
+  if (sub) sub.textContent = `${site.spoke_breakdown.length} spoke${site.spoke_breakdown.length === 1 ? "" : "s"} reporting`;
+  if (badge) {
+    badge.textContent = hubStatusLabel(site.worst_status);
+    badge.className = `sim-status-badge ${hubCheckStatusClass(site.worst_status)}`;
+  }
+  siteDetail.textContent = "";
+  site.spoke_breakdown
+    .slice()
+    .sort((left, right) => {
+      const statusDiff = (HUB_STATUS_PRIORITY[String(right.status || "").toLowerCase()] || 0)
+        - (HUB_STATUS_PRIORITY[String(left.status || "").toLowerCase()] || 0);
+      if (statusDiff) return statusDiff;
+      return String(left.spoke_name || "").localeCompare(String(right.spoke_name || ""), undefined, { sensitivity: "base" });
+    })
+    .forEach((spoke) => {
+      const dropValue = Number(spoke.drop_pct);
+      const avgValue = Number(spoke.hourly_avg);
+      const drop = Number.isFinite(dropValue) ? formatClientCountDelta(dropValue) : "—";
+      const avg = Number.isFinite(avgValue) ? avgValue.toFixed(1) : "—";
+      const row = document.createElement("div");
+      row.className = "sim-site-row";
+      row.style.display = "flex";
+      row.style.justifyContent = "space-between";
+      row.style.alignItems = "center";
+      row.style.gap = "12px";
+      row.style.padding = "12px 16px";
+      row.style.cursor = "default";
+      row.innerHTML = `
+        <span>
+          <span class="sim-site-name">${escHtml(spoke.spoke_name)}</span>
+          <span style="display:block;font-size:0.82rem;color:var(--muted);margin-top:4px;">Current: ${spoke.current ?? "—"} / Avg: ${avg} / Δ: ${drop}${spoke.baseline_stale ? " · baseline stale" : ""}</span>
+        </span>
+        <span class="sim-status-badge ${hubCheckStatusClass(spoke.status)}">${escHtml(hubStatusLabel(spoke.status))}</span>
+      `;
+      siteDetail.appendChild(row);
+    });
 }
 
 function updateClientSpokeFilterOptions() {
@@ -7996,7 +8423,10 @@ function applyAuthUI() {
     tenantUserCounts = {};
     dashboardTenantRows = [];
     aggregateDashboardData = null;
-    aggregateSimulationRows = [];
+    hubCentralData = null;
+    hubSimOpenCheckId = null;
+    hubHwOpenCheckId = null;
+    hubCcOpenWsite = null;
     aggregateClientRows = [];
     aggregateProxmoxHosts = [];
     aggregateApiServerRows = [];
@@ -8098,7 +8528,10 @@ function logout(showMessage = true) {
   tenants = [];
   spokeCache = {};
   aggregateDashboardData = null;
-  aggregateSimulationRows = [];
+  hubCentralData = null;
+  hubSimOpenCheckId = null;
+  hubHwOpenCheckId = null;
+  hubCcOpenWsite = null;
   aggregateClientRows = [];
   aggregateProxmoxHosts = [];
   aggregateApiServerRows = [];
@@ -8119,7 +8552,10 @@ function logout(showMessage = true) {
 async function setCurrentTenant(tenantId, reload = true) {
   currentTenantId = tenantId;
   aggregateDashboardData = null;
-  aggregateSimulationRows = [];
+  hubCentralData = null;
+  hubSimOpenCheckId = null;
+  hubHwOpenCheckId = null;
+  hubCcOpenWsite = null;
   aggregateClientRows = [];
   aggregateProxmoxHosts = [];
   aggregateApiServerRows = [];
@@ -8665,14 +9101,39 @@ async function loadDashboard(force = false) {
 }
 
 async function loadHubSimulations(force = false) {
-  if (!currentTenantId) {
-    aggregateSimulationRows = [];
-    renderSimulationRows();
+  if (!currentTenantId || !currentUser) {
+    hubCentralData = null;
+    const refreshEl = document.getElementById("hub-sim-last-refreshed");
+    if (refreshEl) refreshEl.textContent = "Last refreshed: —";
+    renderHubSimChecksList();
+    renderHubHwPanel();
+    renderHubCcPanel();
     return;
   }
-  const data = force || !aggregateSimulationRows.length ? await loadAggregateData("simulations") : { simulations: aggregateSimulationRows };
-  aggregateSimulationRows = data?.simulations || [];
-  renderSimulationRows();
+  try {
+    const cached = hubCentralData || aggregateCentralData;
+    const data = force || !cached ? await loadAggregateData("central") : cached;
+    hubCentralData = data || { mode: "distributed", hub_central_config: {}, spokes: [] };
+    aggregateCentralData = hubCentralData;
+    const refreshEl = document.getElementById("hub-sim-last-refreshed");
+    if (refreshEl) refreshEl.textContent = `Last refreshed: ${new Date().toLocaleTimeString()}`;
+    if (hubSimActiveTab === "hub-simtop-hardware") {
+      renderHubHwPanel();
+      if (hubHwOpenCheckId) openHubHwDetail(hubHwOpenCheckId);
+    } else if (hubSimActiveTab === "hub-simtop-clients") {
+      renderHubCcPanel();
+      if (hubCcOpenWsite) openHubCcDetail(hubCcOpenWsite);
+    } else {
+      renderHubSimChecksList();
+      if (hubSimOpenCheckId) openHubSimDetail(hubSimOpenCheckId);
+    }
+  } catch (err) {
+    const emptyEl = document.getElementById("hub-sim-checks-empty");
+    if (emptyEl) {
+      emptyEl.textContent = `Error loading simulation data: ${err.message}`;
+      emptyEl.classList.remove("hidden");
+    }
+  }
 }
 
 async function loadClients(force = false) {
@@ -8970,6 +9431,7 @@ async function loadCentral(force = false) {
   container.innerHTML = '<div class="empty-state">Loading…</div>';
   const data = force || !aggregateCentralData ? await loadAggregateData("central") : aggregateCentralData;
   aggregateCentralData = data || { mode: "distributed", hub_central_config: {}, spokes: [] };
+  hubCentralData = aggregateCentralData;
   renderHubCentral();
 }
 
@@ -10702,7 +11164,36 @@ function bindEvents() {
   $("#login-password")?.addEventListener("keydown", event => { if (event.key === "Enter") submitLogin(); });
   $("#refresh-dashboard-btn")?.addEventListener("click", () => loadDashboard(true));
   $("#dashboard-add-tenant-btn")?.addEventListener("click", openSuperadminTenantForm);
-  $("#refresh-simulations-btn")?.addEventListener("click", () => loadHubSimulations(true));
+  document.querySelectorAll(".hub-simtop-subtab").forEach((button) => {
+    button.addEventListener("click", () => activateHubSimTopTab(button.dataset.hubsimtop || "hub-simtop-checks"));
+  });
+  document.querySelectorAll(".hub-sim-subtab").forEach((button) => {
+    button.addEventListener("click", () => {
+      hubSimChecksFilter = button.dataset.hubsimtab || "failing";
+      document.querySelectorAll(".hub-sim-subtab").forEach((item) => item.classList.toggle("active", item === button));
+      renderHubSimChecksList();
+    });
+  });
+  $("#hub-checks-filter")?.addEventListener("input", (event) => {
+    hubSimChecksSearch = event.target.value || "";
+    renderHubSimChecksList();
+  });
+  $("#hub-sim-detail-back")?.addEventListener("click", () => {
+    $("#hub-sim-detail")?.classList.add("hidden");
+    $("#hub-sim-overview")?.classList.remove("hidden");
+    hubSimOpenCheckId = null;
+  });
+  $("#hub-hw-detail-back")?.addEventListener("click", () => {
+    $("#hub-hw-detail")?.classList.add("hidden");
+    $("#hub-hw-overview")?.classList.remove("hidden");
+    hubHwOpenCheckId = null;
+  });
+  $("#hub-cc-detail-back")?.addEventListener("click", () => {
+    $("#hub-cc-detail")?.classList.add("hidden");
+    $("#hub-cc-overview")?.classList.remove("hidden");
+    hubCcOpenWsite = null;
+  });
+  $("#hub-sim-refresh-btn")?.addEventListener("click", () => loadHubSimulations(true));
   $("#refresh-clients-btn")?.addEventListener("click", () => loadClients(true));
   $("#refresh-vm-server-btn")?.addEventListener("click", () => loadVmServer(true));
   $("#refresh-api-server-btn")?.addEventListener("click", () => loadApiServer(true));
@@ -10719,10 +11210,6 @@ function bindEvents() {
     const spokes = await ensureSpokes();
     spokeUiState.expandedByTenant[currentTenantId] = new Set(spokes.filter(spoke => spoke.status === "approved").map(spoke => spoke.id));
     loadSpokes();
-  });
-  $("#hub-simulations-search")?.addEventListener("input", event => {
-    hubSimulationUiState.search = event.target.value || "";
-    renderSimulationRows();
   });
   $("#hub-clients-search")?.addEventListener("input", event => {
     hubClientUiState.search = event.target.value || "";

@@ -174,23 +174,79 @@
     </main>
 
     <main id="tab-hub-simulations" class="page tab-content hidden">
-      <div class="page-toolbar">
-        <div class="toolbar-stats">
-          <span class="stat-pill" id="hub-simulations-pill">— simulations</span>
-          <span class="stat-pill" id="hub-simulation-clients-pill">— clients</span>
-          <span class="stat-pill" id="hub-simulation-spokes-pill">— spokes</span>
+      <nav class="setup-subnav" role="tablist">
+        <button class="setup-subtab hub-simtop-subtab active" data-hubsimtop="hub-simtop-checks" role="tab" type="button">Checks</button>
+        <button class="setup-subtab hub-simtop-subtab" data-hubsimtop="hub-simtop-hardware" role="tab" type="button">Hardware</button>
+        <button class="setup-subtab hub-simtop-subtab" data-hubsimtop="hub-simtop-clients" role="tab" type="button">Client Count</button>
+      </nav>
+
+      <div id="hub-simtop-checks" class="setup-subpanel">
+        <div id="hub-sim-overview">
+          <section class="central-toolbar">
+            <div>
+              <div id="hub-sim-last-refreshed" class="central-last-synced">Last refreshed: —</div>
+            </div>
+            <div class="toolbar-actions">
+              <button id="hub-sim-refresh-btn" class="btn btn-primary btn-small" type="button">Refresh</button>
+            </div>
+          </section>
+          <nav class="setup-subnav" role="tablist">
+            <button class="setup-subtab hub-sim-subtab active" data-hubsimtab="failing" role="tab" type="button">🔴 Failing <span id="hub-sim-tab-failing-count" class="badge-count">0</span></button>
+            <button class="setup-subtab hub-sim-subtab" data-hubsimtab="warning" role="tab" type="button">⚠ Warning <span id="hub-sim-tab-warning-count" class="badge-count">0</span></button>
+            <button class="setup-subtab hub-sim-subtab" data-hubsimtab="functional" role="tab" type="button">🟢 Functional <span id="hub-sim-tab-functional-count" class="badge-count">0</span></button>
+          </nav>
+          <div class="checks-toolbar">
+            <input id="hub-checks-filter" class="checks-filter-input" type="text" placeholder="Filter checks…" spellcheck="false" />
+            <span id="hub-checks-count" class="checks-count-badge">0 checks</span>
+          </div>
+          <div id="hub-sim-checks-list" class="sim-checks-list">
+            <div id="hub-sim-checks-empty" class="central-empty hidden">No check data reported by any spoke.</div>
+          </div>
         </div>
-        <div class="toolbar-actions">
-          <input id="hub-simulations-search" type="search" class="form-input form-input-sm" placeholder="Filter simulations…">
-          <button id="refresh-simulations-btn" class="btn btn-primary btn-small" type="button">Refresh</button>
+        <div id="hub-sim-detail" class="central-detail-panel hidden">
+          <div class="central-detail-header">
+            <button id="hub-sim-detail-back" class="btn btn-secondary btn-small" type="button">← Back</button>
+            <div>
+              <h2 id="hub-sim-detail-title">Check Detail</h2>
+              <p id="hub-sim-detail-sub" class="central-detail-sub">—</p>
+            </div>
+            <div id="hub-sim-detail-badge" class="sim-status-badge sim-unknown">—</div>
+          </div>
+          <div id="hub-sim-site-list" class="sim-site-list"></div>
         </div>
       </div>
-      <div class="setup-card">
-        <div class="table-scroll">
-          <table class="data-table">
-            <thead><tr><th>Simulation</th><th>Status</th><th>Client Count</th></tr></thead>
-            <tbody id="hub-simulations-tbody"></tbody>
-          </table>
+
+      <div id="hub-simtop-hardware" class="setup-subpanel hidden">
+        <div id="hub-hw-overview">
+          <div id="hub-hw-checks-list" class="sim-checks-list"></div>
+        </div>
+        <div id="hub-hw-detail" class="central-detail-panel hidden">
+          <div class="central-detail-header">
+            <button id="hub-hw-detail-back" class="btn btn-secondary btn-small" type="button">← Back</button>
+            <div>
+              <h2 id="hub-hw-detail-title">Hardware Alert</h2>
+              <p id="hub-hw-detail-sub" class="central-detail-sub">—</p>
+            </div>
+            <div id="hub-hw-detail-badge" class="sim-status-badge sim-unknown">—</div>
+          </div>
+          <div id="hub-hw-site-list" class="sim-site-list"></div>
+        </div>
+      </div>
+
+      <div id="hub-simtop-clients" class="setup-subpanel hidden">
+        <div id="hub-cc-overview">
+          <div id="hub-cc-checks-list" class="sim-checks-list"></div>
+        </div>
+        <div id="hub-cc-detail" class="central-detail-panel hidden">
+          <div class="central-detail-header">
+            <button id="hub-cc-detail-back" class="btn btn-secondary btn-small" type="button">← Back</button>
+            <div>
+              <h2 id="hub-cc-detail-title">Client Count</h2>
+              <p id="hub-cc-detail-sub" class="central-detail-sub">—</p>
+            </div>
+            <div id="hub-cc-detail-badge" class="sim-status-badge sim-unknown">—</div>
+          </div>
+          <div id="hub-cc-site-detail" class="sim-site-list"></div>
         </div>
       </div>
     </main>

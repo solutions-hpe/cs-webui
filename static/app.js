@@ -7103,6 +7103,10 @@ let loadServiceLogs = () => {};
 
 document.getElementById('spoke-acme-dns-provider')?.addEventListener('change', toggleSpokeAcmeDnsSection);
 
+document.querySelectorAll('[data-clienttype]').forEach(button => {
+  button.addEventListener('click', () => setClientTypeFilter(button.dataset.clienttype || 'all'));
+});
+
 
   })();
 }

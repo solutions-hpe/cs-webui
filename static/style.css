@@ -1534,7 +1534,8 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 
 /* Certified / USB summary tables */
 #usb-vidpid-table  { table-layout: fixed; width: 100%; }
-#usb-summary-table { table-layout: fixed; width: 100%; }
+/* Override the setup-card edge-to-edge bleed so it stays contained like the uncertified table */
+#usb-summary-table { table-layout: fixed; width: 100%; margin: 0; border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
 #unknown-usb-table { table-layout: fixed; width: 100%; }
 
 /* VID:PID table column widths: VID:PID | Type | Label | Actions */

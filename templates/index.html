@@ -928,9 +928,9 @@
                 <div class="setup-card-header" style="margin-bottom:8px;">
                   <h2 style="font-size:1rem;margin:0;">Fleet Reclone</h2>
                 </div>
-                <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
-                  <span id="reclone-status-badge" class="badge badge-grey">Idle</span>
+                <div class="reclone-action-stack">
                   <button id="reclone-now-btn" class="btn btn-primary btn-small" onclick="triggerRecloneAll()">⟳ Reclone All Now</button>
+                  <div id="reclone-status-badge" class="badge badge-grey">Idle</div>
                 </div>
                 <div id="reclone-progress-wrap" class="hidden">
                   <div class="reclone-meta">
@@ -961,6 +961,7 @@
                   <h2 style="font-size:1rem;margin:0;">VM Auto-Provisioning</h2>
                 </div>
                 <div id="autoprov-live-summary" class="autoprov-live-summary" aria-live="polite"></div>
+                <button id="autoprov-reset-btn" class="btn btn-sm btn-outline-secondary mt-2" onclick="resetAutoprovStatus()" title="Clear stuck auto-provisioning status" style="display:none;">↺ Clear Status</button>
               </div>
               <div class="autoprov-right">
                 <div id="auto-prov-log" class="autoprov-live-list" aria-live="polite"></div>

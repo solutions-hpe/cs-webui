@@ -2592,6 +2592,47 @@ async function triggerRecloneAll() {
 }
 window.triggerRecloneAll = triggerRecloneAll;
 
+async function resetAutoprovStatus() {
+  if (!confirm('Clear the auto-provisioning status panel?')) return;
+  await fetch('/api/proxmox/autoprov/reset', { method: 'POST' });
+}
+window.resetAutoprovStatus = resetAutoprovStatus;
+
+function recloneLogStatusMeta(status) {
+  switch (String(status || '').toLowerCase()) {
+    case 'completed':
+      return { label: 'Done', className: 'status-online' };
+    case 'failed':
+      return { label: 'Failed', className: 'status-offline' };
+    case 'queued':
+      return { label: 'Queued', className: 'status-pending' };
+    case 'in_progress':
+      return { label: 'Running', className: 'status-pending' };
+    default:
+      return { label: 'Pending', className: 'status-pending' };
+  }
+}
+
+function renderRecloneLogItems(entries = [], emptyHtml = '') {
+  if (!entries.length) return emptyHtml;
+  return entries.slice().reverse().map((entry) => {
+    const meta = recloneLogStatusMeta(entry.status);
+    const metaBits = [];
+    if (entry.vmid != null) metaBits.push(`VMID ${entry.vmid}`);
+    if (entry.timestamp) metaBits.push(formatUiDate(entry.timestamp));
+    if (entry.message) metaBits.push(entry.message);
+    return `
+      <div class="autoprov-live-item" title="${escHtml(entry.message || '')}">
+        <div class="autoprov-live-item-main">
+          <div class="autoprov-live-item-name">${escHtml(entry.name || `VM ${entry.vmid}`)}</div>
+          <div class="autoprov-live-item-meta">${escHtml(metaBits.join(' · ') || '—')}</div>
+        </div>
+        <span class="status-badge ${meta.className}">${meta.label}</span>
+      </div>
+    `;
+  }).join('');
+}
+
 function renderRecloneStatus(recloneState = latestRecloneState || {}) {
   latestRecloneState = recloneState || latestRecloneState || {};
   if (!recloneStatusBadge || !recloneProgressWrap || !recloneProgressBar || !recloneProgressLabel || !recloneVmLog || !recloneLastRun) return;
@@ -2656,20 +2697,11 @@ function renderRecloneStatus(recloneState = latestRecloneState || {}) {
   recloneProgressBar.style.width = `${pct}%`;
   recloneProgressLabel.textContent = total ? `${done} / ${total} VMs (${pct}%)` : '';
 
-  const iconMap = { completed: '✅', failed: '❌', in_progress: '⏳', queued: '🕐' };
-  const logEntries = (state.log || []).slice().reverse();
+  const logEntries = Array.isArray(state.log) ? state.log : [];
   if (logEntries.length === 0 && status !== 'idle') {
     recloneVmLog.innerHTML = `<div class="muted" style="padding:8px 0;font-size:13px;">No VMs processed yet.</div>`;
   } else {
-    recloneVmLog.innerHTML = logEntries.map((entry) => `
-      <div class="log-entry" title="${escHtml(entry.message || '')}">
-        <span>${iconMap[entry.status] || '•'}</span>
-        <span>${entry.name || `VM ${entry.vmid}`}</span>
-        <span class="muted">${entry.status}</span>
-        <span class="muted">${formatUiDate(entry.timestamp)}</span>
-        ${entry.message ? `<span class="muted">${escHtml(entry.message)}</span>` : ''}
-      </div>
-    `).join('');
+    recloneVmLog.innerHTML = renderRecloneLogItems(logEntries);
   }
 
   if (state.last_run) {
@@ -2685,14 +2717,7 @@ function renderRecloneStatus(recloneState = latestRecloneState || {}) {
   const autoLog = Array.isArray(state.auto_recovery_log) ? state.auto_recovery_log : [];
   if (arSection) arSection.classList.toggle('hidden', autoLog.length === 0);
   if (arLog) {
-    arLog.innerHTML = autoLog.slice().reverse().map((entry) => `
-      <div class="log-entry">
-        <span>${iconMap[entry.status] || '↺'}</span>
-        <span>${entry.name || `VM ${entry.vmid}`}</span>
-        <span class="muted">auto-recovery</span>
-        <span class="muted">${formatUiDate(entry.timestamp)}</span>
-      </div>
-    `).join('');
+    arLog.innerHTML = renderRecloneLogItems(autoLog, `<div class="muted" style="padding:8px 0;font-size:13px;">No auto-recovery activity.</div>`);
   }
 
   updateVmRecloneIcons();
@@ -2897,6 +2922,8 @@ function renderAutoProvisionStatus() {
   livePanel.classList.remove('hidden');
 
   const showPanel = run.running && total > 0;
+  const resetBtn = document.getElementById('autoprov-reset-btn');
+  if (resetBtn) resetBtn.style.display = run.running ? '' : 'none';
   if (!showPanel) {
     liveSummary.innerHTML = `<div class="muted" style="padding:12px 0;">${
       autoProv
@@ -7298,12 +7325,27 @@ function renderHubSimulationBadges(simulations = [], emptyLabel = "—") {
   return emptyLabel ? `<span class="muted">${escHtml(emptyLabel)}</span>` : "";
 }
 
+function spokeDisplayName(spoke = {}, fallback = "—") {
+  return String(spoke?.spoke_name || spoke?.spoke_hostname || spoke?.hostname || spoke?.id || spoke?.spoke_id || fallback);
+}
+
 function hubClientSiteName(row = {}) {
-  return row.spoke_name || row.spoke_hostname || row.spoke_id || "Unknown site";
+  return spokeDisplayName(row, "Unknown site");
 }
 
 function hubClientSiteKey(row = {}) {
-  return String(row.spoke_id || row.spoke_hostname || row.spoke_name || "unknown-site");
+  return String(row.spoke_id || row.id || row.spoke_hostname || row.spoke_name || "unknown-site");
+}
+
+function primeHubClientExpandedSet(siteKeys = [], tenantId = currentTenantId) {
+  if (!tenantId || hubClientUiState.expandedByTenant[tenantId]) return;
+  hubClientUiState.expandedByTenant[tenantId] = new Set(siteKeys.filter(Boolean));
+}
+
+function normalizeAggregateClientRows(data) {
+  if (Array.isArray(data?.clients)) return data.clients;
+  if (Array.isArray(data?.rows)) return data.rows;
+  return Array.isArray(data) ? data : [];
 }
 
 function getHubClientExpandedSet(tenantId = currentTenantId) {
@@ -7404,7 +7446,7 @@ function updateClientSpokeFilterOptions() {
   const select = $("#hub-clients-spoke-filter");
   if (!select) return;
   const currentValue = select.value || "all";
-  const options = [...new Set(aggregateClientRows.map(row => row.spoke_name || row.spoke_hostname || row.spoke_id).filter(Boolean))]
+  const options = [...new Set(aggregateClientRows.map(row => hubClientSiteName(row)).filter(Boolean))]
     .sort((left, right) => left.localeCompare(right));
   select.innerHTML = '<option value="all">All spokes</option>' + options.map(name => `<option value="${escHtml(name)}">${escHtml(name)}</option>`).join("");
   select.value = options.includes(currentValue) ? currentValue : "all";
@@ -7462,6 +7504,7 @@ function renderClientRowsForHub() {
     container.innerHTML = `<div class="empty-state">${aggregateClientRows.length ? "No clients match the current filters." : "No client telemetry reported for this tenant."}</div>`;
     return;
   }
+  primeHubClientExpandedSet(sites.map(site => site.siteKey));
   const expanded = getHubClientExpandedSet();
   container.innerHTML = sites.map(site => {
     const isExpanded = expanded.has(site.siteKey);
@@ -7936,7 +7979,7 @@ async function setCurrentTenant(tenantId, reload = true) {
   aggregateApiServerRows = [];
   aggregateCentralData = null;
   hubConfigDraft = "";
-  hubClientUiState.expandedByTenant[tenantId] = new Set();
+  delete hubClientUiState.expandedByTenant[tenantId];
   syncRoleBadge();
   syncTenantContextChrome();
   syncHubPermissionUI();
@@ -8012,7 +8055,7 @@ function spokeLabel(count) {
 }
 
 function spokePrimaryLabel(spoke) {
-  return String(spoke?.spoke_name || spoke?.hostname || spoke?.id || "—");
+  return spokeDisplayName(spoke, "—");
 }
 
 function spokeSecondaryLabel(spoke, fallback = "—") {
@@ -8493,7 +8536,8 @@ async function loadClients(force = false) {
     return;
   }
   const data = force || !aggregateClientRows.length ? await loadAggregateData("clients") : { clients: aggregateClientRows };
-  aggregateClientRows = data?.clients || [];
+  aggregateClientRows = normalizeAggregateClientRows(data);
+  primeHubClientExpandedSet([...new Set(aggregateClientRows.map(hubClientSiteKey))]);
   renderClientRowsForHub();
 }
 
@@ -8552,7 +8596,7 @@ function renderHubVmServer() {
     return `
       <details class="setup-card"${index === 0 ? " open" : ""}>
         <summary class="panel-header">
-          <span class="server-node-name">${escHtml(host.spoke_name || host.spoke_id || "Spoke")}</span>
+          <span class="server-node-name">${escHtml(spokeDisplayName(host, "Spoke"))}</span>
           <span class="stat-pill">${host.spoke_online ? "Online" : "Offline"}</span>
           <span class="stat-pill">${escHtml(String(host.vm_count || 0))} VMs</span>
           <span class="stat-pill">${escHtml(String(host.usb_count || 0))} USB</span>
@@ -8600,7 +8644,7 @@ function renderHubApiServer() {
         return `
           <details class="setup-card"${row.spoke_online ? " open" : ""}>
             <summary class="panel-header">
-              <span class="server-node-name">${escHtml(row.spoke_name || row.spoke_id || "Spoke")}</span>
+              <span class="server-node-name">${escHtml(spokeDisplayName(row, "Spoke"))}</span>
               <span class="site-status-pill ${pillClass}">${escHtml(state || "unknown")}</span>
               <span class="stat-pill">${escHtml(health.version || "—")}</span>
               <span class="stat-pill">${serviceCount} services</span>
@@ -8638,7 +8682,7 @@ function renderHubCentral() {
     const pillClass = state === "connected" ? "online" : state === "offline" ? "offline" : "pending";
     return `
       <tr>
-        <td><strong>${escHtml(item.spoke_name || item.spoke_id || "Spoke")}</strong></td>
+        <td><strong>${escHtml(spokeDisplayName(item, "Spoke"))}</strong></td>
         <td><span class="site-status-pill ${pillClass}">${escHtml(state)}</span></td>
         <td>${siteCount}</td>
         <td>${escHtml(item.spoke_online ? "Online" : "Offline")}</td>

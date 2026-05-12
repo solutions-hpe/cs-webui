@@ -3516,8 +3516,22 @@ function spokeAcmeBadgeClass(daysRemaining) {
 
 function toggleSpokeAcmeDnsSection() {
   const provider = document.getElementById('spoke-acme-dns-provider')?.value || 'cloudflare';
-  document.getElementById('spoke-acme-cloudflare-fields')?.classList.toggle('hidden', provider !== 'cloudflare');
-  document.getElementById('spoke-acme-he-fields')?.classList.toggle('hidden', provider !== 'hurricane_electric');
+  const allFields = ['cloudflare', 'he', 'godaddy', 'do', 'porkbun', 'gcloud', 'dnsimple', 'azure', 'route53', 'namecheap'];
+  allFields.forEach((p) => document.getElementById(`spoke-acme-${p}-fields`)?.classList.add('hidden'));
+  const map = {
+    cloudflare: 'spoke-acme-cloudflare-fields',
+    hurricane_electric: 'spoke-acme-he-fields',
+    godaddy: 'spoke-acme-godaddy-fields',
+    digitalocean: 'spoke-acme-do-fields',
+    porkbun: 'spoke-acme-porkbun-fields',
+    gcloud: 'spoke-acme-gcloud-fields',
+    dnsimple: 'spoke-acme-dnsimple-fields',
+    azure_dns: 'spoke-acme-azure-fields',
+    route53: 'spoke-acme-route53-fields',
+    namecheap: 'spoke-acme-namecheap-fields',
+  };
+  const target = map[provider];
+  if (target) document.getElementById(target)?.classList.remove('hidden');
 }
 
 function renderSpokeAcmeStatus(certInfo = {}, cfg = {}) {
@@ -3543,6 +3557,8 @@ function renderSpokeAcmeStatus(certInfo = {}, cfg = {}) {
 
 async function loadSpokeAcmeSettings() {
   const data = await requestJson('/api/acme');
+  const creds = data.dns_credentials || {};
+  const configured = data.dns_credentials_configured || {};
   const setValue = (id, value) => {
     const el = document.getElementById(id);
     if (el) el.value = value || '';
@@ -3551,23 +3567,38 @@ async function loadSpokeAcmeSettings() {
   setValue('spoke-acme-email', data.email || '');
   setValue('spoke-acme-ca', data.ca || 'letsencrypt');
   setValue('spoke-acme-dns-provider', data.dns_provider || 'cloudflare');
+  setValue('spoke-acme-gcloud-sa-json', configured.gcloud_service_account_json || creds.gcloud_service_account_json || '');
+  setValue('spoke-acme-gcloud-zone', creds.gcloud_zone_name || '');
+  setValue('spoke-acme-dnsimple-account-id', creds.dnsimple_account_id || '');
+  setValue('spoke-acme-azure-tenant', creds.azure_tenant_id || '');
+  setValue('spoke-acme-azure-client-id', creds.azure_client_id || '');
+  setValue('spoke-acme-azure-sub', creds.azure_subscription_id || '');
+  setValue('spoke-acme-azure-rg', creds.azure_resource_group || '');
+  setValue('spoke-acme-azure-zone', creds.azure_zone_name || '');
+  setValue('spoke-acme-r53-key', creds.route53_access_key || '');
+  setValue('spoke-acme-r53-zone-id', creds.route53_zone_id || '');
+  setValue('spoke-acme-nc-user', creds.namecheap_username || '');
+  setValue('spoke-acme-nc-ip', creds.namecheap_client_ip || '');
   const enabled = document.getElementById('spoke-acme-enabled');
   if (enabled) enabled.checked = !!data.enabled;
   const tlsEnabled = document.getElementById('spoke-tls-enabled');
   if (tlsEnabled) tlsEnabled.checked = data.spoke_tls === 'on';
-  const token = document.getElementById('spoke-acme-cf-token');
-  const heKey = document.getElementById('spoke-acme-he-ddns-key');
-  setSecretInputConfigured(token, isConfiguredSecretValue(data.cf_api_token_set ?? data.dns_credentials_configured?.cf_api_token ?? data.dns_credentials?.cf_api_token));
-  setSecretInputConfigured(heKey, isConfiguredSecretValue(data.he_ddns_key_set ?? data.dns_credentials_configured?.he_ddns_key ?? data.dns_credentials?.he_ddns_key));
+  setSecretInputConfigured(document.getElementById('spoke-acme-cf-token'), isConfiguredSecretValue(data.cf_api_token_set ?? configured.cf_api_token ?? creds.cf_api_token));
+  setSecretInputConfigured(document.getElementById('spoke-acme-he-ddns-key'), isConfiguredSecretValue(data.he_ddns_key_set ?? configured.he_ddns_key ?? creds.he_ddns_key));
+  setSecretInputConfigured(document.getElementById('spoke-acme-godaddy-key'), isConfiguredSecretValue(configured.godaddy_api_key ?? creds.godaddy_api_key));
+  setSecretInputConfigured(document.getElementById('spoke-acme-godaddy-secret'), isConfiguredSecretValue(configured.godaddy_api_secret ?? creds.godaddy_api_secret));
+  setSecretInputConfigured(document.getElementById('spoke-acme-do-token'), isConfiguredSecretValue(configured.do_token ?? creds.do_token));
+  setSecretInputConfigured(document.getElementById('spoke-acme-porkbun-key'), isConfiguredSecretValue(configured.porkbun_api_key ?? creds.porkbun_api_key));
+  setSecretInputConfigured(document.getElementById('spoke-acme-porkbun-secret'), isConfiguredSecretValue(configured.porkbun_secret_key ?? creds.porkbun_secret_key));
+  setSecretInputConfigured(document.getElementById('spoke-acme-dnsimple-token'), isConfiguredSecretValue(configured.dnsimple_token ?? creds.dnsimple_token));
+  setSecretInputConfigured(document.getElementById('spoke-acme-azure-client-secret'), isConfiguredSecretValue(configured.azure_client_secret ?? creds.azure_client_secret));
+  setSecretInputConfigured(document.getElementById('spoke-acme-r53-secret'), isConfiguredSecretValue(configured.route53_secret_key ?? creds.route53_secret_key));
+  setSecretInputConfigured(document.getElementById('spoke-acme-nc-key'), isConfiguredSecretValue(configured.namecheap_api_key ?? creds.namecheap_api_key));
   toggleSpokeAcmeDnsSection();
   renderSpokeAcmeStatus(data.cert_info || {}, data);
 }
 
 async function saveSpokeAcmeConfig() {
-  const cfTokenInput = document.getElementById('spoke-acme-cf-token');
-  const heKeyInput = document.getElementById('spoke-acme-he-ddns-key');
-  const cfToken = getSecretInputPayload(cfTokenInput);
-  const heKey = getSecretInputPayload(heKeyInput);
   const payload = {
     enabled: !!document.getElementById('spoke-acme-enabled')?.checked,
     domain: document.getElementById('spoke-acme-domain')?.value.trim() || '',
@@ -3578,8 +3609,37 @@ async function saveSpokeAcmeConfig() {
     dns_credentials: {},
     spoke_tls: document.getElementById('spoke-tls-enabled')?.checked ? 'on' : 'off'
   };
-  if (cfToken.include) payload.dns_credentials.cf_api_token = cfToken.value;
-  if (heKey.include) payload.dns_credentials.he_ddns_key = heKey.value;
+  const addSecret = (key, id) => {
+    const secret = getSecretInputPayload(document.getElementById(id));
+    if (secret.include) payload.dns_credentials[key] = secret.value;
+  };
+  const addValue = (key, id) => {
+    const value = document.getElementById(id)?.value.trim();
+    if (value) payload.dns_credentials[key] = value;
+  };
+  addSecret('cf_api_token', 'spoke-acme-cf-token');
+  addSecret('he_ddns_key', 'spoke-acme-he-ddns-key');
+  addSecret('godaddy_api_key', 'spoke-acme-godaddy-key');
+  addSecret('godaddy_api_secret', 'spoke-acme-godaddy-secret');
+  addSecret('do_token', 'spoke-acme-do-token');
+  addSecret('porkbun_api_key', 'spoke-acme-porkbun-key');
+  addSecret('porkbun_secret_key', 'spoke-acme-porkbun-secret');
+  addValue('gcloud_service_account_json', 'spoke-acme-gcloud-sa-json');
+  addValue('gcloud_zone_name', 'spoke-acme-gcloud-zone');
+  addSecret('dnsimple_token', 'spoke-acme-dnsimple-token');
+  addValue('dnsimple_account_id', 'spoke-acme-dnsimple-account-id');
+  addValue('azure_tenant_id', 'spoke-acme-azure-tenant');
+  addValue('azure_client_id', 'spoke-acme-azure-client-id');
+  addSecret('azure_client_secret', 'spoke-acme-azure-client-secret');
+  addValue('azure_subscription_id', 'spoke-acme-azure-sub');
+  addValue('azure_resource_group', 'spoke-acme-azure-rg');
+  addValue('azure_zone_name', 'spoke-acme-azure-zone');
+  addValue('route53_access_key', 'spoke-acme-r53-key');
+  addSecret('route53_secret_key', 'spoke-acme-r53-secret');
+  addValue('route53_zone_id', 'spoke-acme-r53-zone-id');
+  addSecret('namecheap_api_key', 'spoke-acme-nc-key');
+  addValue('namecheap_username', 'spoke-acme-nc-user');
+  addValue('namecheap_client_ip', 'spoke-acme-nc-ip');
   try {
     const data = await requestJson('/api/acme', {
       method: 'POST',
@@ -3592,8 +3652,19 @@ async function saveSpokeAcmeConfig() {
       msg.className = 'form-msg msg-ok';
     }
     renderSpokeAcmeStatus(data.cert_info || {}, data);
-    setSecretInputConfigured(cfTokenInput, isConfiguredSecretValue(data.cf_api_token_set ?? data.dns_credentials_configured?.cf_api_token ?? data.dns_credentials?.cf_api_token));
-    setSecretInputConfigured(heKeyInput, isConfiguredSecretValue(data.he_ddns_key_set ?? data.dns_credentials_configured?.he_ddns_key ?? data.dns_credentials?.he_ddns_key));
+    const creds = data.dns_credentials || {};
+    const configured = data.dns_credentials_configured || {};
+    setSecretInputConfigured(document.getElementById('spoke-acme-cf-token'), isConfiguredSecretValue(data.cf_api_token_set ?? configured.cf_api_token ?? creds.cf_api_token));
+    setSecretInputConfigured(document.getElementById('spoke-acme-he-ddns-key'), isConfiguredSecretValue(data.he_ddns_key_set ?? configured.he_ddns_key ?? creds.he_ddns_key));
+    setSecretInputConfigured(document.getElementById('spoke-acme-godaddy-key'), isConfiguredSecretValue(configured.godaddy_api_key ?? creds.godaddy_api_key));
+    setSecretInputConfigured(document.getElementById('spoke-acme-godaddy-secret'), isConfiguredSecretValue(configured.godaddy_api_secret ?? creds.godaddy_api_secret));
+    setSecretInputConfigured(document.getElementById('spoke-acme-do-token'), isConfiguredSecretValue(configured.do_token ?? creds.do_token));
+    setSecretInputConfigured(document.getElementById('spoke-acme-porkbun-key'), isConfiguredSecretValue(configured.porkbun_api_key ?? creds.porkbun_api_key));
+    setSecretInputConfigured(document.getElementById('spoke-acme-porkbun-secret'), isConfiguredSecretValue(configured.porkbun_secret_key ?? creds.porkbun_secret_key));
+    setSecretInputConfigured(document.getElementById('spoke-acme-dnsimple-token'), isConfiguredSecretValue(configured.dnsimple_token ?? creds.dnsimple_token));
+    setSecretInputConfigured(document.getElementById('spoke-acme-azure-client-secret'), isConfiguredSecretValue(configured.azure_client_secret ?? creds.azure_client_secret));
+    setSecretInputConfigured(document.getElementById('spoke-acme-r53-secret'), isConfiguredSecretValue(configured.route53_secret_key ?? creds.route53_secret_key));
+    setSecretInputConfigured(document.getElementById('spoke-acme-nc-key'), isConfiguredSecretValue(configured.namecheap_api_key ?? creds.namecheap_api_key));
   } catch (error) {
     const msg = document.getElementById('spoke-acme-msg');
     if (msg) {
@@ -9136,8 +9207,22 @@ function acmeBadgeClass(daysRemaining) {
 
 function toggleAcmeDnsSection() {
   const provider = $("#acme-dns-provider")?.value || "cloudflare";
-  $("#acme-cloudflare-fields")?.classList.toggle("hidden", provider !== "cloudflare");
-  $("#acme-he-fields")?.classList.toggle("hidden", provider !== "hurricane_electric");
+  const allFields = ["cloudflare", "he", "godaddy", "do", "porkbun", "gcloud", "dnsimple", "azure", "route53", "namecheap"];
+  allFields.forEach((p) => $("#acme-" + p + "-fields")?.classList.add("hidden"));
+  const map = {
+    cloudflare: "acme-cloudflare-fields",
+    hurricane_electric: "acme-he-fields",
+    godaddy: "acme-godaddy-fields",
+    digitalocean: "acme-do-fields",
+    porkbun: "acme-porkbun-fields",
+    gcloud: "acme-gcloud-fields",
+    dnsimple: "acme-dnsimple-fields",
+    azure_dns: "acme-azure-fields",
+    route53: "acme-route53-fields",
+    namecheap: "acme-namecheap-fields",
+  };
+  const target = map[provider];
+  if (target) $("#" + target)?.classList.remove("hidden");
 }
 
 let hubAcmeSettings = null;
@@ -9278,16 +9363,43 @@ async function loadAcmeSettings() {
   ]);
   if (!settingsRes || !settingsRes.ok) return;
   const data = await settingsRes.json();
+  const creds = data.dns_credentials || {};
+  const configured = data.dns_credentials_configured || {};
+  const setValue = (id, value) => {
+    const el = $(id);
+    if (el) el.value = value || "";
+  };
   hubAcmeSettings = data;
   hubAcmeStatus = statusRes?.ok ? await statusRes.json() : {};
-  $("#acme-domain") && ($("#acme-domain").value = data.domain || "");
-  $("#acme-email") && ($("#acme-email").value = data.email || "");
-  $("#acme-ca") && ($("#acme-ca").value = data.ca || "letsencrypt");
-  $("#acme-challenge") && ($("#acme-challenge").value = "dns-01");
-  $("#acme-dns-provider") && ($("#acme-dns-provider").value = data.dns_provider || "cloudflare");
+  setValue("#acme-domain", data.domain || "");
+  setValue("#acme-email", data.email || "");
+  setValue("#acme-ca", data.ca || "letsencrypt");
+  setValue("#acme-challenge", "dns-01");
+  setValue("#acme-dns-provider", data.dns_provider || "cloudflare");
+  setValue("#acme-gcloud-sa-json", configured.gcloud_service_account_json || creds.gcloud_service_account_json || "");
+  setValue("#acme-gcloud-zone", creds.gcloud_zone_name || "");
+  setValue("#acme-dnsimple-account-id", creds.dnsimple_account_id || "");
+  setValue("#acme-azure-tenant", creds.azure_tenant_id || "");
+  setValue("#acme-azure-client-id", creds.azure_client_id || "");
+  setValue("#acme-azure-sub", creds.azure_subscription_id || "");
+  setValue("#acme-azure-rg", creds.azure_resource_group || "");
+  setValue("#acme-azure-zone", creds.azure_zone_name || "");
+  setValue("#acme-r53-key", creds.route53_access_key || "");
+  setValue("#acme-r53-zone-id", creds.route53_zone_id || "");
+  setValue("#acme-nc-user", creds.namecheap_username || "");
+  setValue("#acme-nc-ip", creds.namecheap_client_ip || "");
   $("#acme-enabled") && ($("#acme-enabled").checked = Boolean(data.enabled));
-  setSecretInputConfigured($("#acme-cf-token"), isConfiguredSecretValue(data.dns_credentials_configured?.cf_api_token ?? data.dns_credentials?.cf_api_token));
-  setSecretInputConfigured($("#acme-he-ddns-key"), isConfiguredSecretValue(data.dns_credentials_configured?.he_ddns_key ?? data.dns_credentials?.he_ddns_key));
+  setSecretInputConfigured($("#acme-cf-token"), isConfiguredSecretValue(data.dns_credentials_configured?.cf_api_token ?? creds.cf_api_token));
+  setSecretInputConfigured($("#acme-he-ddns-key"), isConfiguredSecretValue(data.dns_credentials_configured?.he_ddns_key ?? creds.he_ddns_key));
+  setSecretInputConfigured($("#acme-godaddy-key"), isConfiguredSecretValue(configured.godaddy_api_key ?? creds.godaddy_api_key));
+  setSecretInputConfigured($("#acme-godaddy-secret"), isConfiguredSecretValue(configured.godaddy_api_secret ?? creds.godaddy_api_secret));
+  setSecretInputConfigured($("#acme-do-token"), isConfiguredSecretValue(configured.do_token ?? creds.do_token));
+  setSecretInputConfigured($("#acme-porkbun-key"), isConfiguredSecretValue(configured.porkbun_api_key ?? creds.porkbun_api_key));
+  setSecretInputConfigured($("#acme-porkbun-secret"), isConfiguredSecretValue(configured.porkbun_secret_key ?? creds.porkbun_secret_key));
+  setSecretInputConfigured($("#acme-dnsimple-token"), isConfiguredSecretValue(configured.dnsimple_token ?? creds.dnsimple_token));
+  setSecretInputConfigured($("#acme-azure-client-secret"), isConfiguredSecretValue(configured.azure_client_secret ?? creds.azure_client_secret));
+  setSecretInputConfigured($("#acme-r53-secret"), isConfiguredSecretValue(configured.route53_secret_key ?? creds.route53_secret_key));
+  setSecretInputConfigured($("#acme-nc-key"), isConfiguredSecretValue(configured.namecheap_api_key ?? creds.namecheap_api_key));
   toggleAcmeDnsSection();
   updateHubAcmeDisplay();
   if (hubAcmeStatus?.running) startHubAcmeStatusPolling();
@@ -9304,10 +9416,37 @@ async function saveAcmeConfig() {
     dns_provider: $("#acme-dns-provider")?.value || "",
     dns_credentials: {},
   };
-  const acmeCfToken = getSecretInputPayload($("#acme-cf-token"));
-  if (acmeCfToken.include) payload.dns_credentials.cf_api_token = acmeCfToken.value;
-  const acmeHeKey = getSecretInputPayload($("#acme-he-ddns-key"));
-  if (acmeHeKey.include) payload.dns_credentials.he_ddns_key = acmeHeKey.value;
+  const addSecret = (key, id) => {
+    const secret = getSecretInputPayload($(id));
+    if (secret.include) payload.dns_credentials[key] = secret.value;
+  };
+  const addValue = (key, id) => {
+    const value = $(id)?.value.trim();
+    if (value) payload.dns_credentials[key] = value;
+  };
+  addSecret("cf_api_token", "#acme-cf-token");
+  addSecret("he_ddns_key", "#acme-he-ddns-key");
+  addSecret("godaddy_api_key", "#acme-godaddy-key");
+  addSecret("godaddy_api_secret", "#acme-godaddy-secret");
+  addSecret("do_token", "#acme-do-token");
+  addSecret("porkbun_api_key", "#acme-porkbun-key");
+  addSecret("porkbun_secret_key", "#acme-porkbun-secret");
+  addValue("gcloud_service_account_json", "#acme-gcloud-sa-json");
+  addValue("gcloud_zone_name", "#acme-gcloud-zone");
+  addSecret("dnsimple_token", "#acme-dnsimple-token");
+  addValue("dnsimple_account_id", "#acme-dnsimple-account-id");
+  addValue("azure_tenant_id", "#acme-azure-tenant");
+  addValue("azure_client_id", "#acme-azure-client-id");
+  addSecret("azure_client_secret", "#acme-azure-client-secret");
+  addValue("azure_subscription_id", "#acme-azure-sub");
+  addValue("azure_resource_group", "#acme-azure-rg");
+  addValue("azure_zone_name", "#acme-azure-zone");
+  addValue("route53_access_key", "#acme-r53-key");
+  addSecret("route53_secret_key", "#acme-r53-secret");
+  addValue("route53_zone_id", "#acme-r53-zone-id");
+  addSecret("namecheap_api_key", "#acme-nc-key");
+  addValue("namecheap_username", "#acme-nc-user");
+  addValue("namecheap_client_ip", "#acme-nc-ip");
 
   const res = await apiFetch("/api/settings/acme", { method: "POST", body: payload });
   if (!res || !res.ok) {
@@ -9316,11 +9455,22 @@ async function saveAcmeConfig() {
     return;
   }
   const data = await res.json();
+  const creds = data.dns_credentials || {};
+  const configured = data.dns_credentials_configured || {};
   hubAcmeSettings = data;
   setFormMessage("acme-msg", "TLS certificate settings saved.", true);
   updateHubAcmeDisplay();
-  setSecretInputConfigured($("#acme-cf-token"), isConfiguredSecretValue(data.dns_credentials_configured?.cf_api_token ?? data.dns_credentials?.cf_api_token));
-  setSecretInputConfigured($("#acme-he-ddns-key"), isConfiguredSecretValue(data.dns_credentials_configured?.he_ddns_key ?? data.dns_credentials?.he_ddns_key));
+  setSecretInputConfigured($("#acme-cf-token"), isConfiguredSecretValue(data.dns_credentials_configured?.cf_api_token ?? creds.cf_api_token));
+  setSecretInputConfigured($("#acme-he-ddns-key"), isConfiguredSecretValue(data.dns_credentials_configured?.he_ddns_key ?? creds.he_ddns_key));
+  setSecretInputConfigured($("#acme-godaddy-key"), isConfiguredSecretValue(configured.godaddy_api_key ?? creds.godaddy_api_key));
+  setSecretInputConfigured($("#acme-godaddy-secret"), isConfiguredSecretValue(configured.godaddy_api_secret ?? creds.godaddy_api_secret));
+  setSecretInputConfigured($("#acme-do-token"), isConfiguredSecretValue(configured.do_token ?? creds.do_token));
+  setSecretInputConfigured($("#acme-porkbun-key"), isConfiguredSecretValue(configured.porkbun_api_key ?? creds.porkbun_api_key));
+  setSecretInputConfigured($("#acme-porkbun-secret"), isConfiguredSecretValue(configured.porkbun_secret_key ?? creds.porkbun_secret_key));
+  setSecretInputConfigured($("#acme-dnsimple-token"), isConfiguredSecretValue(configured.dnsimple_token ?? creds.dnsimple_token));
+  setSecretInputConfigured($("#acme-azure-client-secret"), isConfiguredSecretValue(configured.azure_client_secret ?? creds.azure_client_secret));
+  setSecretInputConfigured($("#acme-r53-secret"), isConfiguredSecretValue(configured.route53_secret_key ?? creds.route53_secret_key));
+  setSecretInputConfigured($("#acme-nc-key"), isConfiguredSecretValue(configured.namecheap_api_key ?? creds.namecheap_api_key));
 }
 
 async function requestAcmeCert() {

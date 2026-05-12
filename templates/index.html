@@ -469,8 +469,14 @@
                   <select id="acme-dns-provider" class="form-input">
                     <option value="cloudflare">Cloudflare</option>
                     <option value="hurricane_electric">Hurricane Electric DNS</option>
-                    <option value="azure_dns">Azure DNS (coming soon)</option>
-                    <option value="route53">AWS Route53 (coming soon)</option>
+                    <option value="godaddy">GoDaddy</option>
+                    <option value="digitalocean">DigitalOcean</option>
+                    <option value="porkbun">Porkbun</option>
+                    <option value="gcloud">Google Cloud DNS</option>
+                    <option value="dnsimple">DNSimple</option>
+                    <option value="azure_dns">Azure DNS</option>
+                    <option value="route53">AWS Route53</option>
+                    <option value="namecheap">Namecheap</option>
                   </select>
                 </div>
                 <div id="acme-cloudflare-fields">
@@ -484,6 +490,116 @@
                     <label class="form-label">HE DDNS Key</label>
                     <input id="acme-he-ddns-key" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
                     <p class="form-hint">In dns.he.net: create a TXT record for <code>_acme-challenge.yourdomain</code>, enable DDNS on it, then paste the generated key here.</p>
+                  </div>
+                </div>
+                <!-- GoDaddy -->
+                <div id="acme-godaddy-fields" class="hidden">
+                  <div class="form-group">
+                    <label class="form-label">GoDaddy API Key</label>
+                    <input id="acme-godaddy-key" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">GoDaddy API Secret</label>
+                    <input id="acme-godaddy-secret" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
+                  </div>
+                </div>
+                <!-- DigitalOcean -->
+                <div id="acme-do-fields" class="hidden">
+                  <div class="form-group">
+                    <label class="form-label">DigitalOcean API Token</label>
+                    <input id="acme-do-token" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
+                  </div>
+                </div>
+                <!-- Porkbun -->
+                <div id="acme-porkbun-fields" class="hidden">
+                  <div class="form-group">
+                    <label class="form-label">Porkbun API Key</label>
+                    <input id="acme-porkbun-key" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Porkbun Secret Key</label>
+                    <input id="acme-porkbun-secret" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
+                  </div>
+                </div>
+                <!-- Google Cloud DNS -->
+                <div id="acme-gcloud-fields" class="hidden">
+                  <div class="form-group">
+                    <label class="form-label">Service Account JSON</label>
+                    <textarea id="acme-gcloud-sa-json" class="form-input" rows="4" placeholder="Paste full service account JSON here"></textarea>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Cloud DNS Zone Name</label>
+                    <input id="acme-gcloud-zone" type="text" class="form-input" placeholder="my-zone-name">
+                    <p class="form-hint">The managed zone name in Cloud DNS (not the domain name).</p>
+                  </div>
+                </div>
+                <!-- DNSimple -->
+                <div id="acme-dnsimple-fields" class="hidden">
+                  <div class="form-group">
+                    <label class="form-label">DNSimple API Token</label>
+                    <input id="acme-dnsimple-token" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">DNSimple Account ID</label>
+                    <input id="acme-dnsimple-account-id" type="text" class="form-input" placeholder="12345">
+                  </div>
+                </div>
+                <!-- Azure DNS -->
+                <div id="acme-azure-fields" class="hidden">
+                  <div class="form-group">
+                    <label class="form-label">Tenant ID</label>
+                    <input id="acme-azure-tenant" type="text" class="form-input" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Client ID</label>
+                    <input id="acme-azure-client-id" type="text" class="form-input" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Client Secret</label>
+                    <input id="acme-azure-client-secret" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Subscription ID</label>
+                    <input id="acme-azure-sub" type="text" class="form-input" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Resource Group</label>
+                    <input id="acme-azure-rg" type="text" class="form-input" placeholder="my-resource-group">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">DNS Zone Name</label>
+                    <input id="acme-azure-zone" type="text" class="form-input" placeholder="example.com">
+                  </div>
+                </div>
+                <!-- Route53 -->
+                <div id="acme-route53-fields" class="hidden">
+                  <div class="form-group">
+                    <label class="form-label">AWS Access Key ID</label>
+                    <input id="acme-r53-key" type="text" class="form-input" placeholder="AKIAIOSFODNN7EXAMPLE">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">AWS Secret Access Key</label>
+                    <input id="acme-r53-secret" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Hosted Zone ID</label>
+                    <input id="acme-r53-zone-id" type="text" class="form-input" placeholder="Z1D633PJN98FT9">
+                  </div>
+                </div>
+                <!-- Namecheap -->
+                <div id="acme-namecheap-fields" class="hidden">
+                  <div class="form-group">
+                    <label class="form-label">API Key</label>
+                    <input id="acme-nc-key" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Username</label>
+                    <input id="acme-nc-user" type="text" class="form-input" placeholder="your_namecheap_username">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Client IP</label>
+                    <input id="acme-nc-ip" type="text" class="form-input" placeholder="Auto-detect if blank">
+                    <p class="form-hint">Must be whitelisted in your Namecheap API settings.</p>
                   </div>
                 </div>
               </div>
@@ -2071,8 +2187,14 @@
                   <select id="spoke-acme-dns-provider" class="form-input">
                     <option value="cloudflare">Cloudflare</option>
                     <option value="hurricane_electric">Hurricane Electric DNS</option>
-                    <option value="azure_dns">Azure DNS (coming soon)</option>
-                    <option value="route53">AWS Route53 (coming soon)</option>
+                    <option value="godaddy">GoDaddy</option>
+                    <option value="digitalocean">DigitalOcean</option>
+                    <option value="porkbun">Porkbun</option>
+                    <option value="gcloud">Google Cloud DNS</option>
+                    <option value="dnsimple">DNSimple</option>
+                    <option value="azure_dns">Azure DNS</option>
+                    <option value="route53">AWS Route53</option>
+                    <option value="namecheap">Namecheap</option>
                   </select>
                 </div>
                 <div id="spoke-acme-cloudflare-fields" class="form-group">
@@ -2084,6 +2206,116 @@
                     <label class="form-label">HE DDNS Key</label>
                     <input id="spoke-acme-he-ddns-key" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
                     <p class="form-hint">In dns.he.net: create a TXT record for <code>_acme-challenge.yourdomain</code>, enable DDNS on it, then paste the generated key here.</p>
+                  </div>
+                </div>
+                <!-- GoDaddy -->
+                <div id="spoke-acme-godaddy-fields" class="hidden">
+                  <div class="form-group">
+                    <label class="form-label">GoDaddy API Key</label>
+                    <input id="spoke-acme-godaddy-key" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">GoDaddy API Secret</label>
+                    <input id="spoke-acme-godaddy-secret" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
+                  </div>
+                </div>
+                <!-- DigitalOcean -->
+                <div id="spoke-acme-do-fields" class="hidden">
+                  <div class="form-group">
+                    <label class="form-label">DigitalOcean API Token</label>
+                    <input id="spoke-acme-do-token" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
+                  </div>
+                </div>
+                <!-- Porkbun -->
+                <div id="spoke-acme-porkbun-fields" class="hidden">
+                  <div class="form-group">
+                    <label class="form-label">Porkbun API Key</label>
+                    <input id="spoke-acme-porkbun-key" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Porkbun Secret Key</label>
+                    <input id="spoke-acme-porkbun-secret" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
+                  </div>
+                </div>
+                <!-- Google Cloud DNS -->
+                <div id="spoke-acme-gcloud-fields" class="hidden">
+                  <div class="form-group">
+                    <label class="form-label">Service Account JSON</label>
+                    <textarea id="spoke-acme-gcloud-sa-json" class="form-input" rows="4" placeholder="Paste full service account JSON here"></textarea>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Cloud DNS Zone Name</label>
+                    <input id="spoke-acme-gcloud-zone" type="text" class="form-input" placeholder="my-zone-name">
+                    <p class="form-hint">The managed zone name in Cloud DNS (not the domain name).</p>
+                  </div>
+                </div>
+                <!-- DNSimple -->
+                <div id="spoke-acme-dnsimple-fields" class="hidden">
+                  <div class="form-group">
+                    <label class="form-label">DNSimple API Token</label>
+                    <input id="spoke-acme-dnsimple-token" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">DNSimple Account ID</label>
+                    <input id="spoke-acme-dnsimple-account-id" type="text" class="form-input" placeholder="12345">
+                  </div>
+                </div>
+                <!-- Azure DNS -->
+                <div id="spoke-acme-azure-fields" class="hidden">
+                  <div class="form-group">
+                    <label class="form-label">Tenant ID</label>
+                    <input id="spoke-acme-azure-tenant" type="text" class="form-input" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Client ID</label>
+                    <input id="spoke-acme-azure-client-id" type="text" class="form-input" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Client Secret</label>
+                    <input id="spoke-acme-azure-client-secret" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Subscription ID</label>
+                    <input id="spoke-acme-azure-sub" type="text" class="form-input" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Resource Group</label>
+                    <input id="spoke-acme-azure-rg" type="text" class="form-input" placeholder="my-resource-group">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">DNS Zone Name</label>
+                    <input id="spoke-acme-azure-zone" type="text" class="form-input" placeholder="example.com">
+                  </div>
+                </div>
+                <!-- Route53 -->
+                <div id="spoke-acme-route53-fields" class="hidden">
+                  <div class="form-group">
+                    <label class="form-label">AWS Access Key ID</label>
+                    <input id="spoke-acme-r53-key" type="text" class="form-input" placeholder="AKIAIOSFODNN7EXAMPLE">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">AWS Secret Access Key</label>
+                    <input id="spoke-acme-r53-secret" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Hosted Zone ID</label>
+                    <input id="spoke-acme-r53-zone-id" type="text" class="form-input" placeholder="Z1D633PJN98FT9">
+                  </div>
+                </div>
+                <!-- Namecheap -->
+                <div id="spoke-acme-namecheap-fields" class="hidden">
+                  <div class="form-group">
+                    <label class="form-label">API Key</label>
+                    <input id="spoke-acme-nc-key" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Username</label>
+                    <input id="spoke-acme-nc-user" type="text" class="form-input" placeholder="your_namecheap_username">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Client IP</label>
+                    <input id="spoke-acme-nc-ip" type="text" class="form-input" placeholder="Auto-detect if blank">
+                    <p class="form-hint">Must be whitelisted in your Namecheap API settings.</p>
                   </div>
                 </div>
               </div>

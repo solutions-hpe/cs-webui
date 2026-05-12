@@ -1105,13 +1105,39 @@ function proxmoxHostnameMatches(left, right) {
 function syncAgentUpdateButtonState(data = latestProxmoxData) {
   const btn = document.getElementById('agent-update-btn');
   if (!btn || btn.dataset.busy === 'true') return;
+  const hasToken = Boolean(currentSettings.github_token_configured);
   const host = String(data?.node?.hostname || '').trim();
   const approved = Array.isArray(data?.approved_proxmox) ? data.approved_proxmox : [];
-  const ready = Boolean(host) && approved.some((entry) => proxmoxHostnameMatches(entry?.hostname, host));
+  const hostReady = Boolean(host) && approved.some((entry) => proxmoxHostnameMatches(entry?.hostname, host));
+  const ready = hasToken && hostReady;
   btn.disabled = !ready;
-  btn.title = ready
-    ? 'Reinstall the Proxmox host agent from GitHub and restart it'
-    : 'Approve and connect the Proxmox host before updating the agent';
+  btn.title = !hasToken
+    ? 'GitHub token required — configure it in the GitHub settings tab'
+    : hostReady
+      ? 'Reinstall the Proxmox host agent from GitHub and restart it'
+      : 'Approve and connect the Proxmox host before updating the agent';
+}
+
+function syncGithubGatedButtons() {
+  const hasToken = Boolean(currentSettings.github_token_configured);
+  // Update All button
+  const updateAllBtn = document.getElementById('update-all-btn');
+  if (updateAllBtn && updateAllBtn.dataset.busy !== 'true') {
+    updateAllBtn.disabled = !hasToken;
+    updateAllBtn.title = hasToken
+      ? 'Update all Proxmox agents then the WebUI server'
+      : 'GitHub token required — configure it in the GitHub settings tab';
+  }
+  // Repo Sync button (hub command to spoke)
+  const repoSyncBtn = document.querySelector('[onclick*="repo_sync"]');
+  if (repoSyncBtn) {
+    repoSyncBtn.disabled = !hasToken;
+    repoSyncBtn.title = hasToken
+      ? 'Trigger a repo sync on this spoke'
+      : 'GitHub token required — configure it in the GitHub settings tab';
+  }
+  // Re-evaluate agent update button
+  syncAgentUpdateButtonState();
 }
 
 async function triggerAgentUpdate() {
@@ -1583,6 +1609,7 @@ function applySettingsToUI(s) {
   if (setupActiveBranch) setupActiveBranch.textContent = settings.repo_branch || '—';
   setSecretInputConfigured(githubTokenInput, settings.github_token_configured);
   if (githubTokenStatus) githubTokenStatus.textContent = settings.github_token_configured ? '✓ Token configured' : 'Not configured';
+  syncGithubGatedButtons();
   const centralApi = settings.central_api || defaultCentralApiSettings();
   setInputValueIfIdle(centralClassicUrlInput, centralApi.classic.url || '');
   setInputValueIfIdle(centralClassicUsernameInput, centralApi.classic.username || '');

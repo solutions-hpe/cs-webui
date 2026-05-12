@@ -6924,7 +6924,7 @@ function showToast(message, level = "ok") {
 function isOnline(lastSeenIso) {
   if (!lastSeenIso) return false;
   const ts = new Date(lastSeenIso).getTime();
-  return !Number.isNaN(ts) && Date.now() - ts < 120000;
+  return !Number.isNaN(ts) && Date.now() - ts < 300000;
 }
 
 function statusDot(online) {

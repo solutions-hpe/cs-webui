@@ -910,6 +910,7 @@
         <nav class="setup-subnav" role="tablist">
           <button class="setup-subtab server-subtab active" data-subtab="server-vms" role="tab">VMs</button>
           <button class="setup-subtab server-subtab" data-subtab="server-usb" role="tab">USB</button>
+          <button class="setup-subtab server-subtab" data-subtab="server-vh" role="tab">VirtualHere</button>
           <button class="setup-subtab server-subtab" data-subtab="server-commands" role="tab">Command Queue</button>
           <button class="setup-subtab server-subtab" data-subtab="server-node" role="tab">Details</button>
         </nav>
@@ -922,24 +923,33 @@
 
           <!-- Left: Fleet Reclone -->
           <div id="reclone-status-panel" class="setup-card vm-server-status-tile">
-            <div class="setup-card-header">
-              <span id="reclone-status-badge" class="badge badge-grey">Idle</span>
-              <button id="reclone-now-btn" class="btn btn-primary" onclick="triggerRecloneAll()">⟳ Reclone All Now</button>
-            </div>
-            <div id="reclone-progress-wrap" class="hidden">
-              <div class="reclone-meta">
-                <span id="reclone-type-label" class="badge badge-grey"></span>
-                <span id="reclone-current-vm" class="muted"></span>
-                <span id="reclone-eta" class="muted"></span>
+            <div class="autoprov-two-col">
+              <div class="autoprov-left">
+                <div class="setup-card-header" style="margin-bottom:8px;">
+                  <h2 style="font-size:1rem;margin:0;">Fleet Reclone</h2>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+                  <span id="reclone-status-badge" class="badge badge-grey">Idle</span>
+                  <button id="reclone-now-btn" class="btn btn-primary btn-small" onclick="triggerRecloneAll()">⟳ Reclone All Now</button>
+                </div>
+                <div id="reclone-progress-wrap" class="hidden">
+                  <div class="reclone-meta">
+                    <span id="reclone-type-label" class="badge badge-grey"></span>
+                    <span id="reclone-current-vm" class="muted"></span>
+                    <span id="reclone-eta" class="muted"></span>
+                  </div>
+                  <div class="progress-bar-wrap"><div id="reclone-progress-bar" class="progress-bar"></div></div>
+                  <div id="reclone-progress-label"></div>
+                </div>
+                <div id="reclone-last-run" class="reclone-last-run"></div>
               </div>
-              <div class="progress-bar-wrap"><div id="reclone-progress-bar" class="progress-bar"></div></div>
-              <div id="reclone-progress-label"></div>
-              <div id="reclone-vm-log" class="reclone-log"></div>
-            </div>
-            <div id="reclone-last-run" class="reclone-last-run"></div>
-            <div id="reclone-auto-recovery-section" class="hidden" style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px;">
-              <div class="reclone-section-title">↺ Auto-Recovery Log</div>
-              <div id="reclone-auto-recovery-log" class="reclone-log"></div>
+              <div class="autoprov-right">
+                <div id="reclone-vm-log" class="autoprov-live-list" aria-live="polite"></div>
+                <div id="reclone-auto-recovery-section" class="hidden" style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
+                  <div class="reclone-section-title">↺ Auto-Recovery Log</div>
+                  <div id="reclone-auto-recovery-log" class="autoprov-live-list"></div>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1104,6 +1114,26 @@
                   <tbody id="unknown-usb-tbody"></tbody>
                 </table>
             </div>
+          </div>
+        </div>
+
+        <!-- VirtualHere sub-tab -->
+        <div id="server-vh" class="setup-subpanel hidden">
+          <div class="setup-card setup-section-gap">
+            <div class="setup-card-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+              <div>
+                <h2>🔌 VirtualHere Devices</h2>
+                <div id="vh-stat-pills" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;"></div>
+              </div>
+            </div>
+            <div id="vh-device-list" style="margin-top:12px;"></div>
+          </div>
+          <div class="setup-card setup-section-gap" id="vh-physical-usb-card">
+            <div class="setup-card-header">
+              <h2>🖥 Physical USB on Host</h2>
+              <p>Devices currently detected on the Proxmox host via <code>lsusb</code>.</p>
+            </div>
+            <div id="vh-physical-usb-list"></div>
           </div>
         </div>
 

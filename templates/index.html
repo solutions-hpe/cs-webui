@@ -908,7 +908,6 @@
         <nav class="setup-subnav" role="tablist">
           <button class="setup-subtab server-subtab active" data-subtab="server-vms" role="tab">VMs</button>
           <button class="setup-subtab server-subtab" data-subtab="server-usb" role="tab">USB</button>
-          <button class="setup-subtab server-subtab" data-subtab="server-vh" role="tab">VirtualHere</button>
           <button class="setup-subtab server-subtab" data-subtab="server-commands" role="tab">Command Queue</button>
           <button class="setup-subtab server-subtab" data-subtab="server-node" role="tab">Details</button>
         </nav>
@@ -1103,26 +1102,6 @@
                   <tbody id="unknown-usb-tbody"></tbody>
                 </table>
             </div>
-          </div>
-        </div>
-
-        <!-- VirtualHere sub-tab -->
-        <div id="server-vh" class="setup-subpanel hidden">
-          <div class="setup-card setup-section-gap">
-            <div class="setup-card-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
-              <div>
-                <h2>🔌 VirtualHere Devices</h2>
-                <div id="vh-stat-pills" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;"></div>
-              </div>
-            </div>
-            <div id="vh-device-list" style="margin-top:12px;"></div>
-          </div>
-          <div class="setup-card setup-section-gap" id="vh-physical-usb-card">
-            <div class="setup-card-header">
-              <h2>🖥 Physical USB on Host</h2>
-              <p>Devices currently detected on the Proxmox host via <code>lsusb</code>.</p>
-            </div>
-            <div id="vh-physical-usb-list"></div>
           </div>
         </div>
 

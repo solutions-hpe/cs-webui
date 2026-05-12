@@ -55,7 +55,6 @@ def serialize_client(hostname: str, client: dict[str, Any]) -> dict[str, Any]:
         "iteration": client.get("iteration", 0),
         "connected_ssid": client.get("connected_ssid") or "",
         "gateway_reachable": bool(client.get("gateway_reachable", False)),
-        "vh_connected": bool(client.get("vh_connected", False)),
         "active_simulations": list(client.get("active_simulations", [])),
         "config": config,
         "effective_config": effective_config,

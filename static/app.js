@@ -188,7 +188,7 @@ let configLoaded = false;
 let centralTokenValid = null;
 let centralLastSyncedTs = null;
 let centralStatusInitialized = false;
-let latestProxmoxData = { vms: [], usb_state: [], unknown_usb: [], reclone_state: null, vh_devices: null };
+let latestProxmoxData = { vms: [], usb_state: [], unknown_usb: [], reclone_state: null };
 let latestRecloneState = null;
 let usbCountdownTimer = null;
 let activeVmCat = 'sim';   // 'sim' | 'other' | 'containers' | 'templates'
@@ -1217,7 +1217,6 @@ function renderServerTab(data) {
   }
 
   renderUsbSummary(latestProxmoxData);
-  renderVhDevices(latestProxmoxData);
   renderRecloneStatus(latestRecloneState || latestProxmoxData.reclone_state || {});
   renderAutoProvisionStatus();
 
@@ -1592,7 +1591,6 @@ function applySettingsToUI(s) {
   try { renderCentralOverview(); } catch (_) {}
   try { renderChecksList(); } catch (_) {} // Refresh sim tab whenever settings change (monitored checks may have changed)
   try { renderUsbSummary(latestProxmoxData); } catch (_) {}
-  try { renderVhDevices(latestProxmoxData); } catch (_) {}
   try { renderRecloneStatus(latestRecloneState || latestProxmoxData.reclone_state || {}); } catch (_) {}
   try { renderAutoProvisionStatus(); } catch (_) {}
   if (centralSiteDetailOpen) {
@@ -2489,79 +2487,6 @@ async function triggerRecloneAll() {
   }
 }
 window.triggerRecloneAll = triggerRecloneAll;
-
-function renderVhDevices(proxmoxData = latestProxmoxData) {
-  const pills = document.getElementById('vh-stat-pills');
-  const list  = document.getElementById('vh-device-list');
-  const physCard = document.getElementById('vh-physical-usb-card');
-  const physList = document.getElementById('vh-physical-usb-list');
-  if (!pills || !list) return;
-
-  const vh = proxmoxData?.vh_devices || {};
-  const devices      = Array.isArray(vh.devices) ? vh.devices : [];
-  const physicalUsb  = Array.isArray(vh.physical_usb) ? vh.physical_usb : [];
-  const svcActive    = vh.vh_service_active;
-  const connected    = vh.vh_connected;
-  const autoUseAll   = vh.auto_use_all;
-  const count        = vh.count ?? devices.length;
-  const inUse        = devices.filter(d => d.auto_use).length;
-  const available    = devices.filter(d => !d.auto_use).length;
-
-  // ── Status pills ──────────────────────────────────────────────────────────
-  const svcLabel = svcActive ? '🟢 Service running' : '🔴 Service stopped';
-  const autoLabel = autoUseAll ? '⚡ Auto-Use All: ON' : '⚫ Auto-Use All: OFF';
-  const countLabel = count > 0
-    ? `🔌 ${count} device${count !== 1 ? 's' : ''} — ${inUse} in use, ${available} available`
-    : '⚫ No VH devices detected';
-  pills.innerHTML = [svcLabel, autoLabel, connected ? countLabel : '⚫ Not connected']
-    .map(l => `<span class="server-stat-pill">${l}</span>`).join('');
-
-  // ── VH device table ───────────────────────────────────────────────────────
-  if (!devices.length) {
-    list.innerHTML = '<p class="muted" style="padding:8px 0;">No VirtualHere devices reported. Ensure the VH client service is running and connected to a server.</p>';
-  } else {
-    // Group by server
-    const byServer = new Map();
-    devices.forEach(d => {
-      const srv = d.server || 'Unknown Server';
-      if (!byServer.has(srv)) byServer.set(srv, []);
-      byServer.get(srv).push(d);
-    });
-
-    let html = '';
-    byServer.forEach((devs, server) => {
-      html += `<div style="margin-bottom:16px;">
-        <div style="font-size:0.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">Server: ${escHtml(server)}</div>
-        <table class="data-table">
-          <thead><tr><th>Device Name</th><th>Address</th><th>Status</th></tr></thead>
-          <tbody>`;
-      devs.forEach(d => {
-        const statusBadge = d.auto_use
-          ? '<span class="badge badge-green">In Use</span>'
-          : '<span class="badge badge-grey">Available</span>';
-        html += `<tr>
-          <td><strong>${escHtml(d.name || 'Unknown')}</strong></td>
-          <td><code>${escHtml(d.address || '—')}</code></td>
-          <td>${statusBadge}</td>
-        </tr>`;
-      });
-      html += '</tbody></table></div>';
-    });
-    list.innerHTML = html;
-  }
-
-  // ── Physical USB table ────────────────────────────────────────────────────
-  if (physCard && physList) {
-    physCard.classList.toggle('hidden', physicalUsb.length === 0);
-    if (physicalUsb.length) {
-      const rows = physicalUsb.map(d => `<tr>
-        <td>${escHtml(d.name || 'Unknown')}</td>
-        <td><code>${escHtml(d.vidpid || '—')}</code></td>
-      </tr>`).join('');
-      physList.innerHTML = `<table class="data-table"><thead><tr><th>Device Name</th><th>VID:PID</th></tr></thead><tbody>${rows}</tbody></table>`;
-    }
-  }
-}
 
 function renderRecloneStatus(recloneState = latestRecloneState || {}) {
   latestRecloneState = recloneState || latestRecloneState || {};

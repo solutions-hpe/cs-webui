@@ -1677,9 +1677,26 @@ if (githubTokenInput) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ github_token: token })
       });
-      showSettingsMessage(token ? 'GitHub token saved.' : 'GitHub token cleared.', false);
       applySettingsToUI(response.settings || { github_token_configured: Boolean(token) });
       resetSecretInput(githubTokenInput);
+      if (token) {
+        if (githubTokenStatus) githubTokenStatus.textContent = '⏳ Validating token…';
+        try {
+          const check = await requestJson('/api/test-github');
+          if (check.valid) {
+            if (githubTokenStatus) githubTokenStatus.textContent = `✓ Token valid — authenticated as ${check.username}`;
+            showSettingsMessage('GitHub token saved and validated.', false);
+          } else {
+            if (githubTokenStatus) githubTokenStatus.textContent = `✗ Token saved but invalid: ${check.error}`;
+            showSettingsMessage(`Token saved but validation failed: ${check.error}`, true);
+          }
+        } catch {
+          if (githubTokenStatus) githubTokenStatus.textContent = '✓ Token saved (validation unavailable)';
+          showSettingsMessage('GitHub token saved.', false);
+        }
+      } else {
+        showSettingsMessage('GitHub token cleared.', false);
+      }
     } catch (err) {
       showSettingsMessage(`Error: ${err.message}`, true);
     }
@@ -3952,7 +3969,9 @@ function renderControlPanel(hostname) {
   actions.appendChild(applyButton);
   actions.appendChild(clearButton);
   actions.appendChild(applyAllButton);
-  actions.appendChild(saveOverridesButton);
+  if (currentSettings.github_token_configured) {
+    actions.appendChild(saveOverridesButton);
+  }
 
   panel.appendChild(header);
   panel.appendChild(toggles);

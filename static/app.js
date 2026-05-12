@@ -1309,9 +1309,12 @@ function renderServerTab(data) {
 
     sorted.forEach((vm) => {
       const isRecloning  = recloningVmids.has(Number(vm.vmid));
+      const isDeleting   = vm.status === 'deleting';
       const isWebui      = webuiVmid != null && Number(vm.vmid) === webuiVmid;
       const isProvisioning = vm.prov_status === 'provisioning' || vm.pending_checkin === true;
-      const baseStatusText = isProvisioning
+      const baseStatusText = isDeleting
+        ? '🔴 deleting…'
+        : isProvisioning
         ? '🔵 provisioning'
         : `${vm.status === 'running' ? '🟢' : vm.status === 'paused' ? '🟡' : '⚫'} ${vm.status || 'unknown'}`;
       const statusLabel  = isRecloning ? '🟡 recloning…' : baseStatusText;
@@ -1327,11 +1330,16 @@ function renderServerTab(data) {
         ? ' <span class="badge badge-grey" title="This is the container running the dashboard — cannot be deleted">🔒 webui</span>'
         : '';
 
-      const recloneSupported = vm.reclone_supported !== false && !isWebui;
+      const recloneSupported = vm.reclone_supported !== false && !isWebui && !isDeleting;
       const recloneReason = isWebui
         ? 'Cannot reclone the container running this service'
+        : isDeleting
+        ? 'VM is being deleted'
         : (vm.reclone_reason || 'This guest cannot be recloned from the current configuration');
       const actionBtns = VM_ACTIONS.map((a) => {
+        if (isDeleting) {
+          return `<button class="btn-icon vm-action-btn" data-action="${a.action}" data-vmid="${vm.vmid}" disabled title="VM is being deleted">${a.label}</button>`;
+        }
         if (a.action === 'delete_vm' && isWebui) {
           return `<button class="btn-icon vm-action-btn" data-action="${a.action}" data-vmid="${vm.vmid}" disabled title="Cannot delete the container running this service">${a.label}</button>`;
         }

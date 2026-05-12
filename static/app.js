@@ -1908,6 +1908,7 @@ function clientVmid(client = {}) {
 }
 
 function classifyClient(client = {}, usbVmids = spokeUsbVmids()) {
+  if (client.has_usb != null) return client.has_usb ? 't2' : 't1';
   return usbVmids.has(clientVmid(client)) ? 't2' : 't1';
 }
 

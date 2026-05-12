@@ -55,9 +55,9 @@ Hub requires login. Spoke mode does not implement the same tenant-auth flow.
 | Tab | What it is for |
 |---|---|
 | **Simulations** | Current simulation buckets, counts, Central correlation, hardware alert status, client-count monitoring |
-| **Clients** | Live client inventory, status, SSID, active simulations, errors, and per-client control panel |
+| **Clients** | Live client inventory, status, SSID, active simulations, errors, and per-client control panel. Client type tabs: **All**, **T1** (no USB dongle), **T2** (has USB dongle), **IoT/T3** (placeholder) |
 | **Central** | Aruba Central overview plus site alerts, wireless client counts, and 24-hour history |
-| **VM Server** | Proxmox VM and USB management; appears when Proxmox integration is active |
+| **VM Server** | Proxmox VM and USB management; appears when Proxmox integration is active. Sub-tabs: **VMs**, **USB (T2)**, **IoT (T3)**, **VirtualHere**, **Command Queue**, **Details** |
 | **API Server** | Spoke service status, health, and service log views |
 | **Config** | Read/edit `simulation.conf` and view bucket profiles |
 | **Setup** | Repository, VM/USB, Hub relay, Central API, notifications, TLS, and troubleshooting configuration |
@@ -97,22 +97,23 @@ Use **Clients** for day-to-day VM troubleshooting:
 - Aruba impact badge
 - recent client-side errors posted by `simulation.sh`
 
-#### 3. VM Server / USB
+#### 3. VM Server / USB (T2) / IoT (T3)
 
-When the spoke has a connected Proxmox agent, **VM Server** exposes:
+When the spoke has a connected Proxmox agent, **VM Server** exposes sub-tabs:
 
-- simulation and other VM lists
-- USB inventory and uncertified devices
-- a **VirtualHere** sub-tab fed by `vh_devices` telemetry from the Proxmox agent
-- command queue state
-- auto-provisioning state
-- reclone progress and recovery log
+| Sub-tab | Content |
+|---------|---------|
+| **VMs** | All simulation and other VMs with VMID, name, type, status |
+| **USB (T2)** | USB dongle inventory, VID:PID, assigned VMs, missing/available status |
+| **IoT (T3)** | IoT client VM inventory (T3 classification in development) |
+| **VirtualHere** | VH hub/server name, device names, connection state, auto-use status |
+| **Command Queue** | Queued and completed commands for clients and the Proxmox host |
+| **Details** | Proxmox node info, agent version, and health statistics |
 
-The VirtualHere sub-tab shows the VH hub/server name, device names, connection state, and whether auto-use is active for each device.
-
-Use this area when you need to approve the local Proxmox agent, inspect USB assignments, inspect VirtualHere inventory, or reclone/delete VMs.
-
-When a VM delete is queued, the row immediately shows as **🔴 deleting…** with all controls disabled. The row disappears cleanly on the next agent telemetry cycle once deletion is confirmed, which prevents the inventory from appearing empty during bulk deletes.
+**T1 / T2 client classification** is visible on the **Clients** tab using the type filter buttons at the top of the client list:
+- **T1** — client VM has no USB dongle assigned
+- **T2** — client VM has an active USB dongle assignment (determined by the `has_usb` field on each client)
+- **IoT (T3)** — placeholder for future classification
 
 #### 4. Setup -> Hub
 

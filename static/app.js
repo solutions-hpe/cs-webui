@@ -129,6 +129,7 @@ let currentSettings = {
   repo_url: '',
   repo_branch: '',
   github_token_configured: false,
+  hub_managed: false,
   central_api: {
     mode: 'classic',
     classic: { url: '', username: '', password_configured: false },
@@ -638,6 +639,8 @@ const githubTokenStatus = document.getElementById('github-token-status');
 const syncNowBtn = document.getElementById('sync-now-btn');
 const syncNowMsg = document.getElementById('sync-now-message');
 const settingsMsg = document.getElementById('settings-message');
+const settingsForm = document.getElementById('settings-form');
+const hubManagedBanner = document.getElementById('hub-managed-banner');
 const githubClearConfigBtn = document.getElementById('github-clear-config-btn');
 const refreshWebuiBtn = document.getElementById('refresh-webui-btn');
 const updateMsg = document.getElementById('update-message');
@@ -856,6 +859,7 @@ function mergeSettings(next = {}) {
     repo_url: next.repo_url ?? currentSettings.repo_url ?? repoUrlInput?.value ?? '',
     repo_branch: next.repo_branch ?? currentSettings.repo_branch ?? '',
     github_token_configured: next.github_token_configured ?? currentSettings.github_token_configured ?? false,
+    hub_managed: next.hub_managed ?? currentSettings.hub_managed ?? false,
     central_api: mergedCentralApi,
     central_config: mergedCentralConfig,
     site_mappings: next.site_mappings ?? currentSettings.site_mappings ?? {},
@@ -937,6 +941,33 @@ function updateRelayIndicatorVisibility(settings = currentSettings) {
   const indicator = document.getElementById('relay-indicator');
   if (!indicator) return;
   indicator.classList.toggle('hidden', !String(settings.relay_server_url || '').trim());
+}
+
+function showHubManagedBanner() {
+  if (!hubManagedBanner || WEBUI_MODE !== 'spoke') return;
+  hubManagedBanner.classList.remove('d-none');
+}
+
+function hideHubManagedBanner() {
+  if (!hubManagedBanner) return;
+  hubManagedBanner.classList.add('d-none');
+}
+
+function lockSettingsInputs() {
+  if (!settingsForm || WEBUI_MODE !== 'spoke') return;
+  settingsForm.querySelectorAll('input, select, textarea').forEach((el) => {
+    if (el.dataset.relay === 'true') return;
+    el.disabled = true;
+    el.classList.add('hub-locked');
+  });
+}
+
+function unlockSettingsInputs() {
+  if (!settingsForm) return;
+  settingsForm.querySelectorAll('input, select, textarea').forEach((el) => {
+    el.disabled = false;
+    el.classList.remove('hub-locked');
+  });
 }
 
 function setInputValueIfIdle(input, value) {
@@ -1536,6 +1567,15 @@ async function loadProxmoxApproved() {
 
 function applySettingsToUI(s) {
   const settings = mergeSettings(s);
+  if (WEBUI_MODE === 'spoke') {
+    if (settings.hub_managed) {
+      showHubManagedBanner();
+      lockSettingsInputs();
+    } else {
+      hideHubManagedBanner();
+      unlockSettingsInputs();
+    }
+  }
   // Local kill switch is driven by /api/init local_kill_switch (from simulation.conf),
   // NOT from WebUI settings — the settings object never contains kill_switch.
   if (repoUrlInput) repoUrlInput.value = settings.repo_url || repoUrlInput.value;
@@ -8208,6 +8248,12 @@ function renderTenantSetupPanel(data) {
   const tenant = data.settings?.tenant || getTenantMeta(tenantId);
   const aruba = data.settings?.aruba || {};
   const notifications = data.settings?.notifications || {};
+  const processingModes = {
+    central_api: data.settings?.processing_modes?.central_api || 'centralized',
+    teams: data.settings?.processing_modes?.teams || 'centralized',
+    email: data.settings?.processing_modes?.email || 'centralized',
+  };
+  const disabled = canManageTenant(tenantId) ? '' : ' disabled';
   const apiBase = `${window.location.origin}/api/${tenantId}/spokes/{spoke_id}`;
   const accessNote = data.settingsError ? `<div class="tenant-detail-note">${escHtml(data.settingsError)}</div>` : "";
 
@@ -8255,6 +8301,35 @@ function renderTenantSetupPanel(data) {
             <tr><td>Recipients</td><td>${escHtml((notifications.to_emails || []).join(", ") || "—")}</td></tr>
           </tbody>
         </table>
+      </section>
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>Processing Modes</h2><p>Choose which credentials stay centralized on the hub versus distributed to spokes.</p></div>
+        <div class="setup-form processing-modes-section mt-3">
+          <div class="row g-2">
+            <div class="col-md-4">
+              <label class="form-label small">Central API</label>
+              <select class="form-input" id="pm-central-api" onchange="saveProcessingMode('${escHtml(tenantId)}', 'central_api', this.value)"${disabled}>
+                <option value="centralized"${processingModes.central_api === 'centralized' ? ' selected' : ''}>Centralized</option>
+                <option value="distributed"${processingModes.central_api === 'distributed' ? ' selected' : ''}>Distributed</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Teams Webhook</label>
+              <select class="form-input" id="pm-teams" onchange="saveProcessingMode('${escHtml(tenantId)}', 'teams', this.value)"${disabled}>
+                <option value="centralized"${processingModes.teams === 'centralized' ? ' selected' : ''}>Centralized</option>
+                <option value="distributed"${processingModes.teams === 'distributed' ? ' selected' : ''}>Distributed</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Email / SMTP</label>
+              <select class="form-input" id="pm-email" onchange="saveProcessingMode('${escHtml(tenantId)}', 'email', this.value)"${disabled}>
+                <option value="centralized"${processingModes.email === 'centralized' ? ' selected' : ''}>Centralized</option>
+                <option value="distributed"${processingModes.email === 'distributed' ? ' selected' : ''}>Distributed</option>
+              </select>
+            </div>
+          </div>
+          <div id="processing-modes-msg" class="form-msg"></div>
+        </div>
       </section>
     </div>
   `;
@@ -9865,6 +9940,28 @@ async function saveHubConfig() {
     if (statusEl) statusEl.textContent = `❌ ${e.message}`;
   }
 }
+
+async function saveProcessingMode(tenantId, feature, value) {
+  const msg = document.getElementById('processing-modes-msg');
+  if (!tenantId || !feature) return;
+  if (msg) msg.textContent = 'Saving…';
+  try {
+    const response = await apiFetch(`/api/hub/tenants/${encodeURIComponent(tenantId)}/processing-modes`, {
+      method: 'PATCH',
+      body: { [feature]: value },
+    });
+    const data = await readJson(response);
+    if (!response?.ok) throw new Error(data?.detail || 'Save failed');
+    if (tenantDetailState.data[tenantId]?.settings) {
+      tenantDetailState.data[tenantId].settings.processing_modes = data?.processing_modes || tenantDetailState.data[tenantId].settings.processing_modes;
+    }
+    if (msg) msg.textContent = `Saved. Pushed to ${data?.pushed_to_spokes ?? 0} spoke(s).`;
+    setTimeout(() => { if (msg) msg.textContent = ''; }, 3000);
+  } catch (error) {
+    if (msg) msg.textContent = `Error: ${error.message}`;
+  }
+}
+window.saveProcessingMode = saveProcessingMode;
 
 // ── Tenant admin pending spokes ──────────────────────────────────────────────
 async function loadTenantPendingSpokes() {

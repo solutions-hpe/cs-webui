@@ -43,6 +43,7 @@
 /* ── Reset ─────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 .hidden { display: none !important; }
+.d-none { display: none !important; }
 
 body {
   margin: 0;
@@ -81,6 +82,26 @@ body.mode-hub.hub-logged-out #hub-root > .tab-content { display: none !important
 
 a { color: var(--hpe-green); text-decoration: none; }
 a:hover { color: var(--hpe-green-dark); text-decoration: underline; }
+
+.hub-managed-banner {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 6px;
+    padding: 8px 14px;
+    margin-bottom: 12px;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+input.hub-locked,
+select.hub-locked,
+textarea.hub-locked {
+    opacity: 0.55;
+    cursor: not-allowed;
+    background-color: var(--bs-secondary-bg, #f8f9fa);
+}
 
 /* ── Top navigation bar ─────────────────────────────────────────── */
 .topbar {

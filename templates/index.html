@@ -1550,7 +1550,11 @@
       </main>
 
       <!-- ── Setup tab ── -->
-      <main id="tab-setup" class="page tab-content hidden">
+      <main id="tab-setup" class="page tab-content hidden" role="tabpanel">
+        <div id="settings-form">
+          <div id="hub-managed-banner" class="hub-managed-banner d-none">
+          <span>🔒 Settings managed by hub — local changes are locked</span>
+        </div>
         <nav class="setup-subnav" role="tablist">
           <button class="setup-subtab" data-subtab="setup-github" role="tab">GitHub</button>
           <button class="setup-subtab" data-subtab="setup-proxmox" role="tab">Proxmox</button>
@@ -1904,18 +1908,18 @@
                       </div>
                       <div class="form-group" style="flex:2;">
                         <label>Spoke Name</label>
-                        <input id="relay-spoke-name-input" type="text" data-key="relay_spoke_name" placeholder="e.g. Lab-01-Proxmox">
+                        <input id="relay-spoke-name-input" type="text" data-key="relay_spoke_name" data-relay="true" placeholder="e.g. Lab-01-Proxmox">
                       </div>
                     </div>
                     <div class="form-row">
                       <div class="form-group" style="flex:2;">
                         <label>Server URL</label>
-                        <input id="relay-server-url-input" type="text" data-key="relay_server_url" placeholder="https://hub.example.com">
+                        <input id="relay-server-url-input" type="text" data-key="relay_server_url" data-relay="true" placeholder="https://hub.example.com">
                       </div>
                     </div>
                     <div class="toggle-grid" style="margin-bottom:12px;">
                       <label class="toggle-label">
-                        <input type="checkbox" id="relay-hub-tls-verify-input">
+                        <input type="checkbox" id="relay-hub-tls-verify-input" data-relay="true">
                         <span>Verify Hub TLS Certificate</span>
                       </label>
                     </div>
@@ -1923,7 +1927,7 @@
                     <div class="form-row">
                       <div class="form-group" style="flex:2;">
                         <label>Tenant ID <span class="form-hint-inline">(optional — pre-register with a specific tenant)</span></label>
-                        <input id="relay-tenant-id-input" type="text" data-key="relay_tenant_id" placeholder="e.g. abc123-tenant-id">
+                        <input id="relay-tenant-id-input" type="text" data-key="relay_tenant_id" data-relay="true" placeholder="e.g. abc123-tenant-id">
                       </div>
                     </div>
                   </div>
@@ -2473,6 +2477,7 @@
             </div>
             <button id="setup-clear-cache-btn" class="btn btn-danger" style="flex-shrink:0;">Clear Cache</button>
           </div>
+        </div>
         </div>
       </main>
 

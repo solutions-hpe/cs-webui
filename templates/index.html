@@ -766,10 +766,12 @@
               <button class="btn btn-primary btn-small" onclick="sendSpokeCommand('reboot')" type="button">🔁 Reboot</button>
               <button class="btn btn-primary btn-small" onclick="sendSpokeCommand('repo_sync')" type="button">📥 Repo Sync</button>
             </div>
-            <table class="data-table" id="spoke-clients-table">
-              <thead><tr><th>Client ID</th><th>Hostname</th><th>Status</th><th>Last Seen</th><th>IP</th></tr></thead>
-              <tbody id="spoke-clients-tbody"></tbody>
-            </table>
+            <div class="table-scroll-v">
+              <table class="data-table" id="spoke-clients-table">
+                <thead><tr><th>Client ID</th><th>Hostname</th><th>Status</th><th>Last Seen</th><th>IP</th></tr></thead>
+                <tbody id="spoke-clients-tbody"></tbody>
+              </table>
+            </div>
           </div>
 
           <div id="spoke-commands" class="setup-subpanel hidden" style="margin-top:12px;">

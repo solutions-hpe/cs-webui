@@ -878,6 +878,10 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 .settings-section { border:1px solid var(--border); border-radius:6px; padding:16px; background:#fafafa; overflow-x:auto; }
 .table-scroll { width:100%; max-width:100%; overflow-x:auto; overflow-y:hidden; }
 .table-scroll .data-table { margin:0; width:max-content; min-width:100%; }
+/* Vertical scroll wrapper — shows ~5 rows then scrolls; thead stays sticky */
+.table-scroll-v { width:100%; overflow-y:auto; max-height:252px; border:1px solid var(--border); border-radius:6px; }
+.table-scroll-v .data-table { margin:0; width:100%; }
+.table-scroll-v .data-table thead th { position:sticky; top:0; background:var(--card-bg,#fff); z-index:1; }
 .settings-section input,
 .settings-section select { border:1px solid var(--border); border-radius:3px; padding:9px 12px; font-family:inherit; font-size:0.9rem; color:var(--text); background:#fff; width:100%; }
 .settings-section input:focus,

@@ -109,6 +109,8 @@ When the spoke has a connected Proxmox agent, **VM Server** exposes:
 
 Use this area when you need to approve the local Proxmox agent, inspect USB assignments, or reclone/delete VMs.
 
+When a VM delete is queued, the row immediately shows as **🔴 deleting…** with all controls disabled. The row disappears cleanly on the next agent telemetry cycle once deletion is confirmed, which prevents the inventory from appearing empty during bulk deletes.
+
 #### 4. Setup -> Hub
 
 If the spoke will relay to Hub, go to:

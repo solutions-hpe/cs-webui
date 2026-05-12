@@ -1571,7 +1571,7 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 
 /* Unknown USB table: Device | VID:PID | Actions */
 #unknown-usb-table th:nth-child(2), #unknown-usb-table td:nth-child(2) { width: 18%; }
-#unknown-usb-table th:nth-child(3), #unknown-usb-table td:nth-child(3) { width: 28%; }
+#unknown-usb-table th:nth-child(3), #unknown-usb-table td:nth-child(3) { width: 240px; min-width: 240px; overflow: visible; white-space: normal; }
 
 /* Truncate long text in fixed-width USB tables */
 #usb-vidpid-table td, #unknown-usb-table td {

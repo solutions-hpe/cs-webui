@@ -2420,8 +2420,8 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
       <td>${nameLabel}</td>
       <td>${vid || '—'}</td>
       <td class="usb-actions">
-        <button type="button" class="btn btn-secondary btn-small" data-action="certify" data-vidpid="${vid}" data-name="${nameLabel}">Add to certified</button>
-        <button type="button" class="btn btn-secondary btn-small" data-action="ignore" data-vidpid="${vid}">Ignore</button>
+        <button type="button" class="btn btn-primary btn-small" data-action="certify" data-vidpid="${vid}" data-name="${nameLabel}">Add to certified</button>
+        <button type="button" class="btn btn-primary btn-small" data-action="ignore" data-vidpid="${vid}">Ignore</button>
       </td>
     </tr>`;
   }).join('');

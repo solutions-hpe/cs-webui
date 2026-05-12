@@ -169,6 +169,7 @@ let currentSettings = {
   repo_sync_interval: 300,
   usb_vidpids: '[]',
   usb_missing_timeout: '60',
+  usb_max_slots: '24',
   vm_image_1_template_id: '100',
   vm_image_2_template_id: '200',
   vm_image_1_pct: '50',
@@ -710,6 +711,7 @@ const saveTeamsBtn       = document.getElementById('save-teams-btn');
 const teamsNotifMsg      = document.getElementById('teams-notif-msg');
 const usbAutoProvisionInput = document.getElementById('usb-auto-provision');
 const usbMissingTimeoutInput = document.getElementById('usb-missing-timeout');
+const usbMaxSlotsInput = document.getElementById('usb-max-slots');
 const vmImage1TemplateIdInput = document.getElementById('vm-image-1-template-id');
 const vmImage2TemplateIdInput = document.getElementById('vm-image-2-template-id');
 const vmImage1PctInput = document.getElementById('vm-image-1-pct');
@@ -885,6 +887,7 @@ function mergeSettings(next = {}) {
     repo_sync_interval: next.repo_sync_interval ?? currentSettings.repo_sync_interval ?? 300,
     usb_vidpids: next.usb_vidpids ?? currentSettings.usb_vidpids ?? '[]',
     usb_missing_timeout: next.usb_missing_timeout ?? currentSettings.usb_missing_timeout ?? '60',
+    usb_max_slots: next.usb_max_slots ?? currentSettings.usb_max_slots ?? '24',
     vm_image_1_template_id: next.vm_image_1_template_id ?? currentSettings.vm_image_1_template_id ?? '100',
     vm_image_2_template_id: next.vm_image_2_template_id ?? currentSettings.vm_image_2_template_id ?? '200',
     vm_image_1_pct: next.vm_image_1_pct ?? currentSettings.vm_image_1_pct ?? '50',
@@ -1565,6 +1568,7 @@ function applySettingsToUI(s) {
   updateRelayIndicatorVisibility(settings);
   if (usbAutoProvisionInput) usbAutoProvisionInput.checked = settings.usb_auto_provision === 'on';
   if (usbMissingTimeoutInput && !usbMissingTimeoutInput.matches(':focus')) usbMissingTimeoutInput.value = settings.usb_missing_timeout ?? '60';
+  if (usbMaxSlotsInput && !usbMaxSlotsInput.matches(':focus')) usbMaxSlotsInput.value = settings.usb_max_slots ?? '24';
   if (vmImage1TemplateIdInput && !vmImage1TemplateIdInput.matches(':focus')) vmImage1TemplateIdInput.value = settings.vm_image_1_template_id ?? '100';
   if (vmImage2TemplateIdInput && !vmImage2TemplateIdInput.matches(':focus')) vmImage2TemplateIdInput.value = settings.vm_image_2_template_id ?? '200';
   if (vmImage1PctInput && !vmImage1PctInput.matches(':focus')) vmImage1PctInput.value = settings.vm_image_1_pct ?? '50';
@@ -2235,12 +2239,14 @@ async function loadUsbConfig() {
   currentSettings.usb_vidpids = serializeJsonList(data.vidpids || []);
   currentSettings.usb_ignored_vidpids = serializeJsonList(data.ignored_vidpids || []);
   currentSettings.usb_missing_timeout = String(data.missing_timeout ?? currentSettings.usb_missing_timeout ?? '60');
+  currentSettings.usb_max_slots = String(data.max_slots ?? currentSettings.usb_max_slots ?? '24');
   currentSettings.vm_image_1_template_id = String(data.image1_template_id ?? currentSettings.vm_image_1_template_id ?? '100');
   currentSettings.vm_image_2_template_id = String(data.image2_template_id ?? currentSettings.vm_image_2_template_id ?? '200');
   currentSettings.vm_image_1_pct = String(data.image1_pct ?? currentSettings.vm_image_1_pct ?? '50');
   currentSettings.usb_auto_provision = data.auto_provision || 'off';
   if (usbAutoProvisionInput) usbAutoProvisionInput.checked = currentSettings.usb_auto_provision === 'on';
   if (usbMissingTimeoutInput && !usbMissingTimeoutInput.matches(':focus')) usbMissingTimeoutInput.value = currentSettings.usb_missing_timeout;
+  if (usbMaxSlotsInput && !usbMaxSlotsInput.matches(':focus')) usbMaxSlotsInput.value = currentSettings.usb_max_slots ?? '24';
   if (vmImage1TemplateIdInput && !vmImage1TemplateIdInput.matches(':focus')) vmImage1TemplateIdInput.value = currentSettings.vm_image_1_template_id;
   if (vmImage2TemplateIdInput && !vmImage2TemplateIdInput.matches(':focus')) vmImage2TemplateIdInput.value = currentSettings.vm_image_2_template_id;
   if (vmImage1PctInput && !vmImage1PctInput.matches(':focus')) vmImage1PctInput.value = currentSettings.vm_image_1_pct;
@@ -2274,6 +2280,7 @@ function collectUsbSettingsPayload() {
   return {
     usb_vidpids: currentSettings.usb_vidpids,
     usb_missing_timeout: String(usbMissingTimeoutInput?.value || currentSettings.usb_missing_timeout || '60'),
+    usb_max_slots: String(usbMaxSlotsInput?.value || currentSettings.usb_max_slots || '24'),
     vm_image_1_template_id: String(vmImage1TemplateIdInput?.value || currentSettings.vm_image_1_template_id || '100'),
     vm_image_2_template_id: String(vmImage2TemplateIdInput?.value || currentSettings.vm_image_2_template_id || '200'),
     vm_image_1_pct: String(vmImage1PctInput?.value ?? currentSettings.vm_image_1_pct ?? '50'),
@@ -5938,7 +5945,7 @@ async function _autoSaveVmMaintenance(msgEl) {
 
 // USB — save checkbox changes immediately; number inputs on blur.
 if (usbAutoProvisionInput) usbAutoProvisionInput.addEventListener('change', () => _autoSaveUsb(usbSettingsMsg));
-[usbMissingTimeoutInput, vmImage1TemplateIdInput, vmImage2TemplateIdInput, vmImage1PctInput].forEach((el) => {
+[usbMissingTimeoutInput, usbMaxSlotsInput, vmImage1TemplateIdInput, vmImage2TemplateIdInput, vmImage1PctInput].forEach((el) => {
   if (el) el.addEventListener('blur', () => _autoSaveUsb(usbSettingsMsg));
 });
 
@@ -9802,7 +9809,7 @@ function renderPendingSpokes(items) {
 const HUB_CONFIG_FIELDS = [
   "repo_branch","reclone_schedule_enabled","reclone_schedule_cron","reclone_concurrency",
   "vm_image_1_template_id","vm_image_2_template_id","vm_image_1_pct",
-  "usb_auto_provision","usb_missing_timeout","vm_silent_timeout",
+  "usb_auto_provision","usb_missing_timeout","usb_max_slots","vm_silent_timeout",
   "l1_vlan_start","l1_vlan_end","usb_vidpids","ignored_hostnames",
 ];
 

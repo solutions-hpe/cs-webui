@@ -2473,6 +2473,7 @@ async function triggerRecloneAll() {
     }
   }
 }
+window.triggerRecloneAll = triggerRecloneAll;
 
 function renderVhDevices(proxmoxData = latestProxmoxData) {
   const pills = document.getElementById('vh-stat-pills');

@@ -27,6 +27,7 @@
   --hpe-blue-bg:     #E0F9FF;
 
   --bg:      #F5F5F5;
+  --bg-secondary: #F8FAFC;
   --panel:   #FFFFFF;
   --border:  #CCCCCC;
   --header:  var(--hpe-navy);
@@ -1453,6 +1454,76 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   border-radius: 8px;
   margin-bottom: 12px;
   flex-wrap: wrap;
+}
+.hub-clients-sites-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.hub-client-site-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  appearance: none;
+  font: inherit;
+  color: inherit;
+}
+.hub-client-site-header:hover {
+  border-color: #b7c3d0;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.hub-client-site-name {
+  font-weight: 700;
+  color: var(--hpe-navy);
+}
+.hub-client-site-simulations {
+  display: flex;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.hub-client-site-simulations .badge-list {
+  min-height: 0;
+}
+.hub-client-site-chevron {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.hub-client-site-rows {
+  margin: -2px 0 6px 18px;
+  padding: 10px 0 0 14px;
+  border-left: 2px solid #e5e7eb;
+}
+.hub-client-site-table {
+  table-layout: auto;
+}
+.hub-client-site-table th,
+.hub-client-site-table td {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.hub-table-section td {
+  background: var(--bg-secondary) !important;
+  color: var(--hpe-navy);
+  font-weight: 700;
+  border-top: 1px solid var(--border);
+}
+.hub-table-section:first-child td {
+  border-top: none;
+}
+.hub-table-section-meta {
+  margin-left: 8px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 500;
 }
 #purge-history-btn { margin-left: auto; }
 .server-node-name { font-weight:700; font-size:1rem; }

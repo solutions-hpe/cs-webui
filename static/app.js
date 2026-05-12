@@ -2409,6 +2409,11 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
       return `<div style="white-space:nowrap">${dot} ${name}</div>`;
     }).join('');
 
+    // Look up hardware-detected name from usb_state or present_usb
+    const hwName = entries.find(e => e.name)?.name
+      || presentUsb.find(p => (p.vidpid || '').toLowerCase() === String(device.vidpid || '').toLowerCase())?.name
+      || '';
+
     const tr = document.createElement('tr');
     const available = Math.max(0, total - activeEntries.length);
     const missingHtml = missing
@@ -2418,9 +2423,12 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
           return `<div class="usb-missing-item">🔴 ${mname} · <span data-missing-until="${Number(item.missing_since) + missingTimeoutSeconds}"></span></div>`;
         }).join('')}</div>`
       : '—';
+    const vidpidHtml = hwName
+      ? `${escHtml(device.vidpid || '—')}<div class="muted" style="font-size:0.78rem;margin-top:2px;">${escHtml(hwName)}</div>`
+      : escHtml(device.vidpid || '—');
     tr.innerHTML = `
-      <td>${device.label || device.vidpid || '—'}</td>
-      <td>${device.vidpid || '—'}</td>
+      <td>${escHtml(device.label || device.vidpid || '—')}</td>
+      <td>${vidpidHtml}</td>
       <td class="usb-type-${device.type || 'wireless'}">${device.type || 'wireless'}</td>
       <td>${activeVmHtml}</td>
       <td>${missingHtml}</td>
@@ -2478,37 +2486,74 @@ window.triggerRecloneAll = triggerRecloneAll;
 function renderVhDevices(proxmoxData = latestProxmoxData) {
   const pills = document.getElementById('vh-stat-pills');
   const list  = document.getElementById('vh-device-list');
+  const physCard = document.getElementById('vh-physical-usb-card');
+  const physList = document.getElementById('vh-physical-usb-list');
   if (!pills || !list) return;
 
   const vh = proxmoxData?.vh_devices || {};
-  const devices  = Array.isArray(vh.devices) ? vh.devices : [];
-  const active   = vh.vh_service_active;
-  const connected = vh.vh_connected;
-  const count    = vh.count ?? devices.length;
+  const devices      = Array.isArray(vh.devices) ? vh.devices : [];
+  const physicalUsb  = Array.isArray(vh.physical_usb) ? vh.physical_usb : [];
+  const svcActive    = vh.vh_service_active;
+  const connected    = vh.vh_connected;
+  const autoUseAll   = vh.auto_use_all;
+  const count        = vh.count ?? devices.length;
+  const inUse        = devices.filter(d => d.auto_use).length;
+  const available    = devices.filter(d => !d.auto_use).length;
 
-  // Status pill
-  const svcLabel = active   ? '🟢 Service running' : '🔴 Service stopped';
-  const cxLabel  = connected ? `🔌 ${count} device${count !== 1 ? 's' : ''} detected` : '⚫ No VH devices';
-  pills.innerHTML = `<span class="server-stat-pill">${svcLabel}</span><span class="server-stat-pill">${cxLabel}</span>`;
+  // ── Status pills ──────────────────────────────────────────────────────────
+  const svcLabel = svcActive ? '🟢 Service running' : '🔴 Service stopped';
+  const autoLabel = autoUseAll ? '⚡ Auto-Use All: ON' : '⚫ Auto-Use All: OFF';
+  const countLabel = count > 0
+    ? `🔌 ${count} device${count !== 1 ? 's' : ''} — ${inUse} in use, ${available} available`
+    : '⚫ No VH devices detected';
+  pills.innerHTML = [svcLabel, autoLabel, connected ? countLabel : '⚫ Not connected']
+    .map(l => `<span class="server-stat-pill">${l}</span>`).join('');
 
+  // ── VH device table ───────────────────────────────────────────────────────
   if (!devices.length) {
-    list.innerHTML = '<p class="muted" style="padding:8px 0;">No VirtualHere or cross-referenced USB devices detected.</p>';
-    return;
-  }
-
-  // Group by source
-  const groups = { both: [], vh: [], physical: [] };
-  devices.forEach(d => (groups[d.source] || groups.physical).push(d.vidpid));
-
-  const sourceLabel = { both: '🔌 VH + Physical', vh: '🌐 VH only', physical: '🔧 Physical only' };
-  let html = '<table class="data-table"><thead><tr><th>VID:PID</th><th>Source</th></tr></thead><tbody>';
-  for (const [src, vps] of Object.entries(groups)) {
-    vps.forEach(vp => {
-      html += `<tr><td>${escHtml(vp)}</td><td>${sourceLabel[src] || src}</td></tr>`;
+    list.innerHTML = '<p class="muted" style="padding:8px 0;">No VirtualHere devices reported. Ensure the VH client service is running and connected to a server.</p>';
+  } else {
+    // Group by server
+    const byServer = new Map();
+    devices.forEach(d => {
+      const srv = d.server || 'Unknown Server';
+      if (!byServer.has(srv)) byServer.set(srv, []);
+      byServer.get(srv).push(d);
     });
+
+    let html = '';
+    byServer.forEach((devs, server) => {
+      html += `<div style="margin-bottom:16px;">
+        <div style="font-size:0.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">Server: ${escHtml(server)}</div>
+        <table class="data-table">
+          <thead><tr><th>Device Name</th><th>Address</th><th>Status</th></tr></thead>
+          <tbody>`;
+      devs.forEach(d => {
+        const statusBadge = d.auto_use
+          ? '<span class="badge badge-green">In Use</span>'
+          : '<span class="badge badge-grey">Available</span>';
+        html += `<tr>
+          <td><strong>${escHtml(d.name || 'Unknown')}</strong></td>
+          <td><code>${escHtml(d.address || '—')}</code></td>
+          <td>${statusBadge}</td>
+        </tr>`;
+      });
+      html += '</tbody></table></div>';
+    });
+    list.innerHTML = html;
   }
-  html += '</tbody></table>';
-  list.innerHTML = html;
+
+  // ── Physical USB table ────────────────────────────────────────────────────
+  if (physCard && physList) {
+    physCard.classList.toggle('hidden', physicalUsb.length === 0);
+    if (physicalUsb.length) {
+      const rows = physicalUsb.map(d => `<tr>
+        <td>${escHtml(d.name || 'Unknown')}</td>
+        <td><code>${escHtml(d.vidpid || '—')}</code></td>
+      </tr>`).join('');
+      physList.innerHTML = `<table class="data-table"><thead><tr><th>Device Name</th><th>VID:PID</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+  }
 }
 
 function renderRecloneStatus(recloneState = latestRecloneState || {}) {
@@ -6924,7 +6969,7 @@ let aggregateApiServerRows = [];
 let aggregateCentralData = null;
 let hubConfigDraft = "";
 const hubSimulationUiState = { search: "" };
-const hubClientUiState = { search: "", status: "all", spoke: "all" };
+const hubClientUiState = { search: "", status: "all", expandedByTenant: {} };
 const tenantDashboardSort = { key: "name", direction: "asc" };
 
 const PROCESSING_FEATURES = ["aruba_polling", "teams_webhook", "email", "heartbeat", "gkill", "schedules", "repo_sync"];
@@ -7204,6 +7249,43 @@ function simulationStatusBadge(status) {
   return `<span class="site-status-pill ${cls}">${escHtml(status || "Unknown")}</span>`;
 }
 
+function simulationStatusSortValue(status) {
+  return String(status || "").toLowerCase().includes("running") ? 0 : 1;
+}
+
+function renderHubSimulationBadges(simulations = [], emptyLabel = "—") {
+  const uniqueSimulations = [...new Set((simulations || []).filter(Boolean))]
+    .sort((left, right) => String(left).localeCompare(String(right), undefined, { sensitivity: "base" }));
+  if (uniqueSimulations.length) {
+    return `<div class="badge-list">${uniqueSimulations.map(sim => `<span class="${hubSimulationBadgeClass(sim)}">${escHtml(sim)}</span>`).join("")}</div>`;
+  }
+  return emptyLabel ? `<span class="muted">${escHtml(emptyLabel)}</span>` : "";
+}
+
+function hubClientSiteName(row = {}) {
+  return row.spoke_name || row.spoke_hostname || row.spoke_id || "Unknown site";
+}
+
+function hubClientSiteKey(row = {}) {
+  return String(row.spoke_id || row.spoke_hostname || row.spoke_name || "unknown-site");
+}
+
+function getHubClientExpandedSet(tenantId = currentTenantId) {
+  if (!tenantId) return new Set();
+  if (!hubClientUiState.expandedByTenant[tenantId]) hubClientUiState.expandedByTenant[tenantId] = new Set();
+  return hubClientUiState.expandedByTenant[tenantId];
+}
+
+function toggleHubSiteExpand(siteKey) {
+  const normalizedKey = String(siteKey || "");
+  if (!normalizedKey) return;
+  const expanded = getHubClientExpandedSet();
+  if (expanded.has(normalizedKey)) expanded.delete(normalizedKey);
+  else expanded.add(normalizedKey);
+  renderClientRowsForHub();
+}
+window.toggleHubSiteExpand = toggleHubSiteExpand;
+
 function renderDashboardAggregate(data) {
   const hardwareRows = Object.entries(data.hardware_breakdown || {}).map(([name, count]) => `
     <tr><td>${escHtml(name)}</td><td>${count}</td></tr>
@@ -7244,22 +7326,42 @@ function renderSimulationRows() {
   if (!tbody) return;
   const search = hubSimulationUiState.search.trim().toLowerCase();
   const rows = aggregateSimulationRows.filter(row => !search
-    || String(row.spoke_name || row.spoke_hostname || "").toLowerCase().includes(search)
+    || String(hubClientSiteName(row)).toLowerCase().includes(search)
     || String(row.simulation_name || "").toLowerCase().includes(search)
     || String(row.status || "").toLowerCase().includes(search));
-  const uniqueSpokes = new Set(rows.map(row => row.spoke_id));
+  const groupedRows = new Map();
+  rows.forEach(row => {
+    const siteKey = hubClientSiteKey(row);
+    if (!groupedRows.has(siteKey)) groupedRows.set(siteKey, { name: hubClientSiteName(row), rows: [] });
+    groupedRows.get(siteKey).rows.push(row);
+  });
+  const sections = [...groupedRows.entries()]
+    .map(([siteKey, group]) => ({ siteKey, name: group.name, rows: group.rows.sort((left, right) => {
+      const statusDiff = simulationStatusSortValue(left.status) - simulationStatusSortValue(right.status);
+      if (statusDiff) return statusDiff;
+      return String(left.simulation_name || "").localeCompare(String(right.simulation_name || ""), undefined, { sensitivity: "base" });
+    }) }))
+    .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }));
   const totalClients = rows.reduce((sum, row) => sum + Number(row.client_count || 0), 0);
   $("#hub-simulations-pill") && ($("#hub-simulations-pill").textContent = `${rows.length} simulations`);
   $("#hub-simulation-clients-pill") && ($("#hub-simulation-clients-pill").textContent = `${totalClients} clients`);
-  $("#hub-simulation-spokes-pill") && ($("#hub-simulation-spokes-pill").textContent = `${uniqueSpokes.size} spokes`);
-  tbody.innerHTML = rows.length ? rows.map(row => `
-    <tr>
-      <td><strong>${escHtml(row.spoke_name || row.spoke_hostname || row.spoke_id)}</strong></td>
-      <td>${escHtml(row.simulation_name || "—")}</td>
-      <td>${simulationStatusBadge(row.status)}</td>
-      <td>${Number(row.client_count || 0)}</td>
+  $("#hub-simulation-spokes-pill") && ($("#hub-simulation-spokes-pill").textContent = `${sections.length} spokes`);
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="3" class="empty-state">${aggregateSimulationRows.length ? "No simulations match the current filter." : "No simulation telemetry reported for this tenant."}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = sections.map(section => `
+    <tr class="hub-table-section">
+      <td colspan="3"><strong>${escHtml(section.name)}</strong><span class="hub-table-section-meta">${section.rows.length} simulations</span></td>
     </tr>
-  `).join("") : '<tr><td colspan="4" class="empty-state">No simulation telemetry reported for this tenant.</td></tr>';
+    ${section.rows.map(row => `
+      <tr>
+        <td>${escHtml(row.simulation_name || "—")}</td>
+        <td>${simulationStatusBadge(row.status)}</td>
+        <td>${Number(row.client_count || 0)}</td>
+      </tr>
+    `).join("")}
+  `).join("");
 }
 
 function updateClientSpokeFilterOptions() {
@@ -7273,21 +7375,20 @@ function updateClientSpokeFilterOptions() {
 }
 
 function renderClientRowsForHub() {
-  const tbody = $("#hub-clients-tbody");
-  if (!tbody) return;
+  const container = $("#hub-clients-sites-list");
+  if (!container) return;
   const search = hubClientUiState.search.trim().toLowerCase();
   const rows = aggregateClientRows.filter(client => {
     const statusMatch = hubClientUiState.status === "all"
       || (hubClientUiState.status === "online" && client.online)
       || (hubClientUiState.status === "offline" && !client.online);
     if (!statusMatch) return false;
-    const spokeName = client.spoke_name || client.spoke_hostname || client.spoke_id || "";
-    if (hubClientUiState.spoke !== "all" && spokeName !== hubClientUiState.spoke) return false;
     if (!search) return true;
     const haystack = [
       client.hostname,
-      spokeName,
+      hubClientSiteName(client),
       client.platform,
+      client.hw_type,
       client.simulation_id,
       client.connected_ssid,
       ...(client.active_simulations || []),
@@ -7295,22 +7396,75 @@ function renderClientRowsForHub() {
     return haystack.includes(search);
   });
   const onlineCount = rows.filter(client => client.online).length;
-  const uniqueSpokes = new Set(rows.map(client => client.spoke_id));
+  const groupedRows = new Map();
+  rows.forEach(client => {
+    const siteKey = hubClientSiteKey(client);
+    if (!groupedRows.has(siteKey)) groupedRows.set(siteKey, { name: hubClientSiteName(client), clients: [] });
+    groupedRows.get(siteKey).clients.push(client);
+  });
+  const sites = [...groupedRows.entries()]
+    .map(([siteKey, group]) => {
+      const clients = [...group.clients].sort((left, right) => {
+        const onlineDiff = Number(Boolean(right.online)) - Number(Boolean(left.online));
+        if (onlineDiff) return onlineDiff;
+        return String(left.hostname || "").localeCompare(String(right.hostname || ""), undefined, { sensitivity: "base" });
+      });
+      return {
+        siteKey,
+        name: group.name,
+        clients,
+        onlineCount: clients.filter(client => client.online).length,
+        errorCount: clients.reduce((sum, client) => sum + Number(client.error_count || 0), 0),
+        activeSimulations: [...new Set(clients.flatMap(client => client.active_simulations || []).filter(Boolean))].sort((left, right) => left.localeCompare(right)),
+      };
+    })
+    .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }));
   $("#hub-clients-pill") && ($("#hub-clients-pill").textContent = `${rows.length} clients`);
   $("#hub-clients-online-pill") && ($("#hub-clients-online-pill").textContent = `${onlineCount} online`);
-  $("#hub-clients-spokes-pill") && ($("#hub-clients-spokes-pill").textContent = `${uniqueSpokes.size} spokes`);
-  tbody.innerHTML = rows.length ? rows.map(client => `
-    <tr>
-      <td><span class="site-status-pill ${client.online ? "online" : "offline"}">${client.online ? "Online" : "Offline"}</span></td>
-      <td>${escHtml(client.hostname || "—")}</td>
-      <td>${escHtml(client.spoke_name || client.spoke_hostname || client.spoke_id || "—")}</td>
-      <td>${escHtml(client.platform || client.hw_type || "—")}</td>
-      <td>${escHtml(client.connected_ssid || "—")}</td>
-      <td><div class="badge-list">${(client.active_simulations || []).length ? client.active_simulations.map(sim => `<span class="${hubSimulationBadgeClass(sim)}">${escHtml(sim)}</span>`).join("") : '<span class="muted">—</span>'}</div></td>
-      <td style="white-space:nowrap">${escHtml(fmtDate(client.last_seen))}</td>
-      <td>${Number(client.error_count || 0)}</td>
-    </tr>
-  `).join("") : '<tr><td colspan="8" class="empty-state">No client telemetry reported for this tenant.</td></tr>';
+  $("#hub-clients-spokes-pill") && ($("#hub-clients-spokes-pill").textContent = `${sites.length} spokes`);
+  if (!sites.length) {
+    container.innerHTML = `<div class="empty-state">${aggregateClientRows.length ? "No clients match the current filters." : "No client telemetry reported for this tenant."}</div>`;
+    return;
+  }
+  const expanded = getHubClientExpandedSet();
+  container.innerHTML = sites.map(site => {
+    const isExpanded = expanded.has(site.siteKey);
+    const encodedSiteKey = encodeURIComponent(site.siteKey);
+    return `
+      <section class="hub-client-site-group">
+        <button class="hub-client-site-header" type="button" onclick="toggleHubSiteExpand(decodeURIComponent('${encodedSiteKey}'))" aria-expanded="${isExpanded ? "true" : "false"}">
+          <span class="hub-client-site-name">${escHtml(site.name)}</span>
+          <span class="badge badge-grey">${site.clients.length} clients</span>
+          <span class="badge badge-green">${site.onlineCount} online</span>
+          ${site.errorCount > 0 ? `<span class="badge badge-red">${site.errorCount} errors</span>` : ""}
+          <span class="hub-client-site-simulations">${renderHubSimulationBadges(site.activeSimulations, "")}</span>
+          <span class="hub-client-site-chevron" aria-hidden="true">${isExpanded ? "▼" : "▶"}</span>
+        </button>
+        ${isExpanded ? `
+          <div class="hub-client-site-rows">
+            <div class="table-scroll">
+              <table class="data-table hub-client-site-table">
+                <thead><tr><th>Status</th><th>Hostname</th><th>Platform</th><th>SSID</th><th>Active Simulations</th><th style="white-space:nowrap">Last Seen</th><th>Errors</th></tr></thead>
+                <tbody>
+                  ${site.clients.map(client => `
+                    <tr>
+                      <td class="status-cell">${statusDot(Boolean(client.online))}</td>
+                      <td class="hostname-cell">${escHtml(client.hostname || "—")}</td>
+                      <td>${escHtml(client.platform || client.hw_type || "—")}</td>
+                      <td>${escHtml(client.connected_ssid || "—")}</td>
+                      <td>${renderHubSimulationBadges(client.active_simulations || [])}</td>
+                      <td class="nowrap-cell"><span title="${escHtml(fmtDate(client.last_seen))}">${escHtml(relativeTime(client.last_seen))}</span></td>
+                      <td>${Number(client.error_count || 0)}</td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ` : ""}
+      </section>
+    `;
+  }).join("");
 }
 
 function buildTenantUserCounts(users = []) {
@@ -7623,6 +7777,7 @@ function applyAuthUI() {
     aggregateApiServerRows = [];
     aggregateCentralData = null;
     hubConfigDraft = "";
+    hubClientUiState.expandedByTenant = {};
     tenantDetailState.data = {};
     resetTenantDetail();
     syncTenantContextChrome();
@@ -7724,6 +7879,7 @@ function logout(showMessage = true) {
   aggregateApiServerRows = [];
   aggregateCentralData = null;
   hubConfigDraft = "";
+  hubClientUiState.expandedByTenant = {};
   tenantDetailState.data = {};
   tenantContextActive = false;
   resetTenantDetail();
@@ -7744,6 +7900,7 @@ async function setCurrentTenant(tenantId, reload = true) {
   aggregateApiServerRows = [];
   aggregateCentralData = null;
   hubConfigDraft = "";
+  hubClientUiState.expandedByTenant[tenantId] = new Set();
   syncRoleBadge();
   syncTenantContextChrome();
   syncHubPermissionUI();
@@ -8261,13 +8418,11 @@ async function loadHubSimulations(force = false) {
 async function loadClients(force = false) {
   if (!currentTenantId) {
     aggregateClientRows = [];
-    updateClientSpokeFilterOptions();
     renderClientRowsForHub();
     return;
   }
   const data = force || !aggregateClientRows.length ? await loadAggregateData("clients") : { clients: aggregateClientRows };
   aggregateClientRows = data?.clients || [];
-  updateClientSpokeFilterOptions();
   renderClientRowsForHub();
 }
 
@@ -10292,10 +10447,6 @@ function bindEvents() {
   });
   $("#hub-clients-status-filter")?.addEventListener("change", event => {
     hubClientUiState.status = event.target.value || "all";
-    renderClientRowsForHub();
-  });
-  $("#hub-clients-spoke-filter")?.addEventListener("change", event => {
-    hubClientUiState.spoke = event.target.value || "all";
     renderClientRowsForHub();
   });
   $("#spoke-search")?.addEventListener("input", event => {

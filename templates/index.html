@@ -188,7 +188,7 @@
       <div class="setup-card">
         <div class="table-scroll">
           <table class="data-table">
-            <thead><tr><th>Spoke</th><th>Simulation</th><th>Status</th><th>Client Count</th></tr></thead>
+            <thead><tr><th>Simulation</th><th>Status</th><th>Client Count</th></tr></thead>
             <tbody id="hub-simulations-tbody"></tbody>
           </table>
         </div>
@@ -209,19 +209,11 @@
             <option value="online">Online</option>
             <option value="offline">Offline</option>
           </select>
-          <select id="hub-clients-spoke-filter" class="form-input form-input-sm">
-            <option value="all">All spokes</option>
-          </select>
           <button id="refresh-clients-btn" class="btn btn-primary btn-small" type="button">Refresh</button>
         </div>
       </div>
       <div class="setup-card">
-        <div class="table-scroll">
-          <table class="data-table">
-            <thead><tr><th>Status</th><th>Hostname</th><th>Spoke</th><th>Platform</th><th>SSID</th><th>Active Simulations</th><th style="white-space:nowrap">Last Seen</th><th>Errors</th></tr></thead>
-            <tbody id="hub-clients-tbody"></tbody>
-          </table>
-        </div>
+        <div id="hub-clients-sites-list" class="hub-clients-sites-list"></div>
       </div>
     </main>
 
@@ -1117,11 +1109,20 @@
         <!-- VirtualHere sub-tab -->
         <div id="server-vh" class="setup-subpanel hidden">
           <div class="setup-card setup-section-gap">
-            <div class="setup-card-header">
-              <h2>🔌 VirtualHere Devices</h2>
-              <div id="vh-stat-pills" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"></div>
+            <div class="setup-card-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+              <div>
+                <h2>🔌 VirtualHere Devices</h2>
+                <div id="vh-stat-pills" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;"></div>
+              </div>
             </div>
-            <div id="vh-device-list" style="margin-top:8px;"></div>
+            <div id="vh-device-list" style="margin-top:12px;"></div>
+          </div>
+          <div class="setup-card setup-section-gap" id="vh-physical-usb-card">
+            <div class="setup-card-header">
+              <h2>🖥 Physical USB on Host</h2>
+              <p>Devices currently detected on the Proxmox host via <code>lsusb</code>.</p>
+            </div>
+            <div id="vh-physical-usb-list"></div>
           </div>
         </div>
 

@@ -204,6 +204,7 @@ let refreshSecondsLeft = 10;
 let refreshIntervalSeconds = 10;
 const SECRET_CONFIGURED_PLACEHOLDER = '**********';
 const refreshActiveTabs = new Set(['dashboard', 'api-server']);
+let clientTypeFilter = 'all';
 
 function getSecretInputDefaultPlaceholder(input) {
   if (!input) return '';
@@ -1249,6 +1250,7 @@ function renderServerTab(data) {
     updateBtn._bound = true;
   }
   syncAgentUpdateButtonState(latestProxmoxData);
+  syncSpokeClientTypeFilter();
 
   const node = latestProxmoxData.node || {};
   const setEl = (id, value) => {
@@ -1889,6 +1891,71 @@ function proxmoxVmForHostname(hostname) {
   return vms.find((vm) => String(vm?.name || '').trim().toLowerCase() === normalized) || null;
 }
 
+function spokeUsbVmids() {
+  return new Set(
+    (Array.isArray(latestProxmoxData?.usb_state) ? latestProxmoxData.usb_state : [])
+      .map((device) => String(device?.vmid ?? '').trim())
+      .filter(Boolean)
+  );
+}
+
+function clientVmid(client = {}) {
+  const directVmid = client?.vmid ?? client?.proxmox_vmid;
+  if (directVmid != null && String(directVmid).trim() !== '') return String(directVmid).trim();
+  const proxmoxVm = proxmoxVmForHostname(client?.hostname);
+  const proxmoxVmid = proxmoxVm?.vmid;
+  return proxmoxVmid != null && String(proxmoxVmid).trim() !== '' ? String(proxmoxVmid).trim() : '';
+}
+
+function classifyClient(client = {}, usbVmids = spokeUsbVmids()) {
+  return usbVmids.has(clientVmid(client)) ? 't2' : 't1';
+}
+
+function syncSpokeClientTypeTabs() {
+  document.querySelectorAll('[data-clienttype]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.clienttype === clientTypeFilter);
+  });
+}
+
+function updateSpokeClientTypeCounts(allClients = [...clients.values()]) {
+  const usbVmids = spokeUsbVmids();
+  const counts = { all: allClients.length, t1: 0, t2: 0 };
+  allClients.forEach((client) => {
+    counts[classifyClient(client, usbVmids)] += 1;
+  });
+  const countAll = document.getElementById('client-type-count-all');
+  const countT1 = document.getElementById('client-type-count-t1');
+  const countT2 = document.getElementById('client-type-count-t2');
+  const countT3 = document.getElementById('client-type-count-t3');
+  if (countAll) countAll.textContent = String(counts.all);
+  if (countT1) countT1.textContent = String(counts.t1);
+  if (countT2) countT2.textContent = String(counts.t2);
+  if (countT3) countT3.textContent = '—';
+  return counts;
+}
+
+function syncSpokeClientTypeFilter() {
+  syncSpokeClientTypeTabs();
+  const allClients = [...clients.values()];
+  const usbVmids = spokeUsbVmids();
+  const counts = updateSpokeClientTypeCounts(allClients);
+  let visibleCount = 0;
+  allClients.forEach((client) => {
+    const refs = rowRefs.get(client.hostname);
+    if (!refs) return;
+    const matches = clientTypeFilter === 'all' || classifyClient(client, usbVmids) === clientTypeFilter;
+    if (matches) visibleCount += 1;
+    refs.mainRow.classList.toggle('hidden', !matches);
+    refs.detailRow.classList.toggle('hidden', !matches || openControlHost !== client.hostname);
+  });
+  updateClientCount(visibleCount, counts.all);
+}
+
+function setClientTypeFilter(nextFilter = 'all') {
+  clientTypeFilter = nextFilter === 't1' || nextFilter === 't2' ? nextFilter : 'all';
+  syncSpokeClientTypeFilter();
+}
+
 function clientHasPendingCheckin(hostname) {
   return Boolean(proxmoxVmForHostname(hostname)?.pending_checkin);
 }
@@ -1974,9 +2041,24 @@ function setCentralApiStatus(valid, tokenState) {
   }
 }
 
-function updateClientCount() {
-  clientCount.textContent = `${clients.size} client${clients.size === 1 ? '' : 's'}`;
-  if (emptyRow) emptyRow.style.display = clients.size > 0 ? 'none' : '';
+function updateClientCount(visibleCount = clients.size, totalCount = clients.size) {
+  if (clientCount) {
+    const visible = Number.isFinite(visibleCount) ? visibleCount : clients.size;
+    const total = Number.isFinite(totalCount) ? totalCount : clients.size;
+    clientCount.textContent = visible !== total
+      ? `${visible} / ${total} clients`
+      : `${visible} client${visible === 1 ? '' : 's'}`;
+  }
+  if (!emptyRow) return;
+  const visible = Number.isFinite(visibleCount) ? visibleCount : clients.size;
+  const total = Number.isFinite(totalCount) ? totalCount : clients.size;
+  emptyRow.style.display = visible > 0 ? 'none' : '';
+  const emptyCell = emptyRow.querySelector('td');
+  if (emptyCell) {
+    emptyCell.textContent = total > 0
+      ? 'No clients match the current filter.'
+      : 'No clients connected — waiting for beacons…';
+  }
 }
 
 function createCell(className = '') {
@@ -2126,7 +2208,7 @@ function upsertClient(client) {
     renderControlPanel(merged.hostname);
   }
 
-  updateClientCount();
+  syncSpokeClientTypeFilter();
   if (centralSiteDetailOpen) {
     renderSiteClients(centralSiteDetailOpen);
   }
@@ -4876,7 +4958,7 @@ function handleMessage(message) {
     document.querySelectorAll('#clients-body tr:not(#empty-row)').forEach(r => r.remove());
     const emptyRow = document.getElementById('empty-row');
     if (emptyRow) emptyRow.classList.remove('hidden');
-    updateClientCount();
+    syncSpokeClientTypeFilter();
     updateCmdTargetDropdown([]);
   }
 }
@@ -7060,6 +7142,7 @@ let aggregateCentralData = null;
 let hubConfigDraft = "";
 const hubSimulationUiState = { search: "" };
 const hubClientUiState = { search: "", status: "all", expandedByTenant: {} };
+let hubClientTypeFilter = "all";
 const tenantDashboardSort = { key: "name", direction: "asc" };
 
 const PROCESSING_FEATURES = ["aruba_polling", "teams_webhook", "email", "heartbeat", "gkill", "schedules", "repo_sync"];
@@ -7381,6 +7464,38 @@ function getHubClientExpandedSet(tenantId = currentTenantId) {
   return hubClientUiState.expandedByTenant[tenantId];
 }
 
+function classifyHubClient(client = {}) {
+  if (client?.has_usb) return 't2';
+  return Array.isArray(client?.usb_devices) && client.usb_devices.length ? 't2' : 't1';
+}
+
+function syncHubClientTypeTabs() {
+  document.querySelectorAll('[data-hubclienttype]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.hubclienttype === hubClientTypeFilter);
+  });
+}
+
+function updateHubClientTypeCounts(allClients = aggregateClientRows) {
+  const counts = { all: allClients.length, t1: 0, t2: 0 };
+  allClients.forEach((client) => {
+    counts[classifyHubClient(client)] += 1;
+  });
+  const countAll = document.getElementById('hub-client-type-count-all');
+  const countT1 = document.getElementById('hub-client-type-count-t1');
+  const countT2 = document.getElementById('hub-client-type-count-t2');
+  const countT3 = document.getElementById('hub-client-type-count-t3');
+  if (countAll) countAll.textContent = String(counts.all);
+  if (countT1) countT1.textContent = String(counts.t1);
+  if (countT2) countT2.textContent = String(counts.t2);
+  if (countT3) countT3.textContent = '—';
+}
+
+function setHubClientTypeFilter(nextFilter = 'all') {
+  hubClientTypeFilter = nextFilter === 't1' || nextFilter === 't2' ? nextFilter : 'all';
+  syncHubClientTypeTabs();
+  renderClientRowsForHub();
+}
+
 function toggleHubSiteExpand(siteKey) {
   const normalizedKey = String(siteKey || "");
   if (!normalizedKey) return;
@@ -7482,8 +7597,12 @@ function updateClientSpokeFilterOptions() {
 function renderClientRowsForHub() {
   const container = $("#hub-clients-sites-list");
   if (!container) return;
+  syncHubClientTypeTabs();
+  updateHubClientTypeCounts(aggregateClientRows);
   const search = hubClientUiState.search.trim().toLowerCase();
   const rows = aggregateClientRows.filter(client => {
+    const typeMatch = hubClientTypeFilter === "all" || classifyHubClient(client) === hubClientTypeFilter;
+    if (!typeMatch) return false;
     const statusMatch = hubClientUiState.status === "all"
       || (hubClientUiState.status === "online" && client.online)
       || (hubClientUiState.status === "offline" && !client.online);
@@ -10612,6 +10731,12 @@ function bindEvents() {
   $("#hub-clients-status-filter")?.addEventListener("change", event => {
     hubClientUiState.status = event.target.value || "all";
     renderClientRowsForHub();
+  });
+  document.querySelectorAll("[data-clienttype]").forEach(button => {
+    button.addEventListener("click", () => setClientTypeFilter(button.dataset.clienttype || "all"));
+  });
+  document.querySelectorAll("[data-hubclienttype]").forEach(button => {
+    button.addEventListener("click", () => setHubClientTypeFilter(button.dataset.hubclienttype || "all"));
   });
   $("#spoke-search")?.addEventListener("input", event => {
     spokeUiState.search = event.target.value || "";

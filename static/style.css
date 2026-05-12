@@ -719,6 +719,11 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   border-color: var(--hpe-green);
   font-weight: 600;
 }
+.setup-subtab.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 .setup-subpanel { padding-top: 8px; }
 .setup-subpanel.hidden { display: none; }
 

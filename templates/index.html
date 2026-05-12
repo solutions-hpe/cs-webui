@@ -196,6 +196,20 @@
     </main>
 
     <main id="tab-hub-clients" class="page tab-content hidden">
+      <nav class="setup-subnav client-type-subnav" role="tablist">
+        <button class="setup-subtab client-type-tab active" data-hubclienttype="all" role="tab" type="button">
+          All <span id="hub-client-type-count-all" class="badge-count">0</span>
+        </button>
+        <button class="setup-subtab client-type-tab" data-hubclienttype="t1" role="tab" type="button">
+          T1 <span id="hub-client-type-count-t1" class="badge-count">0</span>
+        </button>
+        <button class="setup-subtab client-type-tab" data-hubclienttype="t2" role="tab" type="button">
+          T2 <span id="hub-client-type-count-t2" class="badge-count">0</span>
+        </button>
+        <button class="setup-subtab client-type-tab disabled" data-hubclienttype="t3" role="tab" type="button" disabled title="T3 classification coming soon">
+          T3 <span id="hub-client-type-count-t3" class="badge-count">—</span>
+        </button>
+      </nav>
       <div class="page-toolbar">
         <div class="toolbar-stats">
           <span class="stat-pill" id="hub-clients-pill">— clients</span>
@@ -877,6 +891,20 @@
   <div id="spoke-root" class="spoke-only">
     <!-- ── Dashboard tab ── -->
       <main id="tab-dashboard" class="page tab-content hidden">
+        <nav class="setup-subnav client-type-subnav" role="tablist">
+          <button class="setup-subtab client-type-tab active" data-clienttype="all" role="tab" type="button">
+            All <span id="client-type-count-all" class="badge-count">0</span>
+          </button>
+          <button class="setup-subtab client-type-tab" data-clienttype="t1" role="tab" type="button">
+            T1 <span id="client-type-count-t1" class="badge-count">0</span>
+          </button>
+          <button class="setup-subtab client-type-tab" data-clienttype="t2" role="tab" type="button">
+            T2 <span id="client-type-count-t2" class="badge-count">0</span>
+          </button>
+          <button class="setup-subtab client-type-tab disabled" data-clienttype="t3" role="tab" type="button" disabled title="T3 classification coming soon">
+            T3 <span id="client-type-count-t3" class="badge-count">—</span>
+          </button>
+        </nav>
         <div id="clients-node-bar" class="server-node-bar">
           <span class="server-node-name">Clients</span>
           <span class="server-stat-pill" id="client-count" title="Connected clients">0 clients</span>

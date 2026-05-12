@@ -46,7 +46,7 @@
         <div id="tenant-context-indicator" class="tenant-context-indicator hidden hub-only">
           <span class="tenant-context-label">TENANT:</span>
           <strong id="tenant-context-name">—</strong>
-          <button id="tenant-context-change-btn" class="btn btn-secondary btn-small" type="button">Change</button>
+          <button id="tenant-context-change-btn" class="btn btn-primary btn-small" type="button">Change</button>
         </div>
         <span id="hub-user-pill" class="hub-only topbar-user-pill" style="display:none">
           <span>👤</span>
@@ -166,7 +166,7 @@
         </div>
         <div class="toolbar-actions">
           <button id="dashboard-add-tenant-btn" class="btn btn-primary btn-small hidden" type="button">Add Tenant</button>
-          <button id="refresh-dashboard-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+          <button id="refresh-dashboard-btn" class="btn btn-primary btn-small" type="button">Refresh</button>
         </div>
       </div>
       <div id="dashboard-grid"></div>
@@ -182,7 +182,7 @@
         </div>
         <div class="toolbar-actions">
           <input id="hub-simulations-search" type="search" class="form-input form-input-sm" placeholder="Filter simulations…">
-          <button id="refresh-simulations-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+          <button id="refresh-simulations-btn" class="btn btn-primary btn-small" type="button">Refresh</button>
         </div>
       </div>
       <div class="setup-card">
@@ -212,7 +212,7 @@
           <select id="hub-clients-spoke-filter" class="form-input form-input-sm">
             <option value="all">All spokes</option>
           </select>
-          <button id="refresh-clients-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+          <button id="refresh-clients-btn" class="btn btn-primary btn-small" type="button">Refresh</button>
         </div>
       </div>
       <div class="setup-card">
@@ -233,7 +233,7 @@
           <span class="stat-pill" id="hub-vm-usb-pill">— USB devices</span>
         </div>
         <div class="toolbar-actions">
-          <button id="refresh-vm-server-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+          <button id="refresh-vm-server-btn" class="btn btn-primary btn-small" type="button">Refresh</button>
         </div>
       </div>
       <div id="hub-vm-server-content"></div>
@@ -247,7 +247,7 @@
           <span class="stat-pill" id="hub-api-version-pill">— versions</span>
         </div>
         <div class="toolbar-actions">
-          <button id="refresh-api-server-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+          <button id="refresh-api-server-btn" class="btn btn-primary btn-small" type="button">Refresh</button>
         </div>
       </div>
       <div id="hub-api-server-content"></div>
@@ -261,7 +261,7 @@
           <span class="stat-pill" id="hub-central-connected-pill">— connected</span>
         </div>
         <div class="toolbar-actions">
-          <button id="refresh-central-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+          <button id="refresh-central-btn" class="btn btn-primary btn-small" type="button">Refresh</button>
         </div>
       </div>
       <div id="hub-central-content"></div>
@@ -277,9 +277,9 @@
         </div>
         <div class="toolbar-actions">
           <input id="spoke-search" type="search" class="form-input form-input-sm" placeholder="Search spokes…">
-          <button id="collapse-all-btn" class="btn btn-secondary btn-small" type="button">Collapse All</button>
-          <button id="expand-all-btn" class="btn btn-secondary btn-small" type="button">Expand All</button>
-          <button id="refresh-spokes-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+          <button id="collapse-all-btn" class="btn btn-primary btn-small" type="button">Collapse All</button>
+          <button id="expand-all-btn" class="btn btn-primary btn-small" type="button">Expand All</button>
+          <button id="refresh-spokes-btn" class="btn btn-primary btn-small" type="button">Refresh</button>
         </div>
       </div>
       <div id="spokes-list"></div>
@@ -290,7 +290,7 @@
     <main id="tab-hub-commands" class="page tab-content hidden">
       <div class="page-toolbar">
         <span class="stat-pill" id="commands-count-pill">— queued</span>
-        <button id="refresh-commands-btn" class="btn btn-secondary btn-small" style="margin-left:auto;" type="button">Refresh</button>
+        <button id="refresh-commands-btn" class="btn btn-primary btn-small" style="margin-left:auto;" type="button">Refresh</button>
       </div>
       <div class="setup-card" style="max-width:520px;">
         <div class="setup-card-header"><h2>Send Command</h2></div>
@@ -328,7 +328,7 @@
     <main id="tab-hub-config" class="page tab-content hidden">
       <div class="page-toolbar">
         <span class="server-node-name">Config</span>
-        <button id="refresh-config-btn" class="btn btn-secondary btn-small" style="margin-left:auto;" type="button">Refresh</button>
+        <button id="refresh-config-btn" class="btn btn-primary btn-small" style="margin-left:auto;" type="button">Refresh</button>
       </div>
       <div id="hub-config-content"></div>
     </main>
@@ -336,7 +336,7 @@
     <main id="tab-hub-tenant-setup" class="page tab-content hidden">
       <div class="page-toolbar">
         <span class="server-node-name">Tenant Setup</span>
-        <button id="refresh-tenant-setup-btn" class="btn btn-secondary btn-small" style="margin-left:auto;" type="button">Refresh</button>
+        <button id="refresh-tenant-setup-btn" class="btn btn-primary btn-small" style="margin-left:auto;" type="button">Refresh</button>
       </div>
       <div id="hub-tenant-setup-content"></div>
     </main>
@@ -435,8 +435,8 @@
                   <div id="acme-log-meta" class="form-hint">Most recent issuance details.</div>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                  <button id="acme-log-toggle-btn" class="btn btn-secondary btn-small" type="button">Show Log</button>
-                  <button id="acme-log-copy-btn" class="btn btn-secondary btn-small" type="button">Copy Log</button>
+                  <button id="acme-log-toggle-btn" class="btn btn-primary btn-small" type="button">Show Log</button>
+                  <button id="acme-log-copy-btn" class="btn btn-primary btn-small" type="button">Copy Log</button>
                 </div>
               </div>
               <pre id="acme-log-output" class="hidden" style="margin-top:12px;max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-word;background:#0f172a;color:#e2e8f0;border-radius:10px;padding:12px;font-size:12px;line-height:1.45;"></pre>
@@ -661,8 +661,8 @@
                 <label style="grid-column:1/-1;">USB VID:PIDs (JSON array)<input type="text" id="hc-usb_vidpids" placeholder='["vid:pid"]'></label>
                 <label style="grid-column:1/-1;">Ignored Hostnames (JSON array)<input type="text" id="hc-ignored_hostnames" placeholder='["sim-rpi-0000"]'></label>
               </div>
-              <div style="margin-top:16px;display:flex;gap:10px;align-items:center;">
-                <button class="btn-primary" id="hub-config-save-btn">Save &amp; Push to All Spokes</button>
+              <div style="margin-top:16px;display:flex;gap:10px;align-items:center;justify-content:flex-end;">
+                <button class="btn btn-primary" id="hub-config-save-btn">Save &amp; Push to All Spokes</button>
                 <span id="hub-config-save-status" style="font-size:0.85rem;"></span>
               </div>
             </div>
@@ -744,7 +744,7 @@
               <div class="setup-status-item"><span class="setup-status-label">Last Fetched</span><span id="sa-gkill-fetched" class="setup-status-value">—</span></div>
               <div class="setup-status-item"><span class="setup-status-label">Error</span><span id="sa-gkill-error" class="setup-status-value">—</span></div>
             </div>
-            <button id="sa-gkill-refresh-btn" class="btn btn-secondary btn-small" style="margin-top:12px;" type="button">Refresh</button>
+            <button id="sa-gkill-refresh-btn" class="btn btn-primary btn-small" style="margin-top:12px;" type="button">Refresh</button>
           </div>
         </div>
       </main>
@@ -769,10 +769,10 @@
           <div id="spoke-clients" class="setup-subpanel" style="margin-top:12px;">
             <div class="spoke-action-bar">
               <button class="btn btn-danger btn-small" onclick="sendSpokeCommand('kill_switch')" type="button">⚡ Kill Switch</button>
-              <button class="btn btn-secondary btn-small" onclick="sendSpokeCommand('restart_sim')" type="button">↺ Restart Sim</button>
-              <button class="btn btn-secondary btn-small" onclick="sendSpokeCommand('reclone')" type="button">🔄 Reclone</button>
-              <button class="btn btn-secondary btn-small" onclick="sendSpokeCommand('reboot')" type="button">🔁 Reboot</button>
-              <button class="btn btn-secondary btn-small" onclick="sendSpokeCommand('repo_sync')" type="button">📥 Repo Sync</button>
+              <button class="btn btn-primary btn-small" onclick="sendSpokeCommand('restart_sim')" type="button">↺ Restart Sim</button>
+              <button class="btn btn-primary btn-small" onclick="sendSpokeCommand('reclone')" type="button">🔄 Reclone</button>
+              <button class="btn btn-primary btn-small" onclick="sendSpokeCommand('reboot')" type="button">🔁 Reboot</button>
+              <button class="btn btn-primary btn-small" onclick="sendSpokeCommand('repo_sync')" type="button">📥 Repo Sync</button>
             </div>
             <table class="data-table" id="spoke-clients-table">
               <thead><tr><th>Client ID</th><th>Hostname</th><th>Status</th><th>Last Seen</th><th>IP</th></tr></thead>
@@ -931,7 +931,7 @@
           <div id="reclone-status-panel" class="setup-card vm-server-status-tile">
             <div class="setup-card-header">
               <span id="reclone-status-badge" class="badge badge-grey">Idle</span>
-              <button id="reclone-now-btn" class="btn btn-secondary" onclick="triggerRecloneAll()">⟳ Reclone All Now</button>
+              <button id="reclone-now-btn" class="btn btn-primary" onclick="triggerRecloneAll()">⟳ Reclone All Now</button>
             </div>
             <div id="reclone-progress-wrap" class="hidden">
               <div class="reclone-meta">
@@ -982,8 +982,8 @@
           <!-- Bulk action bar — hidden when Templates tab is active -->
           <div class="server-bulk-bar" id="vm-bulk-bar">
             <label><input type="checkbox" id="server-select-all"> Select All</label>
-            <button class="btn btn-secondary" id="server-bulk-start">▶ Start</button>
-            <button class="btn btn-secondary" id="server-bulk-stop">■ Stop</button>
+            <button class="btn btn-primary" id="server-bulk-start">▶ Start</button>
+            <button class="btn btn-primary" id="server-bulk-stop">■ Stop</button>
             <button class="btn btn-warning" id="server-bulk-reclone">↺ Reclone</button>
             <button class="btn btn-danger" id="server-bulk-delete">✕ Delete</button>
           </div>
@@ -1179,8 +1179,8 @@
                 <span id="server-storage-pills"></span>
               </div>
               <div style="display:flex;flex-direction:column;align-items:stretch;gap:4px;flex-shrink:0;min-width:130px;">
-                <button id="agent-approve-btn" class="btn btn-secondary" style="display:none;"></button>
-                <button id="agent-update-btn" class="btn btn-secondary" type="button" title="Reinstall the Proxmox host agent from GitHub and restart it">⬆ Update Agent</button>
+                <button id="agent-approve-btn" class="btn btn-primary" style="display:none;"></button>
+                <button id="agent-update-btn" class="btn btn-primary" type="button" title="Reinstall the Proxmox host agent from GitHub and restart it">⬆ Update Agent</button>
                 <span class="server-last-seen" style="font-size:11px;">Last seen: <span id="server-last-seen">—</span></span>
               </div>
             </div>
@@ -1203,8 +1203,8 @@
             <section class="toolbar">
               <div class="toolbar-actions">
                 <button id="logs-tail-btn" class="btn btn-primary" type="button">▶ Start Tail</button>
-                <button id="logs-stop-btn" class="btn btn-secondary hidden" type="button">⏹ Stop</button>
-                <button id="logs-refresh-btn" class="btn btn-secondary" type="button">↺ Reload History</button>
+                <button id="logs-stop-btn" class="btn btn-primary hidden" type="button">⏹ Stop</button>
+                <button id="logs-refresh-btn" class="btn btn-primary" type="button">↺ Reload History</button>
                 <label class="logs-filter-label" id="logs-filter-label">
                   Filter:
                   <input id="logs-filter" class="logs-filter-input" type="text" placeholder="e.g. wireless clients" spellcheck="false" />
@@ -1287,7 +1287,7 @@
                 <div id="sim-last-refreshed" class="central-last-synced">Last refreshed: —</div>
               </div>
               <div class="toolbar-actions">
-                <button id="sim-refresh-btn" class="btn btn-secondary btn-small" type="button">Refresh Now</button>
+                <button id="sim-refresh-btn" class="btn btn-primary btn-small" type="button">Refresh Now</button>
               </div>
             </section>
             <nav class="setup-subnav" role="tablist">
@@ -1385,7 +1385,7 @@
                 <div id="central-last-synced" class="central-last-synced">Last synced: —</div>
               </div>
               <div class="toolbar-actions">
-                <button id="central-refresh-btn" class="btn btn-secondary btn-small" type="button">Refresh Now</button>
+                <button id="central-refresh-btn" class="btn btn-primary btn-small" type="button">Refresh Now</button>
                 <div id="central-token-status" class="central-token-status">
                   <span id="central-token-dot" class="status-dot offline"></span>
                   <span id="central-token-text">Token status unknown</span>
@@ -1742,7 +1742,7 @@
                     <input id="new-vidpid-label" class="form-input" type="text" placeholder="Friendly name">
                   </div>
                   <div class="form-group" style="padding-top:4px;">
-                    <button type="button" class="btn btn-secondary" id="add-vidpid-btn">+ Add Device</button>
+                    <button type="button" class="btn btn-primary" id="add-vidpid-btn">+ Add Device</button>
                   </div>
                 </div>
               </div>
@@ -1798,7 +1798,7 @@
                            placeholder="e.g. sim-rpi-0000" spellcheck="false">
                   </div>
                   <div class="form-group" style="padding-top:4px;">
-                    <button type="button" class="btn btn-secondary" id="add-ignored-hostname-btn">+ Ignore</button>
+                    <button type="button" class="btn btn-primary" id="add-ignored-hostname-btn">+ Ignore</button>
                   </div>
                 </div>
               </div>
@@ -1926,7 +1926,7 @@
                 <!-- Registration Diagnostics -->
                 <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
                   <button id="relay-clear-config-btn" class="btn btn-secondary" type="button">Clear Config</button>
-                  <button id="relay-diag-btn" class="btn btn-secondary btn-small" type="button">🔍 Run Registration Diagnostics</button>
+                  <button id="relay-diag-btn" class="btn btn-primary btn-small" type="button">🔍 Run Registration Diagnostics</button>
                 </div>
                 <div id="relay-diag-panel" class="hidden diag-panel">
                   <div class="diag-section">
@@ -1944,7 +1944,7 @@
                   <div class="diag-section" style="border-bottom:none;">
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px;">
                       <div class="diag-section-title">Service Logs <span id="service-logs-count" class="badge-count">Last 50 lines</span></div>
-                      <button id="service-logs-refresh" class="btn btn-secondary btn-small" type="button">Refresh</button>
+                      <button id="service-logs-refresh" class="btn btn-primary btn-small" type="button">Refresh</button>
                     </div>
                     <pre id="service-logs-output" class="diag-code">(no service logs loaded)</pre>
                   </div>
@@ -2020,7 +2020,7 @@
                   </div>
 
                   <div class="form-actions central-config-actions">
-                    <button id="central-test-btn" class="btn btn-secondary" type="button">Test Connection</button>
+                    <button id="central-test-btn" class="btn btn-primary" type="button">Test Connection</button>
                     <button id="central-save-btn" class="btn btn-primary" type="button">Save</button>
                     <button id="central-clear-btn" class="btn btn-danger" type="button">Clear Config</button>
                   </div>
@@ -2037,7 +2037,7 @@
 
                 <div class="setup-form">
                   <div class="form-actions" style="margin-bottom:0.75rem;">
-                    <button id="load-sites-btn" class="btn btn-secondary" type="button">🔄 Load Sites</button>
+                    <button id="load-sites-btn" class="btn btn-primary" type="button">🔄 Load Sites</button>
                     <span id="sites-load-status" class="form-hint" style="margin-left:0.75rem;"></span>
                   </div>
 
@@ -2053,7 +2053,7 @@
                   </table>
 
                   <div class="form-actions">
-                    <button id="add-mapping-btn" class="btn btn-secondary" type="button">+ Add Row</button>
+                    <button id="add-mapping-btn" class="btn btn-primary" type="button">+ Add Row</button>
                   </div>
 
                   <div id="central-mappings-msg" class="settings-message hidden" role="alert"></div>
@@ -2069,7 +2069,7 @@
                 <div class="setup-form">
                   <div id="selected-checks-preview" class="form-hint">No checks selected yet.</div>
                   <div class="form-actions">
-                    <button id="central-load-checks-btn" class="btn btn-secondary" type="button">Load Available Checks</button>
+                    <button id="central-load-checks-btn" class="btn btn-primary" type="button">Load Available Checks</button>
                   </div>
 
                   <div id="available-checks-container"></div>
@@ -2085,7 +2085,7 @@
                 <div class="setup-form">
                   <div id="hw-checks-preview" class="form-hint">No hardware checks selected yet.</div>
                   <div class="form-actions">
-                    <button id="hw-load-alerts-btn" class="btn btn-secondary" type="button">Load Available Alert Types</button>
+                    <button id="hw-load-alerts-btn" class="btn btn-primary" type="button">Load Available Alert Types</button>
                   </div>
                   <div id="hw-checks-container"></div>
                   <div id="hw-checks-msg" class="settings-message hidden" role="alert"></div>
@@ -2131,8 +2131,10 @@
                     <label class="form-label" for="smtp-to">To (comma-separated)</label>
                     <input id="smtp-to" class="form-input" type="text" placeholder="ops@example.com, noc@example.com" />
                   </div>
-                  <button id="test-email-btn" class="btn btn-secondary" type="button">Send Test</button>
+                  <div class="form-actions">
+                  <button id="test-email-btn" class="btn btn-primary" type="button">Send Test</button>
                   <button id="save-email-btn" class="btn btn-primary" type="button">Save Email Settings</button>
+                  </div>
                   <div id="email-notif-msg" class="settings-message hidden" role="alert"></div>
                 </div>
               </div>
@@ -2154,8 +2156,10 @@
                     <label class="form-label" for="teams-webhook-url">Webhook URL</label>
                     <input id="teams-webhook-url" class="form-input" type="url" placeholder="https://outlook.office.com/webhook/..." data-secret-field="true" />
                   </div>
-                  <button id="test-teams-btn" class="btn btn-secondary" type="button">Send Test</button>
+                  <div class="form-actions">
+                  <button id="test-teams-btn" class="btn btn-primary" type="button">Send Test</button>
                   <button id="save-teams-btn" class="btn btn-primary" type="button">Save Teams Settings</button>
+                  </div>
                   <div id="teams-notif-msg" class="settings-message hidden" role="alert"></div>
                 </div>
               </div>
@@ -2358,7 +2362,7 @@
           <div class="setup-card setup-section-gap">
             <div class="setup-card-header" style="display:flex;justify-content:space-between;align-items:center;">
               <h2>System Health</h2>
-              <button id="syshealth-refresh-btn" class="btn btn-secondary" style="font-size:12px;padding:4px 10px;">↺ Refresh</button>
+              <button id="syshealth-refresh-btn" class="btn btn-primary" style="font-size:12px;padding:4px 10px;">↺ Refresh</button>
             </div>
             <div id="syshealth-msg" class="settings-message hidden" role="alert"></div>
             <div id="syshealth-body" style="display:grid;grid-template-columns:1fr 1fr;gap:16px 24px;padding:4px 0 8px;">
@@ -2401,8 +2405,8 @@
           <div class="setup-card setup-section-gap">
             <div class="setup-card-header"><h2>Service Control</h2></div>
             <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-bottom:8px;">
-              <button id="svc-restart-btn" class="btn btn-secondary">↺ Restart</button>
-              <button id="svc-start-btn" class="btn btn-secondary">▶ Start</button>
+              <button id="svc-restart-btn" class="btn btn-primary">↺ Restart</button>
+              <button id="svc-start-btn" class="btn btn-primary">▶ Start</button>
               <button id="svc-stop-btn" class="btn btn-danger">⏹ Stop</button>
               <span style="font-size:12px;color:var(--muted);">Stopping the service will take the WebUI offline until it is restarted from the Proxmox host console.</span>
             </div>
@@ -2417,7 +2421,7 @@
             </div>
             <div style="display:flex;gap:8px;align-items:stretch;margin-bottom:4px;">
               <code id="proxmox-install-cmd" style="flex:1;background:rgba(0,0,0,.35);border-radius:6px;padding:10px 12px;font-size:12px;word-break:break-all;color:#a8d8a8;display:block;white-space:pre-wrap;"></code>
-              <button id="proxmox-install-copy-btn" class="btn btn-secondary" style="flex-shrink:0;align-self:center;">Copy</button>
+              <button id="proxmox-install-copy-btn" class="btn btn-primary" style="flex-shrink:0;align-self:center;">Copy</button>
             </div>
             <div id="proxmox-install-msg" class="settings-message hidden" role="alert"></div>
           </div>
@@ -2428,7 +2432,7 @@
               <div style="font-weight:600;font-size:13px;">📡 Push WiFi Auth Fix to All Clients</div>
               <div style="font-size:12px;color:var(--muted);">Dispatches an <em>Update Now</em> command to every registered client. This re-deploys the polkit rule and kills nm-applet, fixing recurring WiFi authentication popups.</div>
             </div>
-            <button id="wifi-fix-btn" class="btn btn-secondary" style="flex-shrink:0;">Push Fix</button>
+            <button id="wifi-fix-btn" class="btn btn-primary" style="flex-shrink:0;">Push Fix</button>
           </div>
 
           <!-- Clear Cache -->

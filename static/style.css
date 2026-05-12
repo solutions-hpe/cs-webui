@@ -870,7 +870,7 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 }
 .form-static.muted { color: var(--muted); font-family: inherit; }
 
-.form-actions { padding-top: 4px; }
+.form-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 4px; }
 .central-config-actions { display:flex; justify-content:flex-end; gap:10px; flex-wrap:wrap; }
 .form-row { display:flex; gap:16px; flex-wrap:wrap; }
 .form-row .form-group { flex:1; }

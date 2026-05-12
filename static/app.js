@@ -1486,7 +1486,7 @@ function renderProxmoxApproveState(pending, approved) {
       extraList.innerHTML = otherPending.map((a) => {
         const enc = encodeURIComponent(String(a.hostname || ''));
         return `<strong>${escHtml(a.hostname)}</strong> `
-          + `<button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;" onclick="approveProxmoxAgent(decodeURIComponent('${enc}'))">Approve</button> `;
+          + `<button class="btn btn-primary" style="font-size:11px;padding:2px 8px;" onclick="approveProxmoxAgent(decodeURIComponent('${enc}'))">Approve</button> `;
       }).join(' &nbsp; ');
     } else {
       extraCard.classList.toggle('hidden', pending.length === 0);
@@ -3931,7 +3931,8 @@ function renderControlPanel(hostname) {
 
   const saveOverridesButton = document.createElement('button');
   saveOverridesButton.type = 'button';
-  saveOverridesButton.className = 'btn btn-secondary';
+  saveOverridesButton.className = 'btn btn-primary';
+  saveOverridesButton.style.marginLeft = 'auto';
   saveOverridesButton.textContent = 'Save to user-overrides';
   saveOverridesButton.addEventListener('click', async () => {
     try {
@@ -7975,7 +7976,7 @@ function renderTenantSpokesPanel(data) {
         <td title="${escHtml(fmtDate(spoke.last_seen))}">${escHtml(relativeTime(spoke.last_seen))}</td>
         <td>${getSpokeClients(spoke).length}</td>
         <td>${getSpokeVmCount(spoke)}</td>
-        <td>${spoke.status === "approved" ? `<button class="btn btn-secondary btn-small" data-open-spoke-modal="${escHtml(spoke.id)}" type="button">Open Detail</button>` : '<span class="muted">—</span>'}</td>
+        <td>${spoke.status === "approved" ? `<button class="btn btn-primary btn-small" data-open-spoke-modal="${escHtml(spoke.id)}" type="button">Open Detail</button>` : '<span class="muted">—</span>'}</td>
       </tr>
     `)
     .join("");
@@ -8646,9 +8647,9 @@ function renderSpokeBody(section, spoke) {
       <span class="stat-pill">Seen ${escHtml(relativeTime(spoke.last_seen))}</span>
     </div>
     <div class="spoke-action-bar">
-      <button class="btn btn-secondary btn-small" data-action="detail" type="button">Open Detail</button>
-      <button class="btn btn-secondary btn-small" data-action="audit" type="button">View Audit Log</button>
-      <button class="btn btn-secondary btn-small" data-action="mode" type="button">Processing Mode</button>
+      <button class="btn btn-primary btn-small" data-action="detail" type="button">Open Detail</button>
+      <button class="btn btn-primary btn-small" data-action="audit" type="button">View Audit Log</button>
+      <button class="btn btn-primary btn-small" data-action="mode" type="button">Processing Mode</button>
       <select class="form-input form-input-sm quick-command-select">
         <option value="kill_switch">Kill Switch</option>
         <option value="restart_sim">Restart Simulation</option>
@@ -9767,7 +9768,7 @@ function renderSuperadminTenants(items) {
         <td>${item.created_at ? escHtml(fmtDate(item.created_at)) : '<span class="muted">—</span>'}</td>
         <td>
           <div class="tenant-table-actions">
-            <button class="btn btn-secondary btn-small" data-open-tenant="${escHtml(item.id)}" type="button">Manage</button>
+            <button class="btn btn-primary btn-small" data-open-tenant="${escHtml(item.id)}" type="button">Manage</button>
             <button class="btn btn-danger btn-small" data-delete-tenant="${escHtml(item.id)}" type="button">Delete</button>
           </div>
         </td>
@@ -9790,7 +9791,7 @@ function renderUserRoleAssignForm(user, tenants) {
     `<select class="form-input form-input-sm user-tenant-select" data-user-id="${escHtml(user.id)}">${options}</select>` +
     `<select class="form-input form-input-sm user-role-select" data-user-id="${escHtml(user.id)}">` +
     `<option value="admin">Tenant Admin</option><option value="viewer">Tenant Viewer</option></select>` +
-    `<button class="btn btn-secondary btn-small" data-assign-role="${escHtml(user.id)}" type="button">Assign</button>` +
+    `<button class="btn btn-primary btn-small" data-assign-role="${escHtml(user.id)}" type="button">Assign</button>` +
     `<button class="btn btn-danger btn-small" data-delete-user="${escHtml(user.id)}" type="button">Delete</button>` +
     `</div>`;
 }

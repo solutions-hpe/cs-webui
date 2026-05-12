@@ -2071,19 +2071,27 @@ details[open] > summary.panel-header { margin-bottom: 16px; }
 .tenant-context-indicator {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 6px 10px;
   border: 1px solid rgba(255,255,255,0.14);
   border-radius: 999px;
   background: rgba(255,255,255,0.08);
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: rgba(255,255,255,0.85);
 }
 .tenant-context-label {
-  font-size: 0.76rem;
-  color: rgba(255,255,255,0.72);
+  font-size: inherit;
+  font-weight: 400;
+  color: rgba(255,255,255,0.68);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
 }
-#tenant-context-name { color: #fff; font-size: 0.95rem; }
+#tenant-context-name {
+  color: #fff;
+  font-size: inherit;
+  font-weight: 400;
+}
 .form-input-sm { padding: 4px 8px; font-size: 13px; height: 30px; }
 
 /* GKill badge */

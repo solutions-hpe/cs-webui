@@ -7014,7 +7014,9 @@ function setFormMessage(id, message, ok = true) {
 
 function tenantName(tenantId) {
   const tenant = tenants.find(item => item.id === tenantId);
-  return tenant ? tenant.name : tenantId;
+  if (tenant?.name) return tenant.name;
+  const roleTenant = currentUser?.tenant_roles?.find(role => role.tenant_id === tenantId);
+  return roleTenant?.tenant_name || roleTenant?.name || tenantId;
 }
 
 function normalizeTenantRole(role) {
@@ -7570,14 +7572,14 @@ function syncTenantContextChrome() {
 }
 
 function syncHubPermissionUI() {
-  const canManageCurrent = Boolean(currentUser && currentTenantId && (canManageTenant() || currentUser.is_superadmin));
+  const isSuperadmin = Boolean(currentUser?.is_superadmin);
   [
     '#hub-admin-nav .tab[data-tab="hub-setup"]',
     '#tenant-context-nav .tab-back[data-tab="hub-setup"]',
   ].forEach(selector => {
-    $$(selector).forEach(el => el.classList.toggle("hidden", !canManageCurrent));
+    $$(selector).forEach(el => el.classList.toggle("hidden", !isSuperadmin));
   });
-  $("#dashboard-add-tenant-btn")?.classList.toggle("hidden", !currentUser?.is_superadmin);
+  $("#dashboard-add-tenant-btn")?.classList.toggle("hidden", !isSuperadmin);
 }
 
 function exitTenantContext() {
@@ -7653,7 +7655,11 @@ async function loadUserContext() {
     tenants = tenantsRes && tenantsRes.ok ? (await tenantsRes.json()).map(item => ({ id: item.id, name: item.name || item.id, raw: item })) : [];
     tenantUserCounts = usersRes && usersRes.ok ? buildTenantUserCounts(await usersRes.json()) : {};
   } else {
-    tenants = (currentUser.tenant_roles || []).map(role => ({ id: role.tenant_id, name: role.tenant_id, raw: null }));
+    tenants = (currentUser.tenant_roles || []).map(role => ({
+      id: role.tenant_id,
+      name: role.tenant_name || role.name || role.tenant_id,
+      raw: role,
+    }));
     tenantUserCounts = {};
   }
   if (tenants.length && !tenants.some(tenant => tenant.id === currentTenantId)) {

@@ -187,7 +187,7 @@ let configLoaded = false;
 let centralTokenValid = null;
 let centralLastSyncedTs = null;
 let centralStatusInitialized = false;
-let latestProxmoxData = { vms: [], usb_state: [], unknown_usb: [], reclone_state: null };
+let latestProxmoxData = { vms: [], usb_state: [], unknown_usb: [], reclone_state: null, vh_devices: null };
 let latestRecloneState = null;
 let usbCountdownTimer = null;
 let activeVmCat = 'sim';   // 'sim' | 'other' | 'containers' | 'templates'
@@ -1214,6 +1214,7 @@ function renderServerTab(data) {
   }
 
   renderUsbSummary(latestProxmoxData);
+  renderVhDevices(latestProxmoxData);
   renderRecloneStatus(latestRecloneState || latestProxmoxData.reclone_state || {});
   renderAutoProvisionStatus();
 
@@ -1587,6 +1588,7 @@ function applySettingsToUI(s) {
   try { renderCentralOverview(); } catch (_) {}
   try { renderChecksList(); } catch (_) {} // Refresh sim tab whenever settings change (monitored checks may have changed)
   try { renderUsbSummary(latestProxmoxData); } catch (_) {}
+  try { renderVhDevices(latestProxmoxData); } catch (_) {}
   try { renderRecloneStatus(latestRecloneState || latestProxmoxData.reclone_state || {}); } catch (_) {}
   try { renderAutoProvisionStatus(); } catch (_) {}
   if (centralSiteDetailOpen) {
@@ -2453,6 +2455,42 @@ async function triggerRecloneAll() {
       recloneNowBtn.textContent = '⟳ Reclone All Now';
     }
   }
+}
+
+function renderVhDevices(proxmoxData = latestProxmoxData) {
+  const pills = document.getElementById('vh-stat-pills');
+  const list  = document.getElementById('vh-device-list');
+  if (!pills || !list) return;
+
+  const vh = proxmoxData?.vh_devices || {};
+  const devices  = Array.isArray(vh.devices) ? vh.devices : [];
+  const active   = vh.vh_service_active;
+  const connected = vh.vh_connected;
+  const count    = vh.count ?? devices.length;
+
+  // Status pill
+  const svcLabel = active   ? '🟢 Service running' : '🔴 Service stopped';
+  const cxLabel  = connected ? `🔌 ${count} device${count !== 1 ? 's' : ''} detected` : '⚫ No VH devices';
+  pills.innerHTML = `<span class="server-stat-pill">${svcLabel}</span><span class="server-stat-pill">${cxLabel}</span>`;
+
+  if (!devices.length) {
+    list.innerHTML = '<p class="muted" style="padding:8px 0;">No VirtualHere or cross-referenced USB devices detected.</p>';
+    return;
+  }
+
+  // Group by source
+  const groups = { both: [], vh: [], physical: [] };
+  devices.forEach(d => (groups[d.source] || groups.physical).push(d.vidpid));
+
+  const sourceLabel = { both: '🔌 VH + Physical', vh: '🌐 VH only', physical: '🔧 Physical only' };
+  let html = '<table class="data-table"><thead><tr><th>VID:PID</th><th>Source</th></tr></thead><tbody>';
+  for (const [src, vps] of Object.entries(groups)) {
+    vps.forEach(vp => {
+      html += `<tr><td>${escHtml(vp)}</td><td>${sourceLabel[src] || src}</td></tr>`;
+    });
+  }
+  html += '</tbody></table>';
+  list.innerHTML = html;
 }
 
 function renderRecloneStatus(recloneState = latestRecloneState || {}) {

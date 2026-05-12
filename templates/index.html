@@ -916,6 +916,7 @@
         <nav class="setup-subnav" role="tablist">
           <button class="setup-subtab server-subtab active" data-subtab="server-vms" role="tab">VMs</button>
           <button class="setup-subtab server-subtab" data-subtab="server-usb" role="tab">USB</button>
+          <button class="setup-subtab server-subtab" data-subtab="server-vh" role="tab">VirtualHere</button>
           <button class="setup-subtab server-subtab" data-subtab="server-commands" role="tab">Command Queue</button>
           <button class="setup-subtab server-subtab" data-subtab="server-node" role="tab">Details</button>
         </nav>
@@ -1098,6 +1099,17 @@
                 </table>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- VirtualHere sub-tab -->
+        <div id="server-vh" class="setup-subpanel hidden">
+          <div class="setup-card setup-section-gap">
+            <div class="setup-card-header">
+              <h2>🔌 VirtualHere Devices</h2>
+              <div id="vh-stat-pills" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"></div>
+            </div>
+            <div id="vh-device-list" style="margin-top:8px;"></div>
           </div>
         </div>
 

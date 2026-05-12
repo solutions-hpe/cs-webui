@@ -608,9 +608,9 @@
                   <input id="acme-enabled" type="checkbox"> Enable automatic renewal
                 </label>
               </div>
-              <div style="display:flex;gap:8px;margin-top:12px;">
-                <button class="btn btn-primary" onclick="saveAcmeConfig()">Save</button>
+              <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">
                 <button class="btn btn-secondary" onclick="requestAcmeCert()" id="acme-request-btn">Request Certificate Now</button>
+                <button class="btn btn-primary" onclick="saveAcmeConfig()">Save</button>
               </div>
               <p id="acme-msg" class="form-msg"></p>
             </div>

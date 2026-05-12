@@ -10191,6 +10191,7 @@ function bindEvents() {
       ["settings-account", "settings-aruba", "settings-notifications", "settings-api", "settings-tls", "settings-pending-spokes"].forEach(panelId => {
         document.getElementById(panelId)?.classList.toggle("hidden", panelId !== subtab);
       });
+      if (subtab === "settings-tls") loadAcmeSettings().catch(() => {});
       return;
     }
 

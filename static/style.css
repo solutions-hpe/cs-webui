@@ -1533,40 +1533,29 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 #usb-vidpid-table, #usb-summary-table, #unknown-usb-table { margin-top:10px; }
 
 /* Certified / USB summary tables */
-#usb-vidpid-table  { table-layout: fixed; }
-#usb-summary-table { table-layout: auto; }
-#unknown-usb-table { table-layout: fixed; }
+#usb-vidpid-table  { table-layout: fixed; width: 100%; }
+#usb-summary-table { table-layout: fixed; width: 100%; }
+#unknown-usb-table { table-layout: fixed; width: 100%; }
 
 /* VID:PID table column widths: VID:PID | Type | Label | Actions */
 #usb-vidpid-table  th:nth-child(1), #usb-vidpid-table  td:nth-child(1) { width: 18%; }
 #usb-vidpid-table  th:nth-child(2), #usb-vidpid-table  td:nth-child(2) { width: 14%; }
 #usb-vidpid-table  th:nth-child(4), #usb-vidpid-table  td:nth-child(4) { width: 10%; text-align: center; }
 
-/* USB summary table column widths: Device | VID:PID | Type | Active | Missing | Count */
-#usb-summary-table th:nth-child(2), #usb-summary-table td:nth-child(2) {
-  width: 80px;
-  min-width: 80px;
-  white-space: nowrap;
-}
-#usb-summary-table th:nth-child(3), #usb-summary-table td:nth-child(3) {
-  width: 96px;
-  min-width: 96px;
-}
+/* USB summary table column widths: Device | VID:PID | Type | Active VMs | Missing | Avail | Total */
+#usb-summary-table th:nth-child(1), #usb-summary-table td:nth-child(1) { width: 22%; }
+#usb-summary-table th:nth-child(2), #usb-summary-table td:nth-child(2) { width: 9%; white-space: nowrap; }
+#usb-summary-table th:nth-child(3), #usb-summary-table td:nth-child(3) { width: 9%; }
 #usb-summary-table th:nth-child(4), #usb-summary-table td:nth-child(4),
-#usb-summary-table th:nth-child(5), #usb-summary-table td:nth-child(5) {
-  width: 180px;
-  min-width: 180px;
-}
+#usb-summary-table th:nth-child(5), #usb-summary-table td:nth-child(5) { width: 26%; }
+#usb-summary-table th:nth-child(6), #usb-summary-table td:nth-child(6) { width: 5%; text-align: center; }
+#usb-summary-table th:nth-child(7), #usb-summary-table td:nth-child(7) { width: 5%; text-align: center; }
 #usb-summary-table th:nth-child(4),
 #usb-summary-table th:nth-child(5),
 #usb-summary-table th:nth-child(6),
 #unknown-usb-table th:nth-child(2),
 #unknown-usb-table td:nth-child(2) {
   white-space: nowrap;
-}
-#usb-summary-table th:nth-child(6), #usb-summary-table td:nth-child(6) {
-  width: 72px;
-  min-width: 72px;
 }
 
 /* Unknown USB table: Device | VID:PID | Actions */

@@ -1083,12 +1083,12 @@
             <table class="data-table" id="usb-summary-table">
               <colgroup>
                 <col><!-- Device: flexible -->
-                <col style="width:120px"><!-- VID:PID -->
+                <col style="width:105px"><!-- VID:PID -->
                 <col style="width:90px"><!-- Type -->
-                <col style="width:230px"><!-- Active VMs -->
-                <col style="width:230px"><!-- Missing Dongle -->
-                <col style="width:95px"><!-- Available -->
-                <col style="width:68px"><!-- Count -->
+                <col style="width:200px"><!-- Active VMs -->
+                <col style="width:200px"><!-- Missing Dongle -->
+                <col style="width:100px"><!-- Available -->
+                <col style="width:75px"><!-- Count -->
               </colgroup>
               <thead>
                 <tr><th>Device</th><th>VID:PID</th><th>Type</th><th title="VMs with this USB device actively assigned via USB provisioning">Active VMs</th><th>Missing Dongle</th><th>Available</th><th>Count</th></tr>
@@ -1101,12 +1101,15 @@
                 <h3>⚠️ Uncertified Devices Detected</h3>
                 <p>These USB devices are connected but not in the certified list. Add or ignore them below.</p>
               </div>
-              <div class="table-scroll">
-                <table class="data-table" id="unknown-usb-table">
+              <table class="data-table" id="unknown-usb-table">
+                  <colgroup>
+                    <col><!-- Device: flexible -->
+                    <col style="width:105px"><!-- VID:PID -->
+                    <col style="width:300px"><!-- Actions -->
+                  </colgroup>
                   <thead><tr><th>Device</th><th>VID:PID</th><th>Actions</th></tr></thead>
                   <tbody id="unknown-usb-tbody"></tbody>
                 </table>
-              </div>
             </div>
           </div>
         </div>

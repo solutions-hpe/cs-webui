@@ -1534,24 +1534,27 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 
 /* Certified / USB summary tables */
 #usb-vidpid-table  { table-layout: fixed; width: 100%; }
-/* Override the setup-card edge-to-edge bleed so it stays contained like the uncertified table */
-#usb-summary-table { table-layout: fixed; width: 100%; margin: 0; border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
-#unknown-usb-table { table-layout: fixed; width: 100%; }
+/* Override the setup-card edge-to-edge bleed; add all 4 borders */
+#usb-summary-table { table-layout: fixed; width: 100%; margin: 0; border: 1px solid var(--border); }
+#unknown-usb-table { table-layout: fixed; width: 100%; margin: 0; border: 1px solid var(--border); }
+
+/* Reduce cell padding for fixed-layout USB tables so colgroup widths are meaningful.
+   Default data-table padding is 32px per side (64px total) — too wide for narrow columns. */
+#usb-summary-table th, #usb-summary-table td,
+#unknown-usb-table th, #unknown-usb-table td { padding-left: 12px; padding-right: 12px; }
 
 /* VID:PID table column widths: VID:PID | Type | Label | Actions */
 #usb-vidpid-table  th:nth-child(1), #usb-vidpid-table  td:nth-child(1) { width: 18%; }
 #usb-vidpid-table  th:nth-child(2), #usb-vidpid-table  td:nth-child(2) { width: 14%; }
 #usb-vidpid-table  th:nth-child(4), #usb-vidpid-table  td:nth-child(4) { width: 10%; text-align: center; }
 
-/* USB summary table — column widths controlled by <colgroup> in HTML.
-   VID:PID 120px | Type 90px | Active VMs 230px | Missing 230px | Available 95px | Count 68px | Device: flex */
+/* USB summary table — column widths via <colgroup> in HTML.
+   Device: flex | VID:PID 105px | Type 90px | Active VMs 200px | Missing 200px | Available 100px | Count 75px */
 #usb-summary-table th:nth-child(6), #usb-summary-table td:nth-child(6) { text-align: center; }
 #usb-summary-table th:nth-child(7), #usb-summary-table td:nth-child(7) { text-align: center; }
 
-/* Unknown USB table: Device | VID:PID | Actions */
-#unknown-usb-table th:nth-child(1), #unknown-usb-table td:nth-child(1) { width: auto; }
-#unknown-usb-table th:nth-child(2), #unknown-usb-table td:nth-child(2) { width: 120px; }
-#unknown-usb-table th:nth-child(3), #unknown-usb-table td:nth-child(3) { width: 300px; min-width: 0; white-space: nowrap; }
+/* Unknown USB table — column widths via <colgroup> in HTML.
+   Device: flex | VID:PID 105px | Actions 300px */
 #unknown-usb-table td.usb-actions {
   overflow: visible;
   text-overflow: clip;

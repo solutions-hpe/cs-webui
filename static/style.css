@@ -1559,8 +1559,13 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 }
 
 /* Unknown USB table: Device | VID:PID | Actions */
-#unknown-usb-table th:nth-child(2), #unknown-usb-table td:nth-child(2) { width: 18%; }
-#unknown-usb-table th:nth-child(3), #unknown-usb-table td:nth-child(3) { width: 240px; min-width: 240px; overflow: visible; white-space: normal; }
+#unknown-usb-table th:nth-child(1), #unknown-usb-table td:nth-child(1) { width: auto; }
+#unknown-usb-table th:nth-child(2), #unknown-usb-table td:nth-child(2) { width: 120px; }
+#unknown-usb-table th:nth-child(3), #unknown-usb-table td:nth-child(3) { width: 300px; min-width: 0; white-space: nowrap; }
+#unknown-usb-table td.usb-actions {
+  overflow: visible;
+  text-overflow: clip;
+}
 
 /* Truncate long text in fixed-width USB tables */
 #usb-vidpid-table td, #unknown-usb-table td {
@@ -1593,7 +1598,8 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 .usb-type-wired { color: #ff8300; }
 .usb-missing-list { display:flex; flex-direction:column; gap:4px; }
 .usb-missing-item { font-size:0.82rem; color:var(--muted); }
-.usb-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.usb-actions { display:flex; gap:8px; flex-wrap:nowrap; align-items:center; min-width:0; }
+.usb-actions .btn { flex:0 0 auto; }
 #reclone-last-run, #reclone-progress-label { font-size:0.85rem; color:var(--muted); }
 
 /* ── Reclone + Auto-Provisioning 2-col layout ─────────── */

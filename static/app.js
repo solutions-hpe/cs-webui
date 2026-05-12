@@ -2727,15 +2727,10 @@ function renderRecloneLogItems(entries = [], emptyHtml = '') {
   if (!entries.length) return emptyHtml;
   return entries.slice().reverse().map((entry) => {
     const meta = recloneLogStatusMeta(entry.status);
-    const metaBits = [];
-    if (entry.vmid != null) metaBits.push(`VMID ${entry.vmid}`);
-    if (entry.timestamp) metaBits.push(formatUiDate(entry.timestamp));
-    if (entry.message) metaBits.push(entry.message);
     return `
-      <div class="autoprov-live-item" title="${escHtml(entry.message || '')}">
+      <div class="autoprov-live-item reclone-live-item" title="${escHtml(entry.message || '')}">
         <div class="autoprov-live-item-main">
           <div class="autoprov-live-item-name">${escHtml(entry.name || `VM ${entry.vmid}`)}</div>
-          <div class="autoprov-live-item-meta">${escHtml(metaBits.join(' · ') || '—')}</div>
         </div>
         <span class="status-badge ${meta.className}">${meta.label}</span>
       </div>

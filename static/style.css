@@ -1689,6 +1689,7 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 .reclone-log .log-entry { padding: 2px 0; display: flex; gap: 8px; align-items: center; }
 .progress-bar-wrap { background: #e0e0e0; border-radius: 4px; height: 12px; margin: 8px 0; }
 .progress-bar { background: #01a982; height: 100%; border-radius: 4px; transition: width 0.3s; width:0%; }
+#reclone-progress-wrap .progress-bar-wrap { width: 50%; min-width: 220px; max-width: 100%; }
 .usb-type-wireless { color: #01a982; }
 .usb-type-wired { color: #ff8300; }
 .usb-missing-list { display:flex; flex-direction:column; gap:4px; }
@@ -1786,6 +1787,11 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   color: var(--muted);
   word-break: break-word;
 }
+.reclone-live-item .autoprov-live-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .autoprov-phase {
   flex-shrink: 0;
@@ -1834,6 +1840,9 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+@media (max-width: 900px) {
+  #reclone-progress-wrap .progress-bar-wrap { width: 100%; min-width: 0; }
 }
 
 .status-online {

@@ -90,7 +90,7 @@ Use **Simulations** first to answer:
 
 Use **Clients** for day-to-day VM troubleshooting:
 
-- online/offline state
+- online/offline state (online means the last heartbeat was within 300 seconds)
 - last seen time
 - platform/hardware type
 - active simulations
@@ -103,11 +103,14 @@ When the spoke has a connected Proxmox agent, **VM Server** exposes:
 
 - simulation and other VM lists
 - USB inventory and uncertified devices
+- a **VirtualHere** sub-tab fed by `vh_devices` telemetry from the Proxmox agent
 - command queue state
 - auto-provisioning state
 - reclone progress and recovery log
 
-Use this area when you need to approve the local Proxmox agent, inspect USB assignments, or reclone/delete VMs.
+The VirtualHere sub-tab shows the VH hub/server name, device names, connection state, and whether auto-use is active for each device.
+
+Use this area when you need to approve the local Proxmox agent, inspect USB assignments, inspect VirtualHere inventory, or reclone/delete VMs.
 
 When a VM delete is queued, the row immediately shows as **🔴 deleting…** with all controls disabled. The row disappears cleanly on the next agent telemetry cycle once deletion is confirmed, which prevents the inventory from appearing empty during bulk deletes.
 
@@ -267,6 +270,12 @@ This keeps hub and spoke logic in one file while avoiding runtime overlap.
 3. Add UI fetch logic in the correct IIFE.
 4. Render into the existing page/card/table pattern used in `index.html`.
 5. If the feature belongs in both modes, keep selectors and function names mode-scoped so the two IIFEs stay isolated.
+
+### UI conventions
+
+- `btn-primary` is the default action button style and uses the solid HPE green fill.
+- Use a more specific variant only when semantics require it, such as `btn-danger` for destructive actions or `btn-secondary` for secondary/outline actions.
+- Keep online/offline UI behavior aligned to the shared 300-second timeout used by spoke and hub backends.
 
 ### Shared utilities
 

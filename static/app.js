@@ -392,13 +392,14 @@ function activateServerSubtab(subtabId = 'server-vms') {
   document.querySelectorAll('.server-subtab').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.subtab === subtabId);
   });
-  ['server-node', 'server-vms', 'server-usb', 'server-commands'].forEach((id) => {
+  ['server-node', 'server-vms', 'server-usb', 'server-vh', 'server-commands'].forEach((id) => {
     const panel = document.getElementById(id);
     if (!panel) return;
     const isActive = id === subtabId;
     panel.classList.toggle('active', isActive);
     panel.classList.toggle('hidden', !isActive);
   });
+  if (subtabId === 'server-vh') renderVhDevices(latestProxmoxData);
   updateRefreshPausedState();
 }
 

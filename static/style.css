@@ -1543,13 +1543,13 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 #usb-vidpid-table  th:nth-child(4), #usb-vidpid-table  td:nth-child(4) { width: 10%; text-align: center; }
 
 /* USB summary table column widths: Device | VID:PID | Type | Active VMs | Missing | Avail | Total */
-#usb-summary-table th:nth-child(1), #usb-summary-table td:nth-child(1) { width: 22%; }
-#usb-summary-table th:nth-child(2), #usb-summary-table td:nth-child(2) { width: 9%; white-space: nowrap; }
-#usb-summary-table th:nth-child(3), #usb-summary-table td:nth-child(3) { width: 9%; }
-#usb-summary-table th:nth-child(4), #usb-summary-table td:nth-child(4),
-#usb-summary-table th:nth-child(5), #usb-summary-table td:nth-child(5) { width: 26%; }
-#usb-summary-table th:nth-child(6), #usb-summary-table td:nth-child(6) { width: 5%; text-align: center; }
-#usb-summary-table th:nth-child(7), #usb-summary-table td:nth-child(7) { width: 5%; text-align: center; }
+/* Device column is flexible — takes remaining space */
+#usb-summary-table th:nth-child(2), #usb-summary-table td:nth-child(2) { width: 115px; white-space: nowrap; }
+#usb-summary-table th:nth-child(3), #usb-summary-table td:nth-child(3) { width: 90px; }
+#usb-summary-table th:nth-child(4), #usb-summary-table td:nth-child(4) { width: 220px; }
+#usb-summary-table th:nth-child(5), #usb-summary-table td:nth-child(5) { width: 180px; }
+#usb-summary-table th:nth-child(6), #usb-summary-table td:nth-child(6) { width: 85px; text-align: center; }
+#usb-summary-table th:nth-child(7), #usb-summary-table td:nth-child(7) { width: 70px; text-align: center; }
 #usb-summary-table th:nth-child(4),
 #usb-summary-table th:nth-child(5),
 #usb-summary-table th:nth-child(6),

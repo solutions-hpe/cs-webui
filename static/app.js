@@ -7148,7 +7148,7 @@ let hubSimChecksSearch = "";
 let hubSimOpenCheckId = null;
 let hubHwOpenCheckId = null;
 let hubCcOpenWsite = null;
-const hubClientUiState = { search: "", status: "all", expandedByTenant: {} };
+const hubClientUiState = { search: "", status: "all", expandedByTenant: {}, seenSitesByTenant: {} };
 let hubClientTypeFilter = "all";
 const tenantDashboardSort = { key: "name", direction: "asc" };
 
@@ -7455,8 +7455,17 @@ function hubClientSiteKey(row = {}) {
 }
 
 function primeHubClientExpandedSet(siteKeys = [], tenantId = currentTenantId) {
-  if (!tenantId || hubClientUiState.expandedByTenant[tenantId]) return;
-  hubClientUiState.expandedByTenant[tenantId] = new Set(siteKeys.filter(Boolean));
+  if (!tenantId) return;
+  if (!hubClientUiState.seenSitesByTenant[tenantId]) hubClientUiState.seenSitesByTenant[tenantId] = new Set();
+  const seen = hubClientUiState.seenSitesByTenant[tenantId];
+  const expanded = getHubClientExpandedSet(tenantId);
+  // Auto-expand any site that hasn't been seen before (preserves user's explicit collapses)
+  siteKeys.filter(Boolean).forEach(key => {
+    if (!seen.has(key)) {
+      expanded.add(key);
+      seen.add(key);
+    }
+  });
 }
 
 function normalizeAggregateClientRows(data) {
@@ -8435,6 +8444,7 @@ function applyAuthUI() {
     aggregateCentralData = null;
     hubConfigDraft = "";
     hubClientUiState.expandedByTenant = {};
+    hubClientUiState.seenSitesByTenant = {};
     tenantDetailState.data = {};
     resetTenantDetail();
     syncTenantContextChrome();
@@ -8540,8 +8550,7 @@ function logout(showMessage = true) {
   aggregateCentralData = null;
   hubConfigDraft = "";
   hubClientUiState.expandedByTenant = {};
-  tenantDetailState.data = {};
-  tenantContextActive = false;
+  hubClientUiState.seenSitesByTenant = {};
   resetTenantDetail();
   activeSpokeModal = null;
   localStorage.removeItem("hub_token");
@@ -8564,6 +8573,7 @@ async function setCurrentTenant(tenantId, reload = true) {
   aggregateCentralData = null;
   hubConfigDraft = "";
   delete hubClientUiState.expandedByTenant[tenantId];
+  delete hubClientUiState.seenSitesByTenant[tenantId];
   syncRoleBadge();
   syncTenantContextChrome();
   syncHubPermissionUI();

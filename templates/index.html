@@ -993,7 +993,8 @@
       <main id="tab-server" class="page tab-content hidden tab-panel" style="display:none;">
         <nav class="setup-subnav" role="tablist">
           <button class="setup-subtab server-subtab active" data-subtab="server-vms" role="tab">VMs</button>
-          <button class="setup-subtab server-subtab" data-subtab="server-usb" role="tab">USB</button>
+          <button class="setup-subtab server-subtab" data-subtab="server-usb" role="tab">T2</button>
+          <button class="setup-subtab server-subtab" data-subtab="server-t3" role="tab">T3</button>
           <button class="setup-subtab server-subtab" data-subtab="server-vh" role="tab">VirtualHere</button>
           <button class="setup-subtab server-subtab" data-subtab="server-commands" role="tab">Command Queue</button>
           <button class="setup-subtab server-subtab" data-subtab="server-node" role="tab">Details</button>
@@ -1199,6 +1200,27 @@
                   <tbody id="unknown-usb-tbody"></tbody>
                 </table>
             </div>
+          </div>
+        </div>
+
+        <!-- T3 sub-tab -->
+        <div id="server-t3" class="setup-subpanel hidden">
+          <div class="setup-card setup-section-gap">
+            <div class="setup-card-header">
+              <h2>T3 Clients</h2>
+              <p>T3 client classification coming soon.</p>
+            </div>
+            <table class="data-table" id="server-t3-vm-table">
+              <colgroup>
+                <col style="width:70px">
+                <col>
+                <col style="width:80px">
+                <col style="width:90px">
+                <col>
+              </colgroup>
+              <thead><tr><th>VMID</th><th>Name</th><th>Type</th><th>Status</th><th>USB</th></tr></thead>
+              <tbody id="server-t3-vm-tbody"></tbody>
+            </table>
           </div>
         </div>
 

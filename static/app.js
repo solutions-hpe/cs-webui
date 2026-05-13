@@ -8539,7 +8539,7 @@ function logout(showMessage = true) {
   resetTenantDetail();
   // Clear all per-tenant localStorage caches on logout
   try {
-    Object.keys(localStorage).filter(k => k.startsWith("hub_central_") || k.startsWith("hub_clients_"))
+    Object.keys(localStorage).filter(k => k.startsWith("hub_central_") || k.startsWith("hub_clients_") || k.startsWith("hub_sites_"))
       .forEach(k => localStorage.removeItem(k));
   } catch (_) {}
   localStorage.removeItem("hub_token");
@@ -9759,6 +9759,18 @@ async function loadCentral(force = false) {
   renderHubCentral();
 }
 
+// ── Hub Sites localStorage cache helpers ───────────────────────────────────
+function hubSitesCacheKey() { return `hub_sites_${currentTenantId}`; }
+
+function saveHubSitesCache(data) {
+  try { localStorage.setItem(hubSitesCacheKey(), JSON.stringify(data)); } catch (_) {}
+}
+
+function loadHubSitesCache() {
+  try { const s = localStorage.getItem(hubSitesCacheKey()); return s ? JSON.parse(s) : null; }
+  catch (_) { return null; }
+}
+
 // ── Hub Central localStorage cache helpers ─────────────────────────────────
 function hubCentralCacheKey() { return `hub_central_${currentTenantId}`; }
 
@@ -9788,27 +9800,33 @@ async function loadHubCentralData(force = false) {
     return;
   }
 
+  const saveCaches = (data) => {
+    saveHubSitesCache(data);
+    saveHubCentralCache(data);
+  };
+  const revalidate = () => {
+    loadAggregateData("central-status").then(data => {
+      if (data) {
+        applyHubCentralData(data);
+        saveCaches(data);
+      }
+    }).catch(() => {});
+  };
+
   // In-memory cache still valid (tab switch within session) — render immediately.
   if (!force && hubCentralData) {
     renderHubCentralStatus();
-    // Revalidate in background without blocking UI.
-    loadAggregateData("central-status").then(data => {
-      if (data) { applyHubCentralData(data); saveHubCentralCache(data); }
-    }).catch(() => {});
+    revalidate();
     return;
   }
 
-  // Check localStorage for a previously cached response — show it right away
-  // so the tab isn't blank while the API call is in-flight.
-  const cached = loadHubCentralCache();
+  // Show localStorage cache immediately while fetching fresh data.
+  const cached = loadHubSitesCache() || loadHubCentralCache();
   if (cached) {
     $("#hcs-site-detail")?.classList.add("hidden");
     $("#hcs-overview")?.classList.remove("hidden");
     applyHubCentralData(cached);
-    // Refresh in background; update display when fresh data arrives.
-    loadAggregateData("central-status").then(data => {
-      if (data) { applyHubCentralData(data); saveHubCentralCache(data); }
-    }).catch(() => {});
+    revalidate();
     return;
   }
 
@@ -9823,7 +9841,7 @@ async function loadHubCentralData(force = false) {
   $("#hcs-site-detail")?.classList.add("hidden");
   $("#hcs-overview")?.classList.remove("hidden");
   applyHubCentralData(data);
-  saveHubCentralCache(data);
+  saveCaches(data);
 }
 
 function renderHubCentralStatus() {
@@ -11721,7 +11739,11 @@ function bindEvents() {
       ["hcs-sites-panel", "hcs-alerts-panel", "hcs-clients-panel"].forEach(id => {
         document.getElementById(id)?.classList.toggle("hidden", id !== `${hubCentralActiveSubtab}-panel`);
       });
-      renderHubCentralStatus();
+      if (!hubCentralData && currentTenantId && currentUser) {
+        loadHubCentralData().catch(() => {});
+      } else {
+        renderHubCentralStatus();
+      }
       return;
     }
 

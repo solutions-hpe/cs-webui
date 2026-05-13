@@ -330,11 +330,6 @@ async function hydrateSetupSubtab(subtabId) {
     return;
   }
 
-  if (subtabId === 'setup-tls') {
-    await loadSpokeAcmeSettings().catch(() => {});
-    return;
-  }
-
   const loadSetupSettings = async () => {
     try {
       await loadSettings();
@@ -355,11 +350,6 @@ async function hydrateSetupSubtab(subtabId) {
   }
 
   await loadSetupSettings();
-
-  if (subtabId === 'setup-relay') {
-    await requestJson('/api/relay/status').then(setRelayStatus).catch(() => {});
-    return;
-  }
 
   if (subtabId === 'setup-central') {
     await loadCentralStatus().catch(() => {});

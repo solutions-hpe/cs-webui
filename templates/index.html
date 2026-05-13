@@ -306,7 +306,17 @@
         <button class="setup-subtab hub-central-subtab" data-subtab="hcs-clients" role="tab" type="button">Clients</button>
       </nav>
       <div id="hcs-sites-panel">
-        <div id="hcs-content"></div>
+        <div id="hcs-overview"></div>
+        <div id="hcs-site-detail" class="hidden">
+          <div class="page-toolbar" style="margin-bottom:12px;">
+            <button id="hcs-detail-back" class="btn btn-secondary btn-small" type="button">← Back</button>
+            <div style="flex:1;">
+              <div id="hcs-detail-title" style="font-weight:700;font-size:1.1rem;"></div>
+              <div id="hcs-detail-sub" style="color:var(--muted);font-size:0.85rem;"></div>
+            </div>
+          </div>
+          <div id="hcs-detail-content"></div>
+        </div>
       </div>
       <div id="hcs-alerts-panel" class="hidden">
         <div id="hcs-alerts-content"></div>

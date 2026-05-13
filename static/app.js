@@ -7142,6 +7142,7 @@ let aggregateApiServerRows = [];
 let aggregateCentralData = null;
 let hubCentralData = null;
 let hubCentralActiveSubtab = "hcs-sites";
+let hubCentralSiteOpen = null;
 let hubConfigDraft = "";
 let hubSimActiveTab = "hub-simtop-checks";
 let hubSimChecksFilter = "failing";
@@ -8437,7 +8438,7 @@ function applyAuthUI() {
     dashboardTenantRows = [];
     aggregateDashboardData = null;
     hubCentralData = null;
-    hubSimOpenCheckId = null;
+    hubCentralSiteOpen = null;
     hubHwOpenCheckId = null;
     hubCcOpenWsite = null;
     aggregateClientRows = [];
@@ -9719,7 +9720,7 @@ async function loadCentral(force = false) {
 }
 
 async function loadHubCentralData(force = false) {
-  const container = $("#hcs-content");
+  const container = $("#hcs-overview");
   if (!container) return;
   if (!currentTenantId || !currentUser) {
     container.innerHTML = '<div class="empty-state">Sign in and select a tenant.</div>';
@@ -9740,6 +9741,9 @@ async function loadHubCentralData(force = false) {
   const siteCount = spokes.reduce((n, s) => n + (s.sites || []).length, 0);
   $("#hcs-spokes-pill") && ($("#hcs-spokes-pill").textContent = `${spokes.length} spokes`);
   $("#hcs-sites-pill") && ($("#hcs-sites-pill").textContent = `${siteCount} sites`);
+  hubCentralSiteOpen = null;
+  $("#hcs-site-detail")?.classList.add("hidden");
+  $("#hcs-overview")?.classList.remove("hidden");
   renderHubCentralStatus();
 }
 
@@ -9750,38 +9754,174 @@ function renderHubCentralStatus() {
 }
 
 function renderHubCentralSites() {
-  const container = $("#hcs-content");
+  const container = $("#hcs-overview");
   if (!container || !hubCentralData) return;
   const { spokes = [], mode, token_valid: hubTokenValid } = hubCentralData;
-  const allSites = spokes.flatMap(s => (s.sites || []).map(site => ({
-    ...site,
-    spoke_name: s.spoke_name,
-    spoke_id: s.spoke_id,
-    spoke_online: s.spoke_online,
-    token_valid: mode === "centralized" ? hubTokenValid : s.token_valid,
-  })));
-  if (!allSites.length) {
+
+  // Aggregate by wsite across all spokes
+  const siteMap = {};
+  for (const spoke of spokes) {
+    for (const site of (spoke.sites || [])) {
+      if (!siteMap[site.wsite]) {
+        siteMap[site.wsite] = {
+          wsite: site.wsite,
+          central_site: site.central_site || "",
+          check_ok: 0, check_fail: 0, check_unknown: 0, wireless_clients: 0,
+          status_map: {},
+          token_valid: mode === "centralized" ? hubTokenValid : false,
+          spokes: [],
+        };
+      }
+      const agg = siteMap[site.wsite];
+      agg.check_ok += site.check_ok || 0;
+      agg.check_fail += site.check_fail || 0;
+      agg.check_unknown += site.check_unknown || 0;
+      agg.wireless_clients += typeof site.wireless_clients === "number" ? site.wireless_clients : 0;
+      if (mode !== "centralized" && spoke.token_valid) agg.token_valid = true;
+      // Merge status_map — ERROR wins over OK for same check
+      for (const [cid, cv] of Object.entries(site.status_map || {})) {
+        if (!agg.status_map[cid] || (cv.status === "ERROR" && agg.status_map[cid].status !== "ERROR")) {
+          agg.status_map[cid] = { ...cv };
+        }
+      }
+      agg.spokes.push({ spoke_id: spoke.spoke_id, spoke_name: spoke.spoke_name, spoke_online: spoke.spoke_online });
+    }
+  }
+
+  const sites = Object.values(siteMap);
+  if (!sites.length) {
     container.innerHTML = '<div class="empty-state">No Central sites configured on any spoke.</div>';
     return;
   }
-  const rows = allSites.map(s => `
-    <tr>
-      <td>${escHtml(s.spoke_name || s.spoke_id)}</td>
+
+  const rows = sites.map(s => {
+    const hasChecks = Object.keys(s.status_map).length > 0;
+    return `<tr style="cursor:pointer;" title="View ${escHtml(s.wsite)} detail">
       <td><strong>${escHtml(s.wsite)}</strong></td>
       <td>${escHtml(s.central_site || '—')}</td>
-      <td style="color:var(--hpe-green-dark);">${s.check_ok ?? '—'}</td>
-      <td style="color:${s.check_fail ? '#c0392b' : 'inherit'};">${s.check_fail ?? '—'}</td>
-      <td style="color:var(--muted);">${s.check_unknown ?? '—'}</td>
-      <td>${s.wireless_clients ?? '—'}</td>
+      <td style="color:var(--hpe-green-dark);">${hasChecks ? s.check_ok : '—'}</td>
+      <td style="color:${s.check_fail ? '#c0392b' : 'inherit'};">${hasChecks ? s.check_fail : '—'}</td>
+      <td style="color:var(--muted);">${hasChecks ? s.check_unknown : '—'}</td>
+      <td>${typeof s.wireless_clients === "number" ? s.wireless_clients : '—'}</td>
       <td><span class="status-dot ${s.token_valid ? 'online' : 'offline'}"></span></td>
-    </tr>`).join('');
+      <td><button class="btn btn-small btn-secondary hcs-view-btn" data-wsite="${escHtml(s.wsite)}" type="button">View →</button></td>
+    </tr>`;
+  }).join('');
+
   container.innerHTML = `
     <div class="setup-card">
       <table class="data-table">
-        <thead><tr><th>Spoke</th><th>Site</th><th>Central Site</th><th>✓ OK</th><th>✗ Err</th><th>?</th><th>Wireless</th><th>Token</th></tr></thead>
+        <thead><tr><th>Site</th><th>Central Site</th><th>✓ OK</th><th>✗ Err</th><th>?</th><th>Wireless</th><th>Token</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+
+  // Wire click handlers
+  container.querySelectorAll("tr[title]").forEach(tr => {
+    tr.addEventListener("click", () => openHubSiteDetail(tr.querySelector(".hcs-view-btn")?.dataset.wsite));
+  });
+  container.querySelectorAll(".hcs-view-btn").forEach(btn => {
+    btn.addEventListener("click", e => { e.stopPropagation(); openHubSiteDetail(btn.dataset.wsite); });
+  });
+}
+
+function openHubSiteDetail(wsite) {
+  if (!wsite || !hubCentralData) return;
+  hubCentralSiteOpen = wsite;
+
+  // Build aggregated site data
+  const { spokes = [], mode, token_valid: hubTokenValid } = hubCentralData;
+  let centralSite = "", statusMap = {}, wirelessTotal = 0, spokeList = [];
+  for (const spoke of spokes) {
+    for (const site of (spoke.sites || [])) {
+      if (site.wsite !== wsite) continue;
+      centralSite = centralSite || site.central_site || "";
+      wirelessTotal += typeof site.wireless_clients === "number" ? site.wireless_clients : 0;
+      spokeList.push({ ...spoke });
+      for (const [cid, cv] of Object.entries(site.status_map || {})) {
+        if (!statusMap[cid] || (cv.status === "ERROR" && statusMap[cid].status !== "ERROR")) {
+          statusMap[cid] = { ...cv };
+        }
+      }
+    }
+  }
+
+  $("#hcs-overview")?.classList.add("hidden");
+  $("#hcs-site-detail")?.classList.remove("hidden");
+  const titleEl = $("#hcs-detail-title");
+  const subEl = $("#hcs-detail-sub");
+  if (titleEl) titleEl.textContent = wsite;
+  if (subEl) subEl.textContent = centralSite ? `Central site: ${centralSite}` : "No Central site mapping";
+
+  // Render checks table
+  const checks = Object.entries(statusMap);
+  let checksHtml = "";
+  if (checks.length) {
+    const checkRows = checks.map(([cid, cv]) => {
+      const ok = cv.status === "OK";
+      const statusLabel = ok
+        ? `<span style="color:var(--hpe-green-dark);font-weight:600;">✓ OK</span>`
+        : `<span style="color:#c0392b;font-weight:600;">✗ ERROR</span>`;
+      return `<tr>
+        <td>${escHtml(cv.check_name || cid)}</td>
+        <td style="color:var(--muted);text-transform:capitalize;">${escHtml(cv.check_type || '—')}</td>
+        <td>${statusLabel}</td>
+        <td>${cv.count ?? '—'}</td>
+        <td style="color:var(--muted);">${cv.ts ? new Date(cv.ts * 1000).toLocaleTimeString() : '—'}</td>
+      </tr>`;
+    }).join('');
+    checksHtml = `
+      <div class="setup-card" style="margin-bottom:12px;">
+        <div class="setup-card-header"><h2>Check Status</h2></div>
+        <table class="data-table">
+          <thead><tr><th>Check</th><th>Type</th><th>Status</th><th>Count</th><th>Last Seen</th></tr></thead>
+          <tbody>${checkRows}</tbody>
+        </table>
+      </div>`;
+  } else {
+    checksHtml = `<div class="setup-card" style="margin-bottom:12px;"><div class="empty-state">No check data available for this site.</div></div>`;
+  }
+
+  // Spokes section (distributed mode — shows which spokes see this site)
+  let spokesHtml = "";
+  if (mode === "distributed" && spokeList.length > 1) {
+    const spokeRows = spokeList.map(s => `<tr>
+      <td>${escHtml(s.spoke_name || s.spoke_id)}</td>
+      <td><span class="status-dot ${s.spoke_online ? 'online' : 'offline'}"></span> ${s.spoke_online ? 'Online' : 'Offline'}</td>
+      <td>${s.token_valid ? '✓ Valid' : '—'}</td>
+    </tr>`).join('');
+    spokesHtml = `
+      <div class="setup-card" style="margin-bottom:12px;">
+        <div class="setup-card-header"><h2>Reporting Spokes</h2></div>
+        <table class="data-table">
+          <thead><tr><th>Spoke</th><th>Status</th><th>Token</th></tr></thead>
+          <tbody>${spokeRows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  // Summary card
+  const summaryHtml = `
+    <div class="setup-card" style="margin-bottom:12px;">
+      <div class="setup-status-grid">
+        <div class="setup-status-item"><span class="setup-status-label">Wireless Clients</span><span class="setup-status-value">${wirelessTotal}</span></div>
+        <div class="setup-status-item"><span class="setup-status-label">Checks Passing</span><span class="setup-status-value" style="color:var(--hpe-green-dark);">${checks.filter(([,v]) => v.status === "OK").length} / ${checks.length}</span></div>
+        <div class="setup-status-item"><span class="setup-status-label">Mode</span><span class="setup-status-value" style="text-transform:capitalize;">${escHtml(mode || '—')}</span></div>
+      </div>
+    </div>`;
+
+  const detailContent = $("#hcs-detail-content");
+  if (detailContent) detailContent.innerHTML = summaryHtml + checksHtml + spokesHtml;
+
+  // Wire back button
+  const backBtn = $("#hcs-detail-back");
+  if (backBtn) { backBtn.onclick = closeHubSiteDetail; }
+}
+
+function closeHubSiteDetail() {
+  hubCentralSiteOpen = null;
+  $("#hcs-site-detail")?.classList.add("hidden");
+  $("#hcs-overview")?.classList.remove("hidden");
 }
 
 function renderHubCentralAlerts() {

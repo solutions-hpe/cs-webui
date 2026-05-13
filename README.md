@@ -1,6 +1,8 @@
 # cs-webui
 
-`cs-webui` is the shared browser frontend for the HPE Client-Sim platform. The same `index.html`, `app.js`, and `style.css` are served by both:
+![Release](https://img.shields.io/badge/release-v1.0.0-success)
+
+`cs-webui` is the shared browser frontend for the HPE Client-Sim platform. Version **v1.0.0** on `main` is the production frontend consumed by both Hub and Spoke deployments. The same `index.html`, `app.js`, and `style.css` are served by both:
 
 - `webui-hub` in **hub** mode
 - `client-sim/webui-spoke` in **spoke** mode
@@ -69,11 +71,13 @@ Hub requires login. Spoke mode does not implement the same tenant-auth flow.
 | **Tenants** | Superadmin landing view and tenant selection |
 | **Simulations** | Cross-spoke simulation summary inside a tenant context |
 | **Clients** | Aggregate client list across the selected tenant |
-| **Spokes** | Approved spokes, detail modal, processing mode, and spoke health |
+| **Spokes** | Approved spokes, detail modal, processing mode, spoke health, and access to VM Server workflows for backup/reseed operations |
 | **Commands** | Queue commands to a spoke |
 | **Setup** | Tenant settings, notifications, API info, TLS, and pending spoke approval |
 | **Config** | Tenant processing-mode summary/config |
 | **Superadmin** | Tenant creation, user management, global kill switch state, and pending spoke approvals |
+
+Hub mode does not expose VM backup as a standalone top-level tab. In v1.0, those controls appear in the hub-side VM Server context for eligible spokes, including backup, reseed, and related recovery actions.
 
 ### Spoke operator workflow
 
@@ -287,7 +291,7 @@ This keeps hub and spoke logic in one file while avoiding runtime overlap.
 - Repo version is stored in `VERSION`.
 - Current branch convention:
   - `lrb` = development/integration
-  - `main` = production
+  - `main` = production (`v1.0.0`)
 - Hub and Spoke both consume this repo from the matching branch.
 
 #### How the version is bumped

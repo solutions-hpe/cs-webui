@@ -87,7 +87,7 @@
           <span id="refresh-countdown" class="auto-refresh-countdown">10s</span>
         </div>
         <button id="update-all-btn" class="btn btn-primary spoke-only" title="Update all Proxmox agents then the WebUI server" style="font-size:13px;padding:5px 12px;">⬆ Update All</button>
-        <button id="spoke-logout-btn" class="btn btn-secondary btn-small spoke-only" title="Sign out" type="button" style="display:none">⏏ Sign Out</button>
+        <span id="spoke-user-pill" class="spoke-only topbar-user-pill hidden"><span>👤</span><span id="spoke-user-name">—</span><span id="spoke-user-role" class="role-badge hidden"></span><button id="spoke-logout-btn" class="btn btn-secondary btn-small spoke-only" title="Sign out" type="button">⏏ Sign Out</button></span>
       </div>
     </div>
   </header>
@@ -107,6 +107,7 @@
         <p class="hub-login-subtitle">Enter the administrator password to continue.</p>
       </div>
       <div class="setup-form hub-login-form">
+        <div id="spoke-login-username-group" class="form-group"><label class="form-label" for="spoke-login-username">Username</label><input id="spoke-login-username" type="text" class="form-input" autocomplete="username" placeholder="Username"></div>
         <div class="form-group"><label class="form-label" for="spoke-login-password">Password</label><input id="spoke-login-password" type="password" class="form-input" autocomplete="current-password" placeholder="Password"></div>
         <div id="spoke-login-error" class="form-msg"></div>
         <div class="form-actions hub-login-actions">
@@ -2135,6 +2136,47 @@
                 <button id="admin-password-save-btn" class="btn btn-primary" type="button">Save</button>
               </div>
               <div id="admin-password-message" class="settings-message hidden" role="alert"></div>
+
+              <div class="form-group">
+                <label class="form-label">Authentication Provider</label>
+                <select id="spoke-auth-provider-select" class="form-input">
+                  <option value="local">Local Password</option>
+                  <option value="ldap">LDAP / Active Directory</option>
+                  <option value="radius">RADIUS</option>
+                  <option value="tacacs">TACACS+</option>
+                </select>
+              </div>
+
+              <div id="spoke-auth-ldap-fields" class="auth-provider-fields hidden">
+                <div class="form-group"><label class="form-label">Server URL</label><input id="spoke-ldap-url" type="text" class="form-input" placeholder="ldap://dc.corp.com or ldaps://dc.corp.com:636"></div>
+                <div class="form-group"><label class="form-label">Bind DN (Service Account)</label><input id="spoke-ldap-bind-dn" type="text" class="form-input" placeholder="CN=svc-csim,OU=ServiceAccounts,DC=corp,DC=com"></div>
+                <div class="form-group"><label class="form-label">Bind Password</label><input id="spoke-ldap-bind-password" type="password" class="form-input" placeholder="Service account password" data-secret-field="true"></div>
+                <div class="form-group"><label class="form-label">User Search Base</label><input id="spoke-ldap-user-base" type="text" class="form-input" placeholder="OU=Users,DC=corp,DC=com"></div>
+                <div class="form-group"><label class="form-label">User Search Filter</label><input id="spoke-ldap-user-filter" type="text" class="form-input" placeholder="(&(objectClass=user)(sAMAccountName={username}))"></div>
+                <div class="form-group"><label class="form-label">Admin Group DN</label><input id="spoke-ldap-group-admin" type="text" class="form-input" placeholder="CN=CS-Admins,OU=Groups,DC=corp,DC=com"></div>
+                <div class="form-group"><label class="form-label">Viewer Group DN <small>(optional — leave blank to grant all LDAP users admin)</small></label><input id="spoke-ldap-group-viewer" type="text" class="form-input" placeholder="CN=CS-Viewers,OU=Groups,DC=corp,DC=com"></div>
+              </div>
+
+              <div id="spoke-auth-radius-fields" class="auth-provider-fields hidden">
+                <div class="form-group"><label class="form-label">RADIUS Server Host</label><input id="spoke-radius-host" type="text" class="form-input" placeholder="radius.corp.com"></div>
+                <div class="form-group"><label class="form-label">Port</label><input id="spoke-radius-port" type="number" class="form-input" value="1812"></div>
+                <div class="form-group"><label class="form-label">Shared Secret</label><input id="spoke-radius-secret" type="password" class="form-input" placeholder="RADIUS shared secret" data-secret-field="true"></div>
+                <div class="form-group"><label class="form-label">Role Attribute</label><input id="spoke-radius-role-attr" type="text" class="form-input" value="Filter-Id" placeholder="Filter-Id or Class"></div>
+                <div class="form-group"><label class="form-label">Admin Role Value</label><input id="spoke-radius-admin-val" type="text" class="form-input" value="admin" placeholder="Value in role attribute that means admin"></div>
+              </div>
+
+              <div id="spoke-auth-tacacs-fields" class="auth-provider-fields hidden">
+                <div class="form-group"><label class="form-label">TACACS+ Server Host</label><input id="spoke-tacacs-host" type="text" class="form-input" placeholder="tacacs.corp.com"></div>
+                <div class="form-group"><label class="form-label">Port</label><input id="spoke-tacacs-port" type="number" class="form-input" value="49"></div>
+                <div class="form-group"><label class="form-label">Shared Secret</label><input id="spoke-tacacs-secret" type="password" class="form-input" placeholder="TACACS+ shared secret" data-secret-field="true"></div>
+                <div class="form-group"><label class="form-label">Admin Privilege Level</label><input id="spoke-tacacs-admin-priv" type="number" class="form-input" value="15" placeholder="15 = full admin"></div>
+              </div>
+
+              <div class="form-actions" style="display:flex; justify-content:flex-end; gap:8px;">
+                <button id="spoke-auth-test-btn" class="btn btn-secondary" type="button">Test Connection</button>
+                <button id="spoke-auth-settings-save-btn" class="btn btn-primary" type="button">Save Auth Settings</button>
+              </div>
+              <div id="spoke-auth-settings-msg" class="settings-message hidden" role="alert"></div>
             </div>
           </div>
         </div>

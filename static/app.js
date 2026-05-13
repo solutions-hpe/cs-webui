@@ -157,6 +157,23 @@ let currentSettings = {
   relay_poll_interval: 60,
   relay_api_key_configured: false,
   admin_password_configured: false,
+  auth_provider: 'local',
+  auth_ldap_url: '',
+  auth_ldap_bind_dn: '',
+  auth_ldap_bind_password_configured: false,
+  auth_ldap_user_base: '',
+  auth_ldap_user_filter: '(&(objectClass=user)(sAMAccountName={username}))',
+  auth_ldap_group_admin: '',
+  auth_ldap_group_viewer: '',
+  auth_radius_host: '',
+  auth_radius_port: 1812,
+  auth_radius_secret_configured: false,
+  auth_radius_role_attr: 'Filter-Id',
+  auth_radius_admin_val: 'admin',
+  auth_tacacs_host: '',
+  auth_tacacs_port: 49,
+  auth_tacacs_secret_configured: false,
+  auth_tacacs_admin_priv: 15,
   notifications: {
     email_enabled: false,
     smtp_host: '',
@@ -644,6 +661,7 @@ const repoUrlInput = document.getElementById('repo-url-input');
 const centralTabButtons = document.querySelectorAll('#tab-nav .spoke-only .tab[data-tab="central"]');
 const configTabButtons = document.querySelectorAll('#tab-nav .spoke-only .tab[data-tab="config"]');
 const simTabButtons = document.querySelectorAll('#tab-nav .spoke-only .tab[data-tab="simulations"]');
+const spokeSetupTabButtons = document.querySelectorAll('#tab-nav .spoke-only .tab[data-tab="setup"]');
 const setupSubtabButtons = document.querySelectorAll('#tab-setup .setup-subnav .setup-subtab');
 const setupSubpanels = document.querySelectorAll('#tab-setup .setup-subpanel');
 const centralOverview = document.getElementById('central-overview');
@@ -689,6 +707,33 @@ const adminPasswordInput = document.getElementById('admin-password-input');
 const adminPasswordStatus = document.getElementById('admin-password-status');
 const adminPasswordSaveBtn = document.getElementById('admin-password-save-btn');
 const adminPasswordMsg = document.getElementById('admin-password-message');
+const spokeUserPill = document.getElementById('spoke-user-pill');
+const spokeUserName = document.getElementById('spoke-user-name');
+const spokeUserRole = document.getElementById('spoke-user-role');
+const spokeAuthProviderSelect = document.getElementById('spoke-auth-provider-select');
+const spokeAuthLdapFields = document.getElementById('spoke-auth-ldap-fields');
+const spokeAuthRadiusFields = document.getElementById('spoke-auth-radius-fields');
+const spokeAuthTacacsFields = document.getElementById('spoke-auth-tacacs-fields');
+const spokeLdapUrlInput = document.getElementById('spoke-ldap-url');
+const spokeLdapBindDnInput = document.getElementById('spoke-ldap-bind-dn');
+const spokeLdapBindPasswordInput = document.getElementById('spoke-ldap-bind-password');
+const spokeLdapUserBaseInput = document.getElementById('spoke-ldap-user-base');
+const spokeLdapUserFilterInput = document.getElementById('spoke-ldap-user-filter');
+const spokeLdapGroupAdminInput = document.getElementById('spoke-ldap-group-admin');
+const spokeLdapGroupViewerInput = document.getElementById('spoke-ldap-group-viewer');
+const spokeRadiusHostInput = document.getElementById('spoke-radius-host');
+const spokeRadiusPortInput = document.getElementById('spoke-radius-port');
+const spokeRadiusSecretInput = document.getElementById('spoke-radius-secret');
+const spokeRadiusRoleAttrInput = document.getElementById('spoke-radius-role-attr');
+const spokeRadiusAdminValInput = document.getElementById('spoke-radius-admin-val');
+const spokeTacacsHostInput = document.getElementById('spoke-tacacs-host');
+const spokeTacacsPortInput = document.getElementById('spoke-tacacs-port');
+const spokeTacacsSecretInput = document.getElementById('spoke-tacacs-secret');
+const spokeTacacsAdminPrivInput = document.getElementById('spoke-tacacs-admin-priv');
+const spokeAuthTestBtn = document.getElementById('spoke-auth-test-btn');
+const spokeAuthSettingsSaveBtn = document.getElementById('spoke-auth-settings-save-btn');
+const spokeAuthSettingsMsg = document.getElementById('spoke-auth-settings-msg');
+const topbarUpdateAllBtn = document.getElementById('update-all-btn');
 document.querySelectorAll('input[data-secret-field="true"]').forEach(bindSecretInput);
 
 // Notifications + sync interval
@@ -875,6 +920,23 @@ function mergeSettings(next = {}) {
     relay_poll_interval: next.relay_poll_interval ?? currentSettings.relay_poll_interval ?? 60,
     relay_api_key_configured: next.relay_api_key_configured ?? currentSettings.relay_api_key_configured ?? false,
     admin_password_configured: next.admin_password_configured ?? currentSettings.admin_password_configured ?? false,
+    auth_provider: next.auth_provider ?? currentSettings.auth_provider ?? 'local',
+    auth_ldap_url: next.auth_ldap_url ?? currentSettings.auth_ldap_url ?? '',
+    auth_ldap_bind_dn: next.auth_ldap_bind_dn ?? currentSettings.auth_ldap_bind_dn ?? '',
+    auth_ldap_bind_password_configured: next.auth_ldap_bind_password_configured ?? currentSettings.auth_ldap_bind_password_configured ?? false,
+    auth_ldap_user_base: next.auth_ldap_user_base ?? currentSettings.auth_ldap_user_base ?? '',
+    auth_ldap_user_filter: next.auth_ldap_user_filter ?? currentSettings.auth_ldap_user_filter ?? '(&(objectClass=user)(sAMAccountName={username}))',
+    auth_ldap_group_admin: next.auth_ldap_group_admin ?? currentSettings.auth_ldap_group_admin ?? '',
+    auth_ldap_group_viewer: next.auth_ldap_group_viewer ?? currentSettings.auth_ldap_group_viewer ?? '',
+    auth_radius_host: next.auth_radius_host ?? currentSettings.auth_radius_host ?? '',
+    auth_radius_port: next.auth_radius_port ?? currentSettings.auth_radius_port ?? 1812,
+    auth_radius_secret_configured: next.auth_radius_secret_configured ?? currentSettings.auth_radius_secret_configured ?? false,
+    auth_radius_role_attr: next.auth_radius_role_attr ?? currentSettings.auth_radius_role_attr ?? 'Filter-Id',
+    auth_radius_admin_val: next.auth_radius_admin_val ?? currentSettings.auth_radius_admin_val ?? 'admin',
+    auth_tacacs_host: next.auth_tacacs_host ?? currentSettings.auth_tacacs_host ?? '',
+    auth_tacacs_port: next.auth_tacacs_port ?? currentSettings.auth_tacacs_port ?? 49,
+    auth_tacacs_secret_configured: next.auth_tacacs_secret_configured ?? currentSettings.auth_tacacs_secret_configured ?? false,
+    auth_tacacs_admin_priv: next.auth_tacacs_admin_priv ?? currentSettings.auth_tacacs_admin_priv ?? 15,
     notifications: {
       email_enabled: next.notifications?.email_enabled ?? currentSettings.notifications?.email_enabled ?? false,
       smtp_host: next.notifications?.smtp_host ?? currentSettings.notifications?.smtp_host ?? '',
@@ -986,6 +1048,177 @@ function showInlineMessage(element, text, isError, timeout = 5000) {
       element.className = 'settings-message hidden';
     }, timeout);
   }
+}
+
+function normalizeSpokeAuthProvider(provider) {
+  return ['local', 'ldap', 'radius', 'tacacs'].includes(provider) ? provider : 'local';
+}
+
+function updateSpokeLoginProviderUi(provider = window.__SPOKE_AUTH_PROVIDER__ || currentSettings.auth_provider || 'local') {
+  const nextProvider = normalizeSpokeAuthProvider(String(provider || 'local').trim().toLowerCase());
+  const usernameGroup = document.getElementById('spoke-login-username-group');
+  const usernameInput = document.getElementById('spoke-login-username');
+  const subtitle = document.querySelector('#spoke-login-overlay .hub-login-subtitle');
+  const needsUsername = nextProvider !== 'local';
+  usernameGroup?.classList.toggle('hidden', !needsUsername);
+  if (usernameInput) {
+    usernameInput.required = needsUsername;
+    if (!needsUsername) usernameInput.value = '';
+  }
+  if (subtitle) {
+    subtitle.textContent = needsUsername
+      ? 'Enter your username and password to continue.'
+      : 'Enter the administrator password to continue.';
+  }
+}
+
+function updateSpokeAuthProviderVisibility(provider = currentSettings.auth_provider || 'local') {
+  const nextProvider = normalizeSpokeAuthProvider(String(provider || 'local').trim().toLowerCase());
+  if (spokeAuthProviderSelect && !spokeAuthProviderSelect.matches(':focus')) {
+    spokeAuthProviderSelect.value = nextProvider;
+  }
+  spokeAuthLdapFields?.classList.toggle('hidden', nextProvider !== 'ldap');
+  spokeAuthRadiusFields?.classList.toggle('hidden', nextProvider !== 'radius');
+  spokeAuthTacacsFields?.classList.toggle('hidden', nextProvider !== 'tacacs');
+  updateSpokeLoginProviderUi(nextProvider);
+}
+
+function updateSpokeUserUi() {
+  if (!spokeUserPill) return;
+  const username = spokeCurrentUser?.username || '';
+  const role = spokeCurrentUser?.role || '';
+  const shouldShow = WEBUI_MODE === 'spoke' && Boolean(window.__SPOKE_AUTH_REQUIRED__ && username);
+  spokeUserPill.classList.toggle('hidden', !shouldShow);
+  if (spokeUserName) spokeUserName.textContent = username || '—';
+  if (spokeUserRole) {
+    spokeUserRole.textContent = role || '';
+    spokeUserRole.classList.toggle('hidden', !role);
+  }
+}
+
+function applySpokeViewerMode() {
+  const isViewer = WEBUI_MODE === 'spoke' && spokeCurrentUser?.role === 'viewer';
+  spokeSetupTabButtons.forEach((button) => button.classList.toggle('hidden', isViewer));
+  if (isViewer && activeSpokeTab === 'setup') {
+    simTabButtons[0]?.click();
+  }
+  topbarUpdateAllBtn?.classList.toggle('hidden', isViewer);
+  document.getElementById('reclone-now-btn')?.classList.toggle('hidden', isViewer);
+  document.getElementById('autoprov-reset-btn')?.classList.toggle('hidden', isViewer);
+  document.getElementById('vm-bulk-bar')?.classList.toggle('hidden', isViewer || activeVmCat === 'templates');
+  document.querySelectorAll('.vm-action-btn').forEach((button) => {
+    button.classList.toggle('hidden', isViewer);
+    if (isViewer) button.disabled = true;
+  });
+  document.querySelectorAll('.vm-check, #server-select-all, [id^="server-th-check-"]').forEach((input) => {
+    if (input instanceof HTMLInputElement && isViewer) {
+      input.checked = false;
+      input.disabled = true;
+    }
+  });
+}
+
+function applySpokeAuthSettingsToUI(settings = currentSettings) {
+  if (WEBUI_MODE !== 'spoke') return;
+  const provider = normalizeSpokeAuthProvider(String(settings.auth_provider || 'local').trim().toLowerCase());
+  window.__SPOKE_AUTH_PROVIDER__ = provider;
+  setInputValueIfIdle(spokeLdapUrlInput, settings.auth_ldap_url || '');
+  setInputValueIfIdle(spokeLdapBindDnInput, settings.auth_ldap_bind_dn || '');
+  setSecretInputConfigured(spokeLdapBindPasswordInput, settings.auth_ldap_bind_password_configured);
+  setInputValueIfIdle(spokeLdapUserBaseInput, settings.auth_ldap_user_base || '');
+  setInputValueIfIdle(spokeLdapUserFilterInput, settings.auth_ldap_user_filter || '(&(objectClass=user)(sAMAccountName={username}))');
+  setInputValueIfIdle(spokeLdapGroupAdminInput, settings.auth_ldap_group_admin || '');
+  setInputValueIfIdle(spokeLdapGroupViewerInput, settings.auth_ldap_group_viewer || '');
+  setInputValueIfIdle(spokeRadiusHostInput, settings.auth_radius_host || '');
+  if (spokeRadiusPortInput && !spokeRadiusPortInput.matches(':focus')) spokeRadiusPortInput.value = settings.auth_radius_port ?? 1812;
+  setSecretInputConfigured(spokeRadiusSecretInput, settings.auth_radius_secret_configured);
+  setInputValueIfIdle(spokeRadiusRoleAttrInput, settings.auth_radius_role_attr || 'Filter-Id');
+  setInputValueIfIdle(spokeRadiusAdminValInput, settings.auth_radius_admin_val || 'admin');
+  setInputValueIfIdle(spokeTacacsHostInput, settings.auth_tacacs_host || '');
+  if (spokeTacacsPortInput && !spokeTacacsPortInput.matches(':focus')) spokeTacacsPortInput.value = settings.auth_tacacs_port ?? 49;
+  setSecretInputConfigured(spokeTacacsSecretInput, settings.auth_tacacs_secret_configured);
+  if (spokeTacacsAdminPrivInput && !spokeTacacsAdminPrivInput.matches(':focus')) spokeTacacsAdminPrivInput.value = settings.auth_tacacs_admin_priv ?? 15;
+  updateSpokeAuthProviderVisibility(provider);
+}
+
+async function loadSpokeAuthSettings(settingsData = null) {
+  if (WEBUI_MODE !== 'spoke') return settingsData || null;
+  const settings = settingsData || await requestJson('/api/settings');
+  applySpokeAuthSettingsToUI(mergeSettings(settings || {}));
+  return settings;
+}
+
+async function saveSpokeAuthSettings() {
+  const provider = normalizeSpokeAuthProvider(String(spokeAuthProviderSelect?.value || currentSettings.auth_provider || 'local').trim().toLowerCase());
+  const payload = {
+    auth_provider: provider,
+    auth_ldap_url: spokeLdapUrlInput?.value?.trim() || '',
+    auth_ldap_bind_dn: spokeLdapBindDnInput?.value?.trim() || '',
+    auth_ldap_user_base: spokeLdapUserBaseInput?.value?.trim() || '',
+    auth_ldap_user_filter: spokeLdapUserFilterInput?.value?.trim() || '(&(objectClass=user)(sAMAccountName={username}))',
+    auth_ldap_group_admin: spokeLdapGroupAdminInput?.value?.trim() || '',
+    auth_ldap_group_viewer: spokeLdapGroupViewerInput?.value?.trim() || '',
+    auth_radius_host: spokeRadiusHostInput?.value?.trim() || '',
+    auth_radius_port: Number.parseInt(spokeRadiusPortInput?.value || currentSettings.auth_radius_port || 1812, 10) || 1812,
+    auth_radius_role_attr: spokeRadiusRoleAttrInput?.value?.trim() || 'Filter-Id',
+    auth_radius_admin_val: spokeRadiusAdminValInput?.value?.trim() || 'admin',
+    auth_tacacs_host: spokeTacacsHostInput?.value?.trim() || '',
+    auth_tacacs_port: Number.parseInt(spokeTacacsPortInput?.value || currentSettings.auth_tacacs_port || 49, 10) || 49,
+    auth_tacacs_admin_priv: Number.parseInt(spokeTacacsAdminPrivInput?.value || currentSettings.auth_tacacs_admin_priv || 15, 10) || 15,
+  };
+  const ldapSecret = getSecretInputPayload(spokeLdapBindPasswordInput);
+  if (ldapSecret.include) payload.auth_ldap_bind_password = ldapSecret.value;
+  const radiusSecret = getSecretInputPayload(spokeRadiusSecretInput);
+  if (radiusSecret.include) payload.auth_radius_secret = radiusSecret.value;
+  const tacacsSecret = getSecretInputPayload(spokeTacacsSecretInput);
+  if (tacacsSecret.include) payload.auth_tacacs_secret = tacacsSecret.value;
+
+  const response = await requestJson('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  applySettingsToUI(response.settings || payload);
+  resetSecretInput(spokeLdapBindPasswordInput);
+  resetSecretInput(spokeRadiusSecretInput);
+  resetSecretInput(spokeTacacsSecretInput);
+  showInlineMessage(spokeAuthSettingsMsg, 'Authentication settings saved.', false, 5000);
+  return response;
+}
+
+async function testSpokeAuthConnection() {
+  const provider = normalizeSpokeAuthProvider(String(spokeAuthProviderSelect?.value || currentSettings.auth_provider || 'local').trim().toLowerCase());
+  const response = await requestJson('/api/auth/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider }),
+  });
+  showInlineMessage(spokeAuthSettingsMsg, response.detail || (response.ok ? 'Connection OK.' : 'Connection failed.'), !response.ok, 7000);
+  return response;
+}
+
+async function refreshSpokeAuthState() {
+  if (WEBUI_MODE !== 'spoke' || !window.__SPOKE_AUTH_REQUIRED__) {
+    spokeCurrentUser = null;
+    updateSpokeUserUi();
+    applySpokeViewerMode();
+    return null;
+  }
+  const response = await fetch('/api/auth/check', { headers: { Accept: 'application/json' } });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+  if (data.authenticated) {
+    spokeCurrentUser = {
+      username: data.username || 'admin',
+      role: data.role || 'admin',
+      auth_provider: data.auth_provider || normalizeSpokeAuthProvider(window.__SPOKE_AUTH_PROVIDER__ || 'local'),
+    };
+  } else {
+    spokeCurrentUser = null;
+  }
+  updateSpokeUserUi();
+  applySpokeViewerMode();
+  return data;
 }
 
 function showNotification(message, level = 'info') {
@@ -1515,6 +1748,7 @@ function renderServerTab(data) {
     const selectAll = document.getElementById('server-select-all');
     if (selectAll) selectAll.checked = false;
   }
+  applySpokeViewerMode();
 }
 
 function renderProxmoxApproveState(pending, approved) {
@@ -1676,6 +1910,7 @@ function applySettingsToUI(s) {
       ? 'Password configured. Set a new password to rotate it, or leave blank and click Save to disable login.'
       : 'Set a password to require login when accessing this dashboard. Leave blank to allow open access.';
   }
+  applySpokeAuthSettingsToUI(settings);
   updateCentralApiVisibility();
   updateRelayIndicatorVisibility(settings);
   if (usbAutoProvisionInput) usbAutoProvisionInput.checked = settings.usb_auto_provision === 'on';
@@ -1844,6 +2079,45 @@ if (adminPasswordSaveBtn) {
     } finally {
       adminPasswordSaveBtn.disabled = false;
       adminPasswordSaveBtn.textContent = originalLabel;
+    }
+  });
+}
+
+if (spokeAuthProviderSelect) {
+  spokeAuthProviderSelect.addEventListener('change', () => {
+    updateSpokeAuthProviderVisibility(spokeAuthProviderSelect.value);
+    showInlineMessage(spokeAuthSettingsMsg, '', false, 0);
+  });
+}
+
+if (spokeAuthSettingsSaveBtn) {
+  spokeAuthSettingsSaveBtn.addEventListener('click', async () => {
+    const originalLabel = spokeAuthSettingsSaveBtn.textContent;
+    spokeAuthSettingsSaveBtn.disabled = true;
+    spokeAuthSettingsSaveBtn.textContent = 'Saving…';
+    try {
+      await saveSpokeAuthSettings();
+    } catch (error) {
+      showInlineMessage(spokeAuthSettingsMsg, `Error: ${error.message}`, true, 7000);
+    } finally {
+      spokeAuthSettingsSaveBtn.disabled = false;
+      spokeAuthSettingsSaveBtn.textContent = originalLabel;
+    }
+  });
+}
+
+if (spokeAuthTestBtn) {
+  spokeAuthTestBtn.addEventListener('click', async () => {
+    const originalLabel = spokeAuthTestBtn.textContent;
+    spokeAuthTestBtn.disabled = true;
+    spokeAuthTestBtn.textContent = 'Testing…';
+    try {
+      await testSpokeAuthConnection();
+    } catch (error) {
+      showInlineMessage(spokeAuthSettingsMsg, `Error: ${error.message}`, true, 7000);
+    } finally {
+      spokeAuthTestBtn.disabled = false;
+      spokeAuthTestBtn.textContent = originalLabel;
     }
   });
 }
@@ -3840,6 +4114,7 @@ async function loadSettings() {
   try {
     const settings = await requestJson('/api/settings');
     applySettingsToUI(settings || {});
+    await loadSpokeAuthSettings(settings).catch(() => {});
     await loadUsbConfig().catch(() => {});
     await loadSpokeAcmeSettings().catch(() => {});
   } catch (error) {
@@ -6777,9 +7052,9 @@ vmCatTabs.forEach((btn) => {
     ['sim', 'other', 'containers', 'templates'].forEach((cat) => {
       document.getElementById(`vm-cat-panel-${cat}`)?.classList.toggle('hidden', cat !== activeVmCat);
     });
-    // Bulk bar hidden for templates (read-only)
+    // Bulk bar hidden for templates (read-only) and viewer sessions
     const bulkBar = document.getElementById('vm-bulk-bar');
-    if (bulkBar) bulkBar.classList.toggle('hidden', activeVmCat === 'templates');
+    if (bulkBar) bulkBar.classList.toggle('hidden', activeVmCat === 'templates' || spokeCurrentUser?.role === 'viewer');
     // Reset select-all
     const sa = document.getElementById('server-select-all');
     if (sa) sa.checked = false;
@@ -6877,120 +7152,36 @@ if (updateAllBtn && !updateAllBtn._bound) {
 }
 
 // ── Spoke authentication ───────────────────────────────────────────────────────
-// When admin_password is configured on the server, the page injects
-// window.__SPOKE_AUTH_REQUIRED__ / window.__SPOKE_AUTHENTICATED__.
-// Show the login overlay if needed; wire up login and logout buttons.
-(function initSpokeAuth() {
-  if (WEBUI_MODE !== 'spoke') return;
+let spokeCurrentUser = null;
+let _spokeBooted = false;
 
-  const overlay   = document.getElementById('spoke-login-overlay');
-  const loginBtn  = document.getElementById('spoke-login-btn');
-  const logoutBtn = document.getElementById('spoke-logout-btn');
-  const pwInput   = document.getElementById('spoke-login-password');
-  const errEl     = document.getElementById('spoke-login-error');
-
-  const authRequired = !!window.__SPOKE_AUTH_REQUIRED__;
-
-  if (!authRequired) return; // no password set — open access
-
-  // Show sign-out button in topbar whenever auth is active
-  if (logoutBtn) logoutBtn.style.display = '';
-
-  async function doSpokeLogin() {
-    const pw = pwInput?.value || '';
-    if (errEl) errEl.textContent = '';
-    if (loginBtn) loginBtn.disabled = true;
-    try {
-      const resp = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw }),
-      });
-      if (resp.ok) {
-        if (overlay) overlay.classList.add('hidden');
-      } else {
-        if (errEl) errEl.textContent = 'Invalid password';
-        if (pwInput) { pwInput.value = ''; pwInput.focus(); }
-      }
-    } catch (_) {
-      if (errEl) errEl.textContent = 'Login failed — try again';
-    } finally {
-      if (loginBtn) loginBtn.disabled = false;
-    }
-  }
-
-  if (loginBtn) loginBtn.addEventListener('click', doSpokeLogin);
-  if (pwInput) {
-    pwInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSpokeLogin(); });
-  }
-
-  if (logoutBtn && !logoutBtn._spokeBound) {
-    logoutBtn._spokeBound = true;
-    logoutBtn.addEventListener('click', async () => {
-      await fetch('/api/auth/logout', { method: 'POST' });
-      window.location.reload();
-    });
-  }
-
-  // Block page if not authenticated
-  if (!window.__SPOKE_AUTHENTICATED__) {
-    if (overlay) overlay.classList.remove('hidden');
-    if (pwInput) setTimeout(() => pwInput.focus(), 100);
-    return; // skip connectWebSocket / init until logged in
-  }
-})();
-
-// Re-check auth on 401 responses from any API
-const _origFetch = window.fetch;
-if (WEBUI_MODE === 'spoke' && window.__SPOKE_AUTH_REQUIRED__) {
-  window.fetch = async function (...args) {
-    const resp = await _origFetch(...args);
-    if (resp.status === 401) {
-      const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
-      if (!url.includes('/api/auth/')) {
-        window.location.reload();
-      }
-    }
-    return resp;
-  };
-}
-
-// Only run spoke init if authenticated (or no password configured)
-const _spokeReady = WEBUI_MODE !== 'spoke' || !window.__SPOKE_AUTH_REQUIRED__ || window.__SPOKE_AUTHENTICATED__;
-if (_spokeReady) connectWebSocket();
-if (_spokeReady) loadSimulations();
-
-// Single init call replaces 5 separate REST calls — UI renders immediately from cache
-if (_spokeReady) (async () => {
+async function bootSpokeRuntime() {
+  if (_spokeBooted || WEBUI_MODE !== 'spoke') return;
+  _spokeBooted = true;
+  connectWebSocket();
+  loadSimulations();
   try {
     const init = consumeInitPayload() || await requestJson('/api/init');
-    // Proxmox
     if (init.proxmox) {
       if (init.proxmox.webui_vmid != null) webuiVmid = init.proxmox.webui_vmid;
       if (init.proxmox.connected || (init.proxmox.vms || []).length || (init.proxmox.usb_state || []).length || (init.proxmox.unknown_usb || []).length || (init.proxmox.pending_proxmox || []).length || (init.proxmox.approved_proxmox || []).length) {
         renderServerTab(init.proxmox);
       }
     }
-    // Reclone
     if (init.reclone) renderRecloneStatus(init.reclone);
-    // Update All
     if (init.update_all) handleUpdateAllProgress(init.update_all);
     if (init.settings) applySettingsToUI(init.settings);
-    // Central
     if (init.central) {
       centralTokenValid = Boolean(init.central.token_valid);
       setCentralApiStatus(centralTokenValid, init.central.token_state);
       handleCentralUpdate(init.central.status || {}, Date.now() / 1000, init.central.wireless_clients || {}, init.central.hardware_alerts || [], init.central.client_count_status || {});
     }
-    // Relay
     if (init.relay) setRelayStatus(init.relay);
-    // Kill switch (global from GitHub, local from simulation.conf)
     if (init.kill_switch !== undefined) applyGkillSwitch(init.kill_switch);
     if (init.local_kill_switch !== undefined) {
       simDisabledState.local = init.local_kill_switch === 'on';
       renderSimDisabledBanner();
     }
-    // Footer versions
     const fWebui = document.getElementById('footer-cswebui-version');
     const fRepo  = document.getElementById('footer-repo-version');
     if (fWebui) {
@@ -7003,8 +7194,116 @@ if (_spokeReady) (async () => {
       fRepo.textContent = `GitHub Repo v${rver}`;
       fRepo.title = `Installer/repo version: v${rver}`;
     }
+    applySpokeViewerMode();
   } catch (_) { /* silent — WS will provide live state */ }
+}
+
+(function initSpokeAuth() {
+  if (WEBUI_MODE !== 'spoke') return;
+
+  const overlay = document.getElementById('spoke-login-overlay');
+  const loginBtn = document.getElementById('spoke-login-btn');
+  const logoutBtn = document.getElementById('spoke-logout-btn');
+  const usernameInput = document.getElementById('spoke-login-username');
+  const pwInput = document.getElementById('spoke-login-password');
+  const errEl = document.getElementById('spoke-login-error');
+  const authRequired = !!window.__SPOKE_AUTH_REQUIRED__;
+  const provider = normalizeSpokeAuthProvider(String(window.__SPOKE_AUTH_PROVIDER__ || 'local').trim().toLowerCase());
+
+  updateSpokeLoginProviderUi(provider);
+
+  async function doSpokeLogin() {
+    const username = usernameInput?.value?.trim() || '';
+    const password = pwInput?.value || '';
+    if (errEl) errEl.textContent = '';
+    if (loginBtn) loginBtn.disabled = true;
+    try {
+      const resp = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok) {
+        spokeCurrentUser = {
+          username: data.username || username || 'admin',
+          role: data.role || 'admin',
+          auth_provider: provider,
+        };
+        window.__SPOKE_AUTHENTICATED__ = true;
+        updateSpokeUserUi();
+        applySpokeViewerMode();
+        if (overlay) overlay.classList.add('hidden');
+        if (pwInput) pwInput.value = '';
+        await refreshSpokeAuthState().catch(() => {});
+        await bootSpokeRuntime();
+      } else {
+        if (errEl) errEl.textContent = data.detail || (provider === 'local' ? 'Invalid password' : 'Invalid username or password');
+        if (pwInput) pwInput.value = '';
+        (provider === 'local' ? pwInput : usernameInput)?.focus();
+      }
+    } catch (_) {
+      if (errEl) errEl.textContent = 'Login failed — try again';
+    } finally {
+      if (loginBtn) loginBtn.disabled = false;
+    }
+  }
+
+  if (loginBtn && !loginBtn._spokeBound) {
+    loginBtn._spokeBound = true;
+    loginBtn.addEventListener('click', doSpokeLogin);
+  }
+  [usernameInput, pwInput].forEach((input) => {
+    if (!input || input._spokeBound) return;
+    input._spokeBound = true;
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') doSpokeLogin();
+    });
+  });
+
+  if (logoutBtn && !logoutBtn._spokeBound) {
+    logoutBtn._spokeBound = true;
+    logoutBtn.addEventListener('click', async () => {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      spokeCurrentUser = null;
+      updateSpokeUserUi();
+      window.location.reload();
+    });
+  }
+
+  if (!authRequired) {
+    updateSpokeUserUi();
+    applySpokeViewerMode();
+    bootSpokeRuntime();
+    return;
+  }
+
+  if (!window.__SPOKE_AUTHENTICATED__) {
+    if (overlay) overlay.classList.remove('hidden');
+    setTimeout(() => (provider === 'local' ? pwInput : usernameInput)?.focus(), 100);
+    return;
+  }
+
+  refreshSpokeAuthState().catch(() => {});
+  bootSpokeRuntime();
 })();
+
+const _origFetch = window.fetch;
+if (WEBUI_MODE === 'spoke' && window.__SPOKE_AUTH_REQUIRED__) {
+  window.fetch = async function (...args) {
+    const resp = await _origFetch(...args);
+    if (resp.status === 401) {
+      const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+      if (!url.includes('/api/auth/')) {
+        spokeCurrentUser = null;
+        updateSpokeUserUi();
+        applySpokeViewerMode();
+        window.location.reload();
+      }
+    }
+    return resp;
+  };
+}
 
 // ── Auto-refresh ──────────────────────────────────────────────────────────────
 let _refreshTimer = null;

@@ -8537,6 +8537,11 @@ function logout(showMessage = true) {
   hubClientUiState.seenSitesByTenant = {};
   hubVmServerSelectedSpoke = null;
   resetTenantDetail();
+  // Clear all per-tenant localStorage caches on logout
+  try {
+    Object.keys(localStorage).filter(k => k.startsWith("hub_central_") || k.startsWith("hub_clients_"))
+      .forEach(k => localStorage.removeItem(k));
+  } catch (_) {}
   localStorage.removeItem("hub_token");
   disconnectWebSocket();
   applyAuthUI();
@@ -9139,15 +9144,61 @@ async function loadHubSimulations(force = false) {
   }
 }
 
+// ── Hub Clients localStorage cache helpers ─────────────────────────────────
+function hubClientsCacheKey() { return `hub_clients_${currentTenantId}`; }
+
+function saveHubClientsCache(rows) {
+  try { localStorage.setItem(hubClientsCacheKey(), JSON.stringify(rows)); } catch (_) {}
+}
+
+function loadHubClientsCache() {
+  try { const s = localStorage.getItem(hubClientsCacheKey()); return s ? JSON.parse(s) : null; }
+  catch (_) { return null; }
+}
+
 async function loadClients(force = false) {
   if (!currentTenantId) {
     aggregateClientRows = [];
     renderClientRowsForHub();
     return;
   }
-  const data = force || !aggregateClientRows.length ? await loadAggregateData("clients") : { clients: aggregateClientRows };
+
+  // In-memory cache still valid — render immediately, revalidate silently.
+  if (!force && aggregateClientRows.length) {
+    renderClientRowsForHub();
+    loadAggregateData("clients").then(data => {
+      if (data) {
+        aggregateClientRows = normalizeAggregateClientRows(data);
+        primeHubClientExpandedSet([...new Set(aggregateClientRows.map(hubClientSiteKey))]);
+        saveHubClientsCache(aggregateClientRows);
+        renderClientRowsForHub();
+      }
+    }).catch(() => {});
+    return;
+  }
+
+  // Show localStorage cache immediately while fetching fresh data.
+  const cached = loadHubClientsCache();
+  if (cached && cached.length) {
+    aggregateClientRows = cached;
+    primeHubClientExpandedSet([...new Set(aggregateClientRows.map(hubClientSiteKey))]);
+    renderClientRowsForHub();
+    loadAggregateData("clients").then(data => {
+      if (data) {
+        aggregateClientRows = normalizeAggregateClientRows(data);
+        primeHubClientExpandedSet([...new Set(aggregateClientRows.map(hubClientSiteKey))]);
+        saveHubClientsCache(aggregateClientRows);
+        renderClientRowsForHub();
+      }
+    }).catch(() => {});
+    return;
+  }
+
+  // No cache — blocking fetch.
+  const data = await loadAggregateData("clients");
   aggregateClientRows = normalizeAggregateClientRows(data);
   primeHubClientExpandedSet([...new Set(aggregateClientRows.map(hubClientSiteKey))]);
+  if (aggregateClientRows.length) saveHubClientsCache(aggregateClientRows);
   renderClientRowsForHub();
 }
 
@@ -9201,7 +9252,9 @@ function renderHubVmServer() {
             <div style="padding:8px 16px;font-size:0.82rem;color:var(--muted);">
               Agent ${escHtml(host.proxmox?.agent_version || "—")} &nbsp;·&nbsp;
               PVE ${escHtml(host.proxmox?.pve_version || "—")} &nbsp;·&nbsp;
-              ${host.proxmox?.connected ? "🟢 Proxmox connected" : "⚫ Proxmox disconnected"}
+              ${host.proxmox?.connected
+                ? "🟢 Proxmox connected"
+                : (host.spoke_online ? "⚠️ Proxmox agent not reporting" : "⚫ Proxmox disconnected")}
             </div>
           </div>`;
       }).join("")}
@@ -9706,6 +9759,27 @@ async function loadCentral(force = false) {
   renderHubCentral();
 }
 
+// ── Hub Central localStorage cache helpers ─────────────────────────────────
+function hubCentralCacheKey() { return `hub_central_${currentTenantId}`; }
+
+function saveHubCentralCache(data) {
+  try { localStorage.setItem(hubCentralCacheKey(), JSON.stringify(data)); } catch (_) {}
+}
+
+function loadHubCentralCache() {
+  try { const s = localStorage.getItem(hubCentralCacheKey()); return s ? JSON.parse(s) : null; }
+  catch (_) { return null; }
+}
+
+function applyHubCentralData(data) {
+  hubCentralData = data;
+  const spokes = data.spokes || [];
+  const siteCount = spokes.reduce((n, s) => n + (s.sites || []).length, 0);
+  $("#hcs-spokes-pill") && ($("#hcs-spokes-pill").textContent = `${spokes.length} spokes`);
+  $("#hcs-sites-pill") && ($("#hcs-sites-pill").textContent = `${siteCount} sites`);
+  renderHubCentralStatus();
+}
+
 async function loadHubCentralData(force = false) {
   const container = $("#hcs-overview");
   if (!container) return;
@@ -9713,25 +9787,43 @@ async function loadHubCentralData(force = false) {
     container.innerHTML = '<div class="empty-state">Sign in and select a tenant.</div>';
     return;
   }
+
+  // In-memory cache still valid (tab switch within session) — render immediately.
   if (!force && hubCentralData) {
     renderHubCentralStatus();
+    // Revalidate in background without blocking UI.
+    loadAggregateData("central-status").then(data => {
+      if (data) { applyHubCentralData(data); saveHubCentralCache(data); }
+    }).catch(() => {});
     return;
   }
+
+  // Check localStorage for a previously cached response — show it right away
+  // so the tab isn't blank while the API call is in-flight.
+  const cached = loadHubCentralCache();
+  if (cached) {
+    $("#hcs-site-detail")?.classList.add("hidden");
+    $("#hcs-overview")?.classList.remove("hidden");
+    applyHubCentralData(cached);
+    // Refresh in background; update display when fresh data arrives.
+    loadAggregateData("central-status").then(data => {
+      if (data) { applyHubCentralData(data); saveHubCentralCache(data); }
+    }).catch(() => {});
+    return;
+  }
+
+  // No cache at all — show loading spinner and wait for the first response.
   container.innerHTML = '<div class="empty-state">Loading…</div>';
   const data = await loadAggregateData("central-status");
   if (!data) {
     container.innerHTML = '<div class="empty-state">Unable to load Central data.</div>';
     return;
   }
-  hubCentralData = data;
-  const spokes = data.spokes || [];
-  const siteCount = spokes.reduce((n, s) => n + (s.sites || []).length, 0);
-  $("#hcs-spokes-pill") && ($("#hcs-spokes-pill").textContent = `${spokes.length} spokes`);
-  $("#hcs-sites-pill") && ($("#hcs-sites-pill").textContent = `${siteCount} sites`);
   hubCentralSiteOpen = null;
   $("#hcs-site-detail")?.classList.add("hidden");
   $("#hcs-overview")?.classList.remove("hidden");
-  renderHubCentralStatus();
+  applyHubCentralData(data);
+  saveHubCentralCache(data);
 }
 
 function renderHubCentralStatus() {

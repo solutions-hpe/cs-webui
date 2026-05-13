@@ -9356,7 +9356,11 @@ async function loadUserContext() {
   applyAuthUI();
   syncHubPermissionUI();
   populateCommandSpokeSelect();
-}
+  // Eagerly load pending spokes for tenant admins so approval notice
+  // appears immediately on login without needing to open Hub Setup first.
+  if (!currentUser?.is_superadmin && currentTenantId && canManageTenant()) {
+    loadTenantPendingSpokes();
+  }
 
 async function submitLogin() {
   const username = $("#login-username")?.value.trim();
@@ -10317,6 +10321,8 @@ async function loadDashboard(force = false) {
     }));
     rows.sort((left, right) => String(left.name || left.id).localeCompare(String(right.name || right.id), undefined, { numeric: true, sensitivity: "base" }));
     dashboardTenantRows = rows;
+    // Poll pending spokes on every dashboard refresh for tenant admins
+    if (!currentUser?.is_superadmin && canManageTenant()) loadTenantPendingSpokes();
     const totalSpokes = rows.reduce((sum, row) => sum + row.summary.approvedCount, 0);
     const totalClients = rows.reduce((sum, row) => sum + row.summary.clientCount, 0);
     const totalAlerts = rows.filter(row => row.alert.tone === "alert").length;

@@ -8546,7 +8546,7 @@ function logout(showMessage = true) {
   resetTenantDetail();
   // Clear all per-tenant localStorage caches on logout
   try {
-    Object.keys(localStorage).filter(k => k.startsWith("hub_central_") || k.startsWith("hub_clients_") || k.startsWith("hub_sites_"))
+    Object.keys(localStorage).filter(k => k.startsWith("hub_central_") || k.startsWith("hub_clients_") || k.startsWith("hub_sites_") || k.startsWith("hub_vmserver_"))
       .forEach(k => localStorage.removeItem(k));
   } catch (_) {}
   localStorage.removeItem("hub_token");
@@ -9732,10 +9732,38 @@ async function loadVmServer(force = false) {
     renderHubVmServer();
     return;
   }
+
+  const cacheKey = `hub_vmserver_${currentTenantId}`;
+  const saveCache = (hosts) => { try { localStorage.setItem(cacheKey, JSON.stringify(hosts)); } catch (_) {} };
+  const loadCache = () => { try { const s = localStorage.getItem(cacheKey); return s ? JSON.parse(s) : null; } catch (_) { return null; } };
+
+  const revalidate = async () => {
+    const fresh = await loadAggregateData("proxmox");
+    const hosts = fresh?.hosts || [];
+    aggregateProxmoxHosts = hosts;
+    saveCache(hosts);
+    renderHubVmServer();
+  };
+
+  // In-memory hit — render immediately + silent background revalidate
+  if (!force && aggregateProxmoxHosts.length) {
+    renderHubVmServer();
+    revalidate();
+    return;
+  }
+
+  // localStorage hit — render stale immediately + background revalidate
+  const cached = loadCache();
+  if (!force && cached && cached.length) {
+    aggregateProxmoxHosts = cached;
+    renderHubVmServer();
+    revalidate();
+    return;
+  }
+
+  // No cache — blocking fetch
   container.innerHTML = '<div class="empty-state">Loading…</div>';
-  const data = force || !aggregateProxmoxHosts.length ? await loadAggregateData("proxmox") : { hosts: aggregateProxmoxHosts };
-  aggregateProxmoxHosts = data?.hosts || [];
-  renderHubVmServer();
+  await revalidate();
 }
 
 async function loadApiServer(force = false) {

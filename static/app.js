@@ -2535,11 +2535,16 @@ function renderVhDevices(proxmoxData = latestProxmoxData) {
       html += `<div style="margin-bottom:16px;">
         <div style="font-size:0.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">Server: ${escHtml(server)}</div>
         <table class="data-table">
-          <thead><tr><th>Adapter Name</th><th>Address</th><th>Status</th></tr></thead>
+          <thead><tr><th>Adapter</th><th>Address</th><th>Vendor</th><th>VID:PID</th><th>Serial</th><th>Status</th></tr></thead>
           <tbody>${devs.map(d => `<tr>
             <td><strong>${escHtml(d.name || 'Unknown')}</strong></td>
             <td><code>${escHtml(d.address || '—')}</code></td>
-            <td>${d.auto_use ? '<span class="badge badge-green">In Use</span>' : '<span class="badge badge-grey">Available</span>'}</td>
+            <td>${escHtml(d.vendor || '—')}</td>
+            <td>${d.vendor_id && d.product_id ? `<code>${escHtml(d.vendor_id)}:${escHtml(d.product_id)}</code>` : '—'}</td>
+            <td><code>${escHtml(d.serial || '—')}</code></td>
+            <td>${d.auto_use
+              ? `<span class="badge badge-green">In Use${d.in_use_by ? ` by ${escHtml(d.in_use_by)}` : ''}</span>`
+              : '<span class="badge badge-grey">Available</span>'}</td>
           </tr>`).join('')}</tbody>
         </table></div>`;
     });

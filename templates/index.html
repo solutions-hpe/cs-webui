@@ -1706,6 +1706,7 @@
           <button class="setup-subtab" data-subtab="setup-github" role="tab">GitHub</button>
           <button class="setup-subtab" data-subtab="setup-hub" role="tab">Hub</button>
           <button class="setup-subtab" data-subtab="setup-proxmox" role="tab">Proxmox</button>
+          <button class="setup-subtab" data-subtab="setup-security" role="tab">Security</button>
           <button class="setup-subtab" data-subtab="setup-central" role="tab">Central API</button>
           <button class="setup-subtab" data-subtab="setup-notifications" role="tab">Notifications</button>
           <button class="setup-subtab" data-subtab="setup-troubleshoot" role="tab">Troubleshooting</button>
@@ -2113,6 +2114,27 @@
 
               <div id="vm-maintenance-message" class="settings-message hidden" role="alert"></div>
 
+            </div>
+          </div>
+        </div>
+
+        <div id="setup-security" class="setup-subpanel hidden">
+          <div class="setup-card setup-section-gap">
+            <div class="setup-card-header">
+              <h2>Dashboard Security</h2>
+              <p>Require operators to sign in before accessing this spoke dashboard.</p>
+            </div>
+            <div class="setup-form">
+              <div class="form-group">
+                <label class="form-label" for="admin-password-input">Dashboard Password</label>
+                <input id="admin-password-input" class="form-input" type="password"
+                       placeholder="Leave blank to disable" autocomplete="new-password">
+                <span class="form-hint" id="admin-password-status">Set a password to require login when accessing this dashboard. Leave blank to allow open access.</span>
+              </div>
+              <div class="form-actions" style="display:flex; justify-content:flex-end; gap:8px;">
+                <button id="admin-password-save-btn" class="btn btn-primary" type="button">Save</button>
+              </div>
+              <div id="admin-password-message" class="settings-message hidden" role="alert"></div>
             </div>
           </div>
         </div>

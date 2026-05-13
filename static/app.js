@@ -156,6 +156,7 @@ let currentSettings = {
   relay_spoke_id: '',
   relay_poll_interval: 60,
   relay_api_key_configured: false,
+  admin_password_configured: false,
   notifications: {
     email_enabled: false,
     smtp_host: '',
@@ -684,6 +685,10 @@ const relayHubTlsVerifyInput = document.getElementById('relay-hub-tls-verify-inp
 const relayTenantIdInput = document.getElementById('relay-tenant-id-input');
 const relayMsg = document.getElementById('relay-message');
 const relayClearConfigBtn = document.getElementById('relay-clear-config-btn');
+const adminPasswordInput = document.getElementById('admin-password-input');
+const adminPasswordStatus = document.getElementById('admin-password-status');
+const adminPasswordSaveBtn = document.getElementById('admin-password-save-btn');
+const adminPasswordMsg = document.getElementById('admin-password-message');
 document.querySelectorAll('input[data-secret-field="true"]').forEach(bindSecretInput);
 
 // Notifications + sync interval
@@ -869,6 +874,7 @@ function mergeSettings(next = {}) {
     relay_spoke_id: next.relay_spoke_id ?? currentSettings.relay_spoke_id ?? '',
     relay_poll_interval: next.relay_poll_interval ?? currentSettings.relay_poll_interval ?? 60,
     relay_api_key_configured: next.relay_api_key_configured ?? currentSettings.relay_api_key_configured ?? false,
+    admin_password_configured: next.admin_password_configured ?? currentSettings.admin_password_configured ?? false,
     notifications: {
       email_enabled: next.notifications?.email_enabled ?? currentSettings.notifications?.email_enabled ?? false,
       smtp_host: next.notifications?.smtp_host ?? currentSettings.notifications?.smtp_host ?? '',
@@ -1658,6 +1664,18 @@ function applySettingsToUI(s) {
   if (spokeIdDisplay) spokeIdDisplay.textContent = settings.relay_spoke_id || '—';
   const apikeyStatus = document.getElementById('relay-apikey-status');
   if (apikeyStatus) apikeyStatus.textContent = settings.relay_api_key_configured ? '✓ Received' : 'Pending approval';
+  if (adminPasswordInput && !adminPasswordInput.matches(':focus')) {
+    adminPasswordInput.value = '';
+  }
+  if (adminPasswordInput) {
+    adminPasswordInput.dataset.configured = settings.admin_password_configured ? 'true' : 'false';
+    adminPasswordInput.placeholder = 'Leave blank to disable';
+  }
+  if (adminPasswordStatus) {
+    adminPasswordStatus.textContent = settings.admin_password_configured
+      ? 'Password configured. Set a new password to rotate it, or leave blank and click Save to disable login.'
+      : 'Set a password to require login when accessing this dashboard. Leave blank to allow open access.';
+  }
   updateCentralApiVisibility();
   updateRelayIndicatorVisibility(settings);
   if (usbAutoProvisionInput) usbAutoProvisionInput.checked = settings.usb_auto_provision === 'on';
@@ -1796,6 +1814,36 @@ if (githubTokenInput) {
       }
     } catch (err) {
       showSettingsMessage(`Error: ${err.message}`, true);
+    }
+  });
+}
+
+if (adminPasswordSaveBtn) {
+  adminPasswordSaveBtn.addEventListener('click', async () => {
+    const originalLabel = adminPasswordSaveBtn.textContent;
+    const password = adminPasswordInput?.value?.trim() || '';
+    adminPasswordSaveBtn.disabled = true;
+    adminPasswordSaveBtn.textContent = 'Saving…';
+    showInlineMessage(adminPasswordMsg, '', false, 0);
+    try {
+      const response = await requestJson('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admin_password: password })
+      });
+      applySettingsToUI(response.settings || { admin_password_configured: Boolean(password) });
+      if (adminPasswordInput) adminPasswordInput.value = '';
+      showInlineMessage(
+        adminPasswordMsg,
+        password ? 'Dashboard password saved. Existing sessions were signed out.' : 'Dashboard password setting cleared. Existing sessions were signed out.',
+        false,
+        5000,
+      );
+    } catch (error) {
+      showInlineMessage(adminPasswordMsg, `Error: ${error.message}`, true, 7000);
+    } finally {
+      adminPasswordSaveBtn.disabled = false;
+      adminPasswordSaveBtn.textContent = originalLabel;
     }
   });
 }

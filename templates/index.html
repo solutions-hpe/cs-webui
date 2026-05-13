@@ -1679,6 +1679,7 @@
         </div>
         <nav class="setup-subnav" role="tablist">
           <button class="setup-subtab" data-subtab="setup-github" role="tab">GitHub</button>
+          <button class="setup-subtab" data-subtab="setup-hub" role="tab">Hub</button>
           <button class="setup-subtab" data-subtab="setup-proxmox" role="tab">Proxmox</button>
           <button class="setup-subtab" data-subtab="setup-central" role="tab">Central API</button>
           <button class="setup-subtab" data-subtab="setup-notifications" role="tab">Notifications</button>
@@ -1799,6 +1800,88 @@
         </div>
 
             <div id="setup-simulation" class="setup-subpanel hidden">
+        </div>
+
+        <div id="setup-hub" class="setup-subpanel hidden">
+          <div class="setup-card setup-section-gap">
+            <div class="setup-card-header">
+              <h2>Hub Connection</h2>
+              <p>Connect this spoke to a central hub for fleet management. The spoke registers itself and receives commands from the hub.</p>
+            </div>
+            <div class="setup-form">
+              <div class="form-group">
+                <label class="form-label" for="relay-enabled-select">Hub Relay</label>
+                <select id="relay-enabled-select" class="form-input" style="max-width:160px;">
+                  <option value="on">Enabled</option>
+                  <option value="off">Disabled</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="relay-server-url-input">Hub URL</label>
+                <input id="relay-server-url-input" class="form-input" type="url"
+                       placeholder="https://your-hub:8443" autocomplete="off" spellcheck="false">
+                <span class="form-hint">Full URL of the hub (include port if non-standard).</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="relay-spoke-name-input">Spoke Name</label>
+                <input id="relay-spoke-name-input" class="form-input" type="text"
+                       placeholder="e.g. site-a-spoke" autocomplete="off" spellcheck="false">
+                <span class="form-hint">Human-readable name shown in the hub fleet view.</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="relay-tenant-id-input">Tenant ID</label>
+                <input id="relay-tenant-id-input" class="form-input" type="text"
+                       placeholder="(leave blank for default)" autocomplete="off" spellcheck="false">
+              </div>
+              <div class="form-group" style="display:flex;align-items:center;gap:10px;">
+                <input id="relay-hub-tls-verify-input" type="checkbox" style="width:auto;">
+                <label class="form-label" for="relay-hub-tls-verify-input" style="margin:0;">Verify TLS certificate</label>
+              </div>
+              <div class="form-actions" style="display:flex;justify-content:flex-end;gap:8px;">
+                <button id="relay-clear-config-btn" class="btn btn-secondary" type="button">Clear Hub Config</button>
+              </div>
+              <div id="relay-message" class="settings-message hidden" role="alert"></div>
+            </div>
+          </div>
+
+          <div class="setup-card setup-section-gap">
+            <div class="setup-card-header">
+              <h2>Connection Status</h2>
+            </div>
+            <div class="setup-status-grid">
+              <div class="setup-status-item">
+                <span class="setup-status-label">State</span>
+                <span id="relay-state-text" class="setup-status-value">—</span>
+              </div>
+              <div class="setup-status-item">
+                <span class="setup-status-label">Last Sync</span>
+                <span id="relay-last-time" class="setup-status-value">—</span>
+              </div>
+              <div class="setup-status-item">
+                <span class="setup-status-label">Spoke ID</span>
+                <span id="relay-spoke-id-display" class="setup-status-value muted">—</span>
+              </div>
+              <div class="setup-status-item">
+                <span class="setup-status-label">API Key</span>
+                <span id="relay-apikey-status" class="setup-status-value muted">—</span>
+              </div>
+              <div class="setup-status-item">
+                <span class="setup-status-label">Last Error</span>
+                <span id="relay-last-error" class="setup-status-value muted">—</span>
+              </div>
+            </div>
+            <div style="margin-top:12px;">
+              <button id="relay-diag-btn" class="btn btn-secondary" type="button">🔍 Run Diagnostics</button>
+            </div>
+            <div id="relay-diag-panel" class="hidden" style="margin-top:16px;">
+              <h3 style="font-size:.9rem;font-weight:600;margin-bottom:8px;">Configuration</h3>
+              <dl id="relay-diag-config" class="diag-dl"></dl>
+              <h3 style="font-size:.9rem;font-weight:600;margin:12px 0 8px;">Reachability</h3>
+              <div id="relay-diag-reach"></div>
+              <h3 style="font-size:.9rem;font-weight:600;margin:12px 0 8px;">Registration Log (<span id="relay-diag-log-count">0</span>)</h3>
+              <div id="relay-diag-log"></div>
+            </div>
+          </div>
         </div>
 
         <div id="setup-proxmox" class="setup-subpanel hidden">

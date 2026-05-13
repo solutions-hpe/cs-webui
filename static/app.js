@@ -4951,7 +4951,9 @@ function handleMessage(message) {
 
 function connectWebSocket() {
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  socket = new WebSocket(`${protocol}://${window.location.host}/ws`);
+  const spokeWsToken = (typeof window.__SPOKE_WS_TOKEN__ !== 'undefined' && window.__SPOKE_WS_TOKEN__)
+    ? `?token=${encodeURIComponent(window.__SPOKE_WS_TOKEN__)}` : '';
+  socket = new WebSocket(`${protocol}://${window.location.host}/ws${spokeWsToken}`);
   setWsStatus(false, 'Connecting');
 
   socket.addEventListener('open', () => {

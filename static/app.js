@@ -9288,9 +9288,14 @@ function renderHubVmServerDetail(container, host) {
   const reclone = host.reclone_state || {};
   const px = host.proxmox || {};
 
-  // Categorise VMs
-  const TEMPLATE_IDS = new Set(["100", "200"]);
-  const templateVms = vms.filter(v => v.is_template === true || v.is_template === "true" || TEMPLATE_IDS.has(String(v.vmid)));
+  // Categorise VMs to match the spoke drill-in view.
+  const configuredTemplateIds = new Set([
+    String(currentSettings?.vm_image_1_template_id || "100"),
+    String(currentSettings?.vm_image_2_template_id || "200"),
+  ]);
+  const templateVms = vms.filter(v =>
+    v.is_template === true || v.is_template === "true" || configuredTemplateIds.has(String(v.vmid))
+  );
   const nonTpl = vms.filter(v => !templateVms.includes(v));
   const containerVms = nonTpl.filter(v => v.type === "lxc");
   const qemuVms = nonTpl.filter(v => v.type !== "lxc");
@@ -9393,8 +9398,8 @@ function _hubVmTable(spokeId, vms, label) {
 function renderHubVmServerVmsPanel(spokeId, { simVms, otherVms, containerVms, templateVms }) {
   let activeVmCat = "sim";
   const cats = [
-    { id: "sim", label: "Sim Clients", vms: simVms },
-    { id: "other", label: "Other Clients", vms: otherVms },
+    { id: "sim", label: "USB (T2)", vms: simVms },
+    { id: "other", label: "IoT (T3)", vms: otherVms },
     { id: "containers", label: "Containers", vms: containerVms },
     { id: "templates", label: "Templates", vms: templateVms },
   ];

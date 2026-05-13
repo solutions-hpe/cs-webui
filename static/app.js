@@ -7130,7 +7130,7 @@ let autoRefreshCountdownTimer = null;
 let autoRefreshSecondsLeft = 10;
 let refreshPaused = false;
 let tenantContextActive = false;
-const autoRefreshActiveTabs = new Set(["dashboard", "simulations", "clients", "vm-server", "api-server", "spokes"]);
+const autoRefreshActiveTabs = new Set(["dashboard", "simulations", "clients", "central", "vm-server", "api-server", "spokes"]);
 let tenantDetailState = { open: false, tenantId: null, activeTab: "dashboard", data: {} };
 const hubAdminTabIds = new Set(["dashboard", "spokes", "setup", "superadmin"]);
 let tenantUserCounts = {};
@@ -7141,6 +7141,7 @@ let aggregateProxmoxHosts = [];
 let aggregateApiServerRows = [];
 let aggregateCentralData = null;
 let hubCentralData = null;
+let hubCentralActiveSubtab = "hcs-sites";
 let hubConfigDraft = "";
 let hubSimActiveTab = "hub-simtop-checks";
 let hubSimChecksFilter = "failing";
@@ -8625,6 +8626,8 @@ async function refreshCurrentView(force = false) {
     await loadVmServer(force);
   } else if (activeTab === "api-server") {
     await loadApiServer(force);
+  } else if (activeTab === "central") {
+    await loadHubCentralData(force);
   } else if (activeTab === "spokes") {
     await loadSpokes(force);
   } else if (activeTab === "commands") {
@@ -9712,8 +9715,124 @@ async function loadCentral(force = false) {
   container.innerHTML = '<div class="empty-state">Loading…</div>';
   const data = force || !aggregateCentralData ? await loadAggregateData("central") : aggregateCentralData;
   aggregateCentralData = data || { mode: "distributed", hub_central_config: {}, spokes: [] };
-  hubCentralData = aggregateCentralData;
   renderHubCentral();
+}
+
+async function loadHubCentralData(force = false) {
+  const container = $("#hcs-content");
+  if (!container) return;
+  if (!currentTenantId || !currentUser) {
+    container.innerHTML = '<div class="empty-state">Sign in and select a tenant.</div>';
+    return;
+  }
+  if (!force && hubCentralData) {
+    renderHubCentralStatus();
+    return;
+  }
+  container.innerHTML = '<div class="empty-state">Loading…</div>';
+  const data = await loadAggregateData("central-status");
+  if (!data) {
+    container.innerHTML = '<div class="empty-state">Unable to load Central data.</div>';
+    return;
+  }
+  hubCentralData = data;
+  const spokes = data.spokes || [];
+  const siteCount = spokes.reduce((n, s) => n + (s.sites || []).length, 0);
+  $("#hcs-spokes-pill") && ($("#hcs-spokes-pill").textContent = `${spokes.length} spokes`);
+  $("#hcs-sites-pill") && ($("#hcs-sites-pill").textContent = `${siteCount} sites`);
+  renderHubCentralStatus();
+}
+
+function renderHubCentralStatus() {
+  if (hubCentralActiveSubtab === "hcs-sites") renderHubCentralSites();
+  else if (hubCentralActiveSubtab === "hcs-alerts") renderHubCentralAlerts();
+  else if (hubCentralActiveSubtab === "hcs-clients") renderHubCentralClients();
+}
+
+function renderHubCentralSites() {
+  const container = $("#hcs-content");
+  if (!container || !hubCentralData) return;
+  const { spokes = [], mode, token_valid: hubTokenValid } = hubCentralData;
+  const allSites = spokes.flatMap(s => (s.sites || []).map(site => ({
+    ...site,
+    spoke_name: s.spoke_name,
+    spoke_id: s.spoke_id,
+    spoke_online: s.spoke_online,
+    token_valid: mode === "centralized" ? hubTokenValid : s.token_valid,
+  })));
+  if (!allSites.length) {
+    container.innerHTML = '<div class="empty-state">No Central sites configured on any spoke.</div>';
+    return;
+  }
+  const rows = allSites.map(s => `
+    <tr>
+      <td>${escHtml(s.spoke_name || s.spoke_id)}</td>
+      <td><strong>${escHtml(s.wsite)}</strong></td>
+      <td>${escHtml(s.central_site || '—')}</td>
+      <td style="color:var(--hpe-green-dark);">${s.check_ok ?? '—'}</td>
+      <td style="color:${s.check_fail ? '#c0392b' : 'inherit'};">${s.check_fail ?? '—'}</td>
+      <td style="color:var(--muted);">${s.check_unknown ?? '—'}</td>
+      <td>${s.wireless_clients ?? '—'}</td>
+      <td><span class="status-dot ${s.token_valid ? 'online' : 'offline'}"></span></td>
+    </tr>`).join('');
+  container.innerHTML = `
+    <div class="setup-card">
+      <table class="data-table">
+        <thead><tr><th>Spoke</th><th>Site</th><th>Central Site</th><th>✓ OK</th><th>✗ Err</th><th>?</th><th>Wireless</th><th>Token</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+function renderHubCentralAlerts() {
+  const container = $("#hcs-alerts-content");
+  if (!container || !hubCentralData) return;
+  const alerts = (hubCentralData.spokes || []).flatMap(s =>
+    (s.hardware_alerts || []).map(a => ({ ...a, spoke_name: s.spoke_name }))
+  );
+  if (!alerts.length) {
+    container.innerHTML = '<div class="empty-state">No active hardware alerts.</div>';
+    return;
+  }
+  const rows = alerts.map(a => `
+    <tr>
+      <td>${escHtml(a.spoke_name || '—')}</td>
+      <td>${escHtml(a.name || a.id || '—')}</td>
+      <td>${a.total ?? 0}</td>
+      <td>${escHtml(Object.keys(a.sites || {}).join(', ') || '—')}</td>
+    </tr>`).join('');
+  container.innerHTML = `
+    <div class="setup-card">
+      <table class="data-table">
+        <thead><tr><th>Spoke</th><th>Alert</th><th>Affected</th><th>Sites</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+function renderHubCentralClients() {
+  const container = $("#hcs-clients-content");
+  if (!container || !hubCentralData) return;
+  const rows = (hubCentralData.spokes || []).flatMap(s =>
+    (s.sites || []).map(site => `
+      <tr>
+        <td>${escHtml(s.spoke_name || s.spoke_id)}</td>
+        <td>${escHtml(site.wsite)}</td>
+        <td>${escHtml(site.central_site || '—')}</td>
+        <td>${site.wireless_clients ?? '—'}</td>
+      </tr>`)
+  ).join('');
+  if (!rows) {
+    container.innerHTML = '<div class="empty-state">No client data available.</div>';
+    return;
+  }
+  container.innerHTML = `
+    <div class="setup-card">
+      <table class="data-table">
+        <thead><tr><th>Spoke</th><th>Site</th><th>Central Site</th><th>Wireless Clients</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
 }
 
 async function loadSetup() {
@@ -11275,6 +11394,7 @@ function connectHubWebSocket() {
       if (activeTab === "clients") scheduleReload("ws-clients", () => loadClients(true));
       if (activeTab === "vm-server") scheduleReload("ws-vm-server", () => loadVmServer(true));
       if (activeTab === "api-server") scheduleReload("ws-api-server", () => loadApiServer(true));
+      if (activeTab === "central") scheduleReload("ws-hub-central", () => loadHubCentralData(true));
       if (activeTab === "spokes") scheduleReload("ws-spokes", () => loadSpokes(true));
       if (activeTab === "tenant-setup") scheduleReload("ws-tenant-setup", () => loadTenantSetup(true));
       if (activeTab === "config") scheduleReload("ws-config", () => loadConfig(true));
@@ -11402,6 +11522,17 @@ function bindEvents() {
       return;
     }
 
+    const hCentralBtn = event.target.closest(".hub-central-subtab");
+    if (hCentralBtn) {
+      hubCentralActiveSubtab = hCentralBtn.dataset.subtab;
+      $$(".hub-central-subtab").forEach(b => b.classList.toggle("active", b.dataset.subtab === hubCentralActiveSubtab));
+      ["hcs-sites-panel", "hcs-alerts-panel", "hcs-clients-panel"].forEach(id => {
+        document.getElementById(id)?.classList.toggle("hidden", id !== `${hubCentralActiveSubtab}-panel`);
+      });
+      renderHubCentralStatus();
+      return;
+    }
+
     const setupButton = event.target.closest(".settings-subtab");
     if (setupButton) {
       const subtab = setupButton.dataset.subtab;
@@ -11486,6 +11617,7 @@ function bindEvents() {
   });
   $("#hub-sim-refresh-btn")?.addEventListener("click", () => loadHubSimulations(true));
   $("#refresh-clients-btn")?.addEventListener("click", () => loadClients(true));
+  $("#refresh-hub-central-btn")?.addEventListener("click", () => loadHubCentralData(true));
   $("#refresh-vm-server-btn")?.addEventListener("click", () => loadVmServer(true));
   $("#refresh-api-server-btn")?.addEventListener("click", () => loadApiServer(true));
   $("#refresh-spokes-btn")?.addEventListener("click", () => loadSpokes(true));

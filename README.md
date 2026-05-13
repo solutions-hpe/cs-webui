@@ -289,10 +289,7 @@ This keeps hub and spoke logic in one file while avoiding runtime overlap.
 ### Versioning
 
 - Repo version is stored in `VERSION`.
-- Current branch convention:
-  - `lrb` = development/integration
-  - `main` = production (`v1.0.0`)
-- Hub and Spoke both consume this repo from the matching branch.
+- `main` is the production branch. Hub and Spoke both consume this repo from `main`.
 
 #### How the version is bumped
 
@@ -320,7 +317,7 @@ This keeps hub and spoke logic in one file while avoiding runtime overlap.
 There is no standalone frontend dev server in this repo. The normal workflow is:
 
 1. edit `templates/`, `static/`, or `shared/`
-2. commit to `lrb`
+2. commit to `main`
 3. redeploy/reinstall the spoke or rebuild hub so it consumes the updated assets
 
 ---

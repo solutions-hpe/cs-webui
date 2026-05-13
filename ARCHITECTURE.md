@@ -194,7 +194,6 @@ Client-Sim is versioned per component, not as one monolithic platform version.
 
 Branch convention in active docs and installers:
 
-- `lrb` = development/integration branch
 - `main` = production branch
 
 ---

@@ -7130,7 +7130,7 @@ let autoRefreshCountdownTimer = null;
 let autoRefreshSecondsLeft = 10;
 let refreshPaused = false;
 let tenantContextActive = false;
-const autoRefreshActiveTabs = new Set(["dashboard", "simulations", "clients", "vm-server", "api-server", "central", "spokes", "config", "tenant-setup"]);
+const autoRefreshActiveTabs = new Set(["dashboard", "simulations", "clients", "vm-server", "api-server", "spokes"]);
 let tenantDetailState = { open: false, tenantId: null, activeTab: "dashboard", data: {} };
 const hubAdminTabIds = new Set(["dashboard", "spokes", "setup", "superadmin"]);
 let tenantUserCounts = {};
@@ -8625,8 +8625,6 @@ async function refreshCurrentView(force = false) {
     await loadVmServer(force);
   } else if (activeTab === "api-server") {
     await loadApiServer(force);
-  } else if (activeTab === "central") {
-    await loadCentral(force);
   } else if (activeTab === "spokes") {
     await loadSpokes(force);
   } else if (activeTab === "commands") {
@@ -9732,6 +9730,7 @@ async function loadTenantSetup(force = false) {
   container.innerHTML = '<div class="empty-state">Loading…</div>';
   const data = await loadTenantDetailData(force);
   container.innerHTML = data ? renderTenantSetupPanel(data) : '<div class="empty-state">Unable to load tenant setup.</div>';
+  await loadCentral(force);
 }
 
 async function loadConfig(force = false) {
@@ -11276,7 +11275,6 @@ function connectHubWebSocket() {
       if (activeTab === "clients") scheduleReload("ws-clients", () => loadClients(true));
       if (activeTab === "vm-server") scheduleReload("ws-vm-server", () => loadVmServer(true));
       if (activeTab === "api-server") scheduleReload("ws-api-server", () => loadApiServer(true));
-      if (activeTab === "central") scheduleReload("ws-central", () => loadCentral(true));
       if (activeTab === "spokes") scheduleReload("ws-spokes", () => loadSpokes(true));
       if (activeTab === "tenant-setup") scheduleReload("ws-tenant-setup", () => loadTenantSetup(true));
       if (activeTab === "config") scheduleReload("ws-config", () => loadConfig(true));
@@ -11394,6 +11392,16 @@ function bindEvents() {
       return;
     }
 
+    const hTsButton = event.target.closest(".hub-ts-subtab");
+    if (hTsButton) {
+      const subtab = hTsButton.dataset.subtab;
+      $$(".hub-ts-subtab").forEach(b => b.classList.toggle("active", b.dataset.subtab === subtab));
+      ["ts-setup-panel", "ts-central-api-panel"].forEach(panelId => {
+        document.getElementById(panelId)?.classList.toggle("hidden", panelId !== `${subtab}-panel`);
+      });
+      return;
+    }
+
     const setupButton = event.target.closest(".settings-subtab");
     if (setupButton) {
       const subtab = setupButton.dataset.subtab;
@@ -11480,7 +11488,6 @@ function bindEvents() {
   $("#refresh-clients-btn")?.addEventListener("click", () => loadClients(true));
   $("#refresh-vm-server-btn")?.addEventListener("click", () => loadVmServer(true));
   $("#refresh-api-server-btn")?.addEventListener("click", () => loadApiServer(true));
-  $("#refresh-central-btn")?.addEventListener("click", () => loadCentral(true));
   $("#refresh-spokes-btn")?.addEventListener("click", () => loadSpokes(true));
   $("#refresh-commands-btn")?.addEventListener("click", loadCommands);
   $("#refresh-config-btn")?.addEventListener("click", () => loadConfig(true));

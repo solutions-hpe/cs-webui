@@ -113,7 +113,6 @@
           <button class="tab active" data-tab="hub-simulations" type="button">Simulations</button>
           <button class="tab" data-tab="hub-clients" type="button">Clients</button>
           <button class="tab" data-tab="hub-vm-server" type="button">VM Server</button>
-          <button class="tab" data-tab="hub-central" type="button">Central</button>
           <button class="tab" data-tab="hub-api-server" type="button">API Server</button>
           <span class="tab-nav-sep" aria-hidden="true"></span>
           <button class="tab tab-nav-right" data-tab="hub-config" type="button">Config</button>
@@ -318,19 +317,6 @@
       <div id="hub-api-server-content"></div>
     </main>
 
-    <main id="tab-hub-central" class="page tab-content hidden">
-      <div class="page-toolbar">
-        <div class="toolbar-stats">
-          <span class="stat-pill" id="hub-central-mode-pill">— mode</span>
-          <span class="stat-pill" id="hub-central-spokes-pill">— spokes</span>
-          <span class="stat-pill" id="hub-central-connected-pill">— connected</span>
-        </div>
-        <div class="toolbar-actions">
-          <button id="refresh-central-btn" class="btn btn-primary btn-small" type="button">Refresh</button>
-        </div>
-      </div>
-      <div id="hub-central-content"></div>
-    </main>
 
     <!-- ── Islands tab (auth required) ── -->
     <main id="tab-hub-spokes" class="page tab-content hidden">
@@ -403,7 +389,23 @@
         <span class="server-node-name">Tenant Setup</span>
         <button id="refresh-tenant-setup-btn" class="btn btn-primary btn-small" style="margin-left:auto;" type="button">Refresh</button>
       </div>
-      <div id="hub-tenant-setup-content"></div>
+      <nav class="setup-subnav">
+        <button class="setup-subtab hub-ts-subtab active" data-subtab="ts-setup" type="button">Setup</button>
+        <button class="setup-subtab hub-ts-subtab" data-subtab="ts-central-api" type="button">Central API</button>
+      </nav>
+      <div id="ts-setup-panel">
+        <div id="hub-tenant-setup-content"></div>
+      </div>
+      <div id="ts-central-api-panel" class="hidden">
+        <div class="page-toolbar">
+          <div class="toolbar-stats">
+            <span class="stat-pill" id="hub-central-mode-pill">— mode</span>
+            <span class="stat-pill" id="hub-central-spokes-pill">— spokes</span>
+            <span class="stat-pill" id="hub-central-connected-pill">— connected</span>
+          </div>
+        </div>
+        <div id="hub-central-content"></div>
+      </div>
     </main>
 
     <!-- ── Hub setup tab ── -->

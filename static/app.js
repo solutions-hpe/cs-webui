@@ -1517,7 +1517,7 @@ function renderProxmoxApproveState(pending, approved) {
   } else if (pending.length > 0) {
     // No connected agent yet — show Approve for the first pending
     const first = pending[0];
-    btn.textContent = `✓ Approve ${escHtml(first.hostname)}`;
+    btn.textContent = `✓ Approve ${first.hostname}`;
     btn.style.display = '';
     btn._approveHostname = first.hostname;
     btn._action = 'approve';
@@ -2303,7 +2303,7 @@ function renderUsbVidPidTable() {
     removeBtn.className = 'btn-icon';
     removeBtn.textContent = '✕';
     removeBtn.addEventListener('click', () => removeVidPid(device.vidpid));
-    tr.innerHTML = `<td>${device.vidpid || '—'}</td><td>${device.type || 'wireless'}</td><td>${device.label || '—'}</td>`;
+    tr.innerHTML = `<td>${escHtml(device.vidpid || '—')}</td><td>${escHtml(device.type || 'wireless')}</td><td>${escHtml(device.label || '—')}</td>`;
     const actionTd = document.createElement('td');
     actionTd.appendChild(removeBtn);
     tr.appendChild(actionTd);
@@ -6987,13 +6987,35 @@ let loadServiceLogs = () => {};
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
+  function debounce(fn, delay) {
+    let t;
+    return (...args) => {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...args), delay);
+    };
+  }
+
+  function applyLogFilter() {
+    const filter = filterInput.value.trim();
+    const normalizedFilter = filter.toLowerCase();
+    output.querySelectorAll('.log-line').forEach((line) => {
+      const rawText = line._rawText ?? line.textContent ?? '';
+      const match = !normalizedFilter || rawText.toLowerCase().includes(normalizedFilter);
+      line.style.display = match ? '' : 'none';
+      if (match) line.innerHTML = highlight(rawText, filter) + '\n';
+    });
+  }
+
   function appendLine(text) {
     const filter = filterInput.value.trim();
-    if (filter && !text.toLowerCase().includes(filter.toLowerCase())) return;
+    const normalizedText = text.toLowerCase();
+    const match = !filter || normalizedText.includes(filter.toLowerCase());
 
     const span = document.createElement('span');
     span.className = 'log-line ' + classify(text);
-    span.innerHTML = highlight(text, filter) + '\n';
+    span._rawText = text;
+    span.style.display = match ? '' : 'none';
+    span.innerHTML = highlight(text, match ? filter : '') + '\n';
     output.appendChild(span);
 
     while (output.children.length > MAX_LINES) output.removeChild(output.firstChild);
@@ -7068,11 +7090,7 @@ let loadServiceLogs = () => {};
   });
 
   // Re-apply filter live
-  filterInput.addEventListener('input', () => {
-    const lines = Array.from(output.querySelectorAll('.log-line')).map(s => s.textContent);
-    clearOutput();
-    lines.forEach(appendLine);
-  });
+  filterInput.addEventListener('input', debounce(applyLogFilter, 150));
 
   loadServiceLogs = () => {
     if (!historyLoaded) {
@@ -7104,7 +7122,7 @@ function startHubApp() {
 
 "use strict";
 
-let authToken = localStorage.getItem("hub_token") || null;
+let authToken = sessionStorage.getItem("hub_token") || null;
 let currentUser = null;
 let currentTenantId = null;
 let tenants = [];
@@ -8511,7 +8529,7 @@ async function submitLogin() {
   }
   const payload = await res.json();
   authToken = payload.access_token;
-  localStorage.setItem("hub_token", authToken);
+  sessionStorage.setItem("hub_token", authToken);
   await loadUserContext();
   connectHubWebSocket();
   await refreshCurrentView(true);
@@ -8558,7 +8576,7 @@ function logout(showMessage = true) {
     Object.keys(localStorage).filter(k => k.startsWith("hub_central_") || k.startsWith("hub_clients_") || k.startsWith("hub_sites_") || k.startsWith("hub_vmserver_"))
       .forEach(k => localStorage.removeItem(k));
   } catch (_) {}
-  localStorage.removeItem("hub_token");
+  sessionStorage.removeItem("hub_token");
   disconnectWebSocket();
   applyAuthUI();
   closeSpokeModal();
@@ -9988,7 +10006,7 @@ function renderHubVmServerConfigPanel(px) {
 }
 
 async function sendHubProxmoxCommand(tenantId, spokeId, action, args = {}) {
-  const token = localStorage.getItem("hub_token");
+  const token = sessionStorage.getItem("hub_token");
   try {
     const resp = await fetch(`/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/proxmox-command`, {
       method: "POST",
@@ -10084,7 +10102,7 @@ function renderHubCentral() {
   const data = aggregateCentralData || { spokes: [], hub_central_config: {}, mode: "distributed" };
   const spokes = data.spokes || [];
   const connectedCount = spokes.filter(item => item.central_status?.token_valid).length;
-  $("#hub-central-mode-pill") && ($("#hub-central-mode-pill").textContent = `${escHtml(data.mode || "distributed")} mode`);
+  $("#hub-central-mode-pill") && ($("#hub-central-mode-pill").textContent = `${data.mode || "distributed"} mode`);
   $("#hub-central-spokes-pill") && ($("#hub-central-spokes-pill").textContent = `${spokes.length} spokes`);
   $("#hub-central-connected-pill") && ($("#hub-central-connected-pill").textContent = `${connectedCount} connected`);
   const config = data.hub_central_config || {};

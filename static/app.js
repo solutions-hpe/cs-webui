@@ -7190,6 +7190,23 @@ const superadminBackupState = {
   vmProgress: {},
   completionNotified: false,
 };
+const HUB_RESEED_VM_ID = 100;
+const hubReseedState = {
+  tenantId: null,
+  loading: false,
+  templatesLoading: false,
+  templates: [],
+  templatesError: "",
+  selectedTemplateKey: "",
+  selectedSpokeIds: [],
+  submitting: false,
+  error: "",
+  step: "select",
+  jobId: "",
+  progressTemplateName: "",
+  progressRows: {},
+  completionNotified: false,
+};
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -8294,6 +8311,7 @@ async function refreshAfterSpokeApproval(tenantId = currentTenantId) {
       await loadSpokes(true);
       await loadTenantSetup(true);
       await loadConfig(true);
+      if (activeTab === "reseed") await loadHubReseedPanel(true);
     }
     if (tenantDetailState.open && tenantDetailState.tenantId === tenantId) {
       const data = await loadTenantDetailData(true);
@@ -8435,11 +8453,11 @@ function ensureSuperadminBackupUi() {
       <div id="sa-backup-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="sa-backup-modal-title">
         <div class="modal-box modal-box-large">
           <div class="modal-header">
-            <h2 id="sa-backup-modal-title">VM Backup</h2>
+            <h2 id="sa-backup-modal-title">Upload Template to Azure</h2>
             <button id="sa-backup-modal-x" class="btn btn-secondary btn-small" type="button">✕ Close</button>
           </div>
           <nav class="setup-subnav" style="margin-top:12px;">
-            <button class="setup-subtab sa-backup-tab active" data-sa-backup-tab="backup" type="button">Backup</button>
+            <button class="setup-subtab sa-backup-tab active" data-sa-backup-tab="backup" type="button">Upload</button>
             <button class="setup-subtab sa-backup-tab" data-sa-backup-tab="config" type="button">⚙️ Config</button>
           </nav>
           <div id="sa-backup-modal-body" class="setup-subpanel" style="margin-top:12px;"></div>
@@ -8475,15 +8493,15 @@ function renderSuperadminBackupModal() {
   closeX.disabled = !canClose;
 
   if (superadminBackupState.activeTab === "config") {
-    title.textContent = "Backup Configuration";
+    title.textContent = "Upload Configuration";
     const configRows = listSuperadminBackupSpokes();
     body.innerHTML = `
       <div class="setup-card">
         <div class="setup-card-header">
-          <h3>Superadmin Backup Settings</h3>
-          <p>Configure VM IDs per spoke and Azure destination settings.</p>
+          <h3>Superadmin Upload Settings</h3>
+          <p>Configure VM IDs per spoke and Azure destination settings for template uploads.</p>
         </div>
-        ${superadminBackupState.configLoading ? '<div class="empty-state">Loading backup configuration…</div>' : `
+        ${superadminBackupState.configLoading ? '<div class="empty-state">Loading upload configuration…</div>' : `
           <div class="form-group">
             <label class="form-label" for="sa-backup-config-retention">Retention count</label>
             <input id="sa-backup-config-retention" type="number" min="1" class="form-input" value="${escHtml(superadminBackupConfig?.retention ?? 3)}">
@@ -8520,11 +8538,11 @@ function renderSuperadminBackupModal() {
 
   if (superadminBackupState.step === "status") {
     const rows = getSuperadminBackupRows();
-    title.textContent = "Backup in Progress";
+    title.textContent = "Upload in Progress";
     body.innerHTML = `
       <div class="setup-card">
         <div class="setup-card-header">
-          <h3>Backup in Progress</h3>
+          <h3>Upload in Progress</h3>
           <p>Job ID: ${escHtml(superadminBackupState.jobId || "pending")}</p>
         </div>
         <div class="table-scroll-v" style="margin-top:12px;">
@@ -8539,7 +8557,7 @@ function renderSuperadminBackupModal() {
                 <td>${escHtml(formatBackupBytes(row.size))}</td>
                 <td>${escHtml(row.file || "-")}</td>
               </tr>`;
-            }).join("") : '<tr><td colspan="5" class="empty-state">Waiting for backup updates…</td></tr>'}</tbody>
+            }).join("") : '<tr><td colspan="5" class="empty-state">Waiting for upload updates…</td></tr>'}</tbody>
           </table>
         </div>
         <div class="form-actions" style="margin-top:16px;">
@@ -8562,11 +8580,11 @@ function renderSuperadminBackupModal() {
           <h3>Enter Azure Storage Key</h3>
           <p>${selectedSpoke ? `${escHtml(tenantName(selectedSpoke.tenant_id))} — ${escHtml(spokePrimaryLabel(selectedSpoke))}` : "No spoke selected."}</p>
         </div>
-        <p>Key will be used for this backup only and never stored.</p>
+        <p>Key will be used for this upload only and never stored.</p>
         <input type="password" id="sa-azure-key" placeholder="Azure storage account key" class="form-input" style="width:100%">
         <div class="form-actions" style="margin-top:16px;">
           <button id="sa-backup-back-btn" class="btn btn-secondary" type="button">← Back</button>
-          <button id="sa-backup-start-btn" class="btn btn-primary" type="button"${superadminBackupState.loading ? " disabled" : ""}>Start Backup</button>
+          <button id="sa-backup-start-btn" class="btn btn-primary" type="button"${superadminBackupState.loading ? " disabled" : ""}>Start Upload</button>
         </div>
         <div class="form-msg ${superadminBackupState.backupError ? "msg-error" : ""}">${escHtml(superadminBackupState.backupError)}</div>
       </div>
@@ -8575,12 +8593,12 @@ function renderSuperadminBackupModal() {
     return;
   }
 
-  title.textContent = "VM Backup";
+  title.textContent = "Upload Template to Azure";
   body.innerHTML = `
     <div class="setup-card">
       <div class="setup-card-header">
-        <h3>VM Backup</h3>
-        <p>Select spoke to back up:</p>
+        <h3>Upload Template to Azure</h3>
+        <p>Select source spoke to upload:</p>
       </div>
       <div class="form-group">
         <label class="form-label" for="sa-spoke-select">Spoke</label>
@@ -8612,7 +8630,7 @@ async function loadSuperadminBackupConfig(force = false) {
   const data = await readJson(res);
   if (!res || !res.ok) {
     superadminBackupConfig = superadminBackupConfig || { spokes: {}, retention: 3, azure_account: "", azure_container: "" };
-    superadminBackupState.configMessage = data?.detail || "Failed to load backup configuration.";
+    superadminBackupState.configMessage = data?.detail || "Failed to load upload configuration.";
     superadminBackupState.configMessageOk = false;
   } else {
     superadminBackupConfig = {
@@ -8689,7 +8707,7 @@ async function saveSuperadminBackupConfig() {
   const data = await readJson(res);
   superadminBackupState.configSaving = false;
   if (!res || !res.ok) {
-    superadminBackupState.configMessage = data?.detail || "Failed to save backup configuration.";
+    superadminBackupState.configMessage = data?.detail || "Failed to save upload configuration.";
     superadminBackupState.configMessageOk = false;
     renderSuperadminBackupModal();
     return;
@@ -8700,7 +8718,7 @@ async function saveSuperadminBackupConfig() {
     azure_account: data?.azure_account ?? payload.azure_account,
     azure_container: data?.azure_container ?? payload.azure_container,
   };
-  superadminBackupState.configMessage = "Backup configuration saved.";
+  superadminBackupState.configMessage = "Upload configuration saved.";
   superadminBackupState.configMessageOk = true;
   renderSuperadminBackupModal();
 }
@@ -8721,7 +8739,7 @@ function updateSuperadminBackupProgress(message) {
   if (superadminBackupState.open && superadminBackupState.step === "status") renderSuperadminBackupModal();
   if (!superadminBackupState.completionNotified && isSuperadminBackupComplete()) {
     superadminBackupState.completionNotified = true;
-    showToast("VM backup finished.", "ok");
+    showToast("Template upload finished.", "ok");
   }
 }
 
@@ -8759,7 +8777,7 @@ async function startSuperadminBackup() {
   const data = await readJson(res);
   superadminBackupState.loading = false;
   if (!res || !res.ok) {
-    superadminBackupState.backupError = data?.detail || "Unable to start backup.";
+    superadminBackupState.backupError = data?.detail || "Unable to start upload.";
     renderSuperadminBackupModal();
     return;
   }
@@ -8768,7 +8786,392 @@ async function startSuperadminBackup() {
   superadminBackupState.vmProgress = Object.fromEntries(configuredVmIds.map(vmId => [String(vmId), { vm_id: vmId, status: "queued", pct: 0, size: null, file: "" }]));
   superadminBackupState.completionNotified = false;
   renderSuperadminBackupModal();
-  showToast(`Backup started for ${spokePrimaryLabel(spoke)}.`, "ok");
+  showToast(`Upload started for ${spokePrimaryLabel(spoke)}.`, "ok");
+}
+
+function resetHubReseedState({ preserveTemplates = true } = {}) {
+  hubReseedState.tenantId = currentTenantId || null;
+  hubReseedState.loading = false;
+  hubReseedState.submitting = false;
+  hubReseedState.error = "";
+  hubReseedState.step = "select";
+  hubReseedState.jobId = "";
+  hubReseedState.progressTemplateName = "";
+  hubReseedState.progressRows = {};
+  hubReseedState.completionNotified = false;
+  hubReseedState.selectedSpokeIds = [];
+  if (!preserveTemplates) {
+    hubReseedState.templatesLoading = false;
+    hubReseedState.templates = [];
+    hubReseedState.templatesError = "";
+    hubReseedState.selectedTemplateKey = "";
+  }
+}
+
+function syncHubReseedTenantState() {
+  if (hubReseedState.tenantId !== currentTenantId) resetHubReseedState({ preserveTemplates: true });
+}
+
+function ensureHubReseedUi() {
+  const tenantNav = document.querySelector("#tenant-context-nav .tenant-context-nav-row2");
+  if (tenantNav && !tenantNav.querySelector('[data-tab="hub-reseed"]')) {
+    const button = document.createElement("button");
+    button.className = "tab";
+    button.type = "button";
+    button.dataset.tab = "hub-reseed";
+    button.textContent = "Reseed";
+    const anchor = tenantNav.querySelector(".tab-nav-sep");
+    tenantNav.insertBefore(button, anchor || null);
+  }
+  const hubRoot = document.getElementById("hub-root");
+  if (hubRoot && !document.getElementById("tab-hub-reseed")) {
+    const panel = document.createElement("main");
+    panel.id = "tab-hub-reseed";
+    panel.className = "page tab-content hidden";
+    panel.innerHTML = '<div id="hub-reseed-panel"><div class="empty-state">Loading reseed options…</div></div>';
+    const anchor = document.getElementById("tab-hub-config") || document.getElementById("tab-hub-tenant-setup");
+    hubRoot.insertBefore(panel, anchor || null);
+  }
+}
+
+function titleCaseWords(value) {
+  return String(value || "")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .replace(/\b\w/g, char => char.toUpperCase()) || "Unknown";
+}
+
+function formatBackupTemplateUpdatedAt(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function normalizeBackupTemplates(payload) {
+  const items = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.templates)
+      ? payload.templates
+      : Array.isArray(payload?.items)
+        ? payload.items
+        : [];
+  return items.map((item, index) => {
+    const value = typeof item === "string" ? { template_name: item, latest_blob: item } : (item || {});
+    const templateName = value.template_name || value.name || value.template || value.label || value.blob_name || `template-${index + 1}`;
+    const latestBlob = value.latest_blob || value.blob_name || value.blob || templateName;
+    const sizeValue = value.size_bytes ?? value.latest_size_bytes ?? value.latest_blob_size ?? value.bytes ?? value.size ?? null;
+    const updatedAt = value.updated_at || value.last_updated || value.modified || value.last_modified || value.created_at || value.timestamp || "";
+    return {
+      template_name: String(templateName),
+      latest_blob: String(latestBlob),
+      size_bytes: Number.isFinite(Number(sizeValue)) ? Number(sizeValue) : null,
+      updated_at: updatedAt,
+    };
+  }).filter(item => item.template_name && item.latest_blob).sort((left, right) => {
+    const updatedCmp = String(right.updated_at || "").localeCompare(String(left.updated_at || ""));
+    if (updatedCmp !== 0) return updatedCmp;
+    return left.template_name.localeCompare(right.template_name, undefined, { numeric: true, sensitivity: "base" });
+  });
+}
+
+function backupTemplateKey(template) {
+  if (!template) return "";
+  return String(template.latest_blob || template.template_name || "");
+}
+
+function renderBackupTemplateOptionLabel(template) {
+  const size = template.size_bytes ? ` (${formatBackupBytes(template.size_bytes)})` : "";
+  const updated = formatBackupTemplateUpdatedAt(template.updated_at);
+  return `${template.template_name}${size}${updated ? ` — updated ${updated}` : ""}`;
+}
+
+function getSelectedHubReseedTemplate() {
+  if (!hubReseedState.templates.length) return null;
+  const selected = hubReseedState.templates.find(template => backupTemplateKey(template) === hubReseedState.selectedTemplateKey);
+  if (selected) return selected;
+  const fallback = hubReseedState.templates[0] || null;
+  hubReseedState.selectedTemplateKey = backupTemplateKey(fallback);
+  return fallback;
+}
+
+function listTenantReseedSpokes() {
+  return getTenantSpokes()
+    .filter(spoke => spoke.status === "approved")
+    .sort((left, right) => spokePrimaryLabel(left).localeCompare(spokePrimaryLabel(right), undefined, { numeric: true, sensitivity: "base" }));
+}
+
+function setHubReseedSelectedSpokeIds(ids = []) {
+  const allowed = new Set(listTenantReseedSpokes().map(spoke => spoke.id));
+  hubReseedState.selectedSpokeIds = Array.from(new Set(ids.filter(id => allowed.has(id))));
+}
+
+function getHubReseedRows() {
+  return Object.values(hubReseedState.progressRows).sort((left, right) => {
+    const orderDiff = (left.order ?? 0) - (right.order ?? 0);
+    if (orderDiff !== 0) return orderDiff;
+    return String(left.spoke_name || left.spoke_id || "").localeCompare(String(right.spoke_name || right.spoke_id || ""), undefined, { numeric: true, sensitivity: "base" });
+  });
+}
+
+function isHubReseedComplete() {
+  const rows = getHubReseedRows();
+  return rows.length > 0 && rows.every(row => ["done", "error"].includes(String(row.status || "").toLowerCase()));
+}
+
+function reseedStatusMeta(status) {
+  const value = String(status || "queued").toLowerCase();
+  if (value === "done") return { icon: "✅", label: "Done", className: "status-online" };
+  if (value === "error") return { icon: "❌", label: "Error", className: "status-offline" };
+  if (["queued", "pending", "offline", "offline_queued"].includes(value)) return { icon: "⏱", label: "Queued", className: "status-unknown" };
+  if (["downloading", "restoring", "recloning", "running", "in_progress"].includes(value)) {
+    return { icon: "⏳", label: titleCaseWords(value), className: "status-unknown" };
+  }
+  return { icon: "⏳", label: titleCaseWords(value), className: "status-unknown" };
+}
+
+async function loadHubReseedTemplates(force = false) {
+  if (!currentUser) return hubReseedState.templates;
+  if (hubReseedState.templatesLoading) return hubReseedState.templates;
+  if (!force && hubReseedState.templates.length) return hubReseedState.templates;
+  hubReseedState.templatesLoading = true;
+  hubReseedState.templatesError = "";
+  if (activeTab === "reseed") renderHubReseedPanel();
+  const res = await apiFetch("/api/backup/templates");
+  const data = await readJson(res);
+  if (!res || !res.ok) {
+    hubReseedState.templates = [];
+    hubReseedState.selectedTemplateKey = "";
+    hubReseedState.templatesError = data?.detail || "Unable to load Azure templates.";
+  } else {
+    hubReseedState.templates = normalizeBackupTemplates(data);
+    const selectedKey = hubReseedState.selectedTemplateKey;
+    if (!hubReseedState.templates.find(template => backupTemplateKey(template) === selectedKey)) {
+      hubReseedState.selectedTemplateKey = backupTemplateKey(hubReseedState.templates[0]);
+    }
+  }
+  hubReseedState.templatesLoading = false;
+  if (activeTab === "reseed") renderHubReseedPanel();
+  return hubReseedState.templates;
+}
+
+function renderHubReseedPanel() {
+  ensureHubReseedUi();
+  const container = document.getElementById("hub-reseed-panel");
+  if (!container) return;
+  if (!currentUser) {
+    container.innerHTML = '<div class="empty-state">Sign in to reseed spokes.</div>';
+    return;
+  }
+  if (!currentTenantId) {
+    container.innerHTML = '<div class="empty-state">Select a tenant to reseed spokes.</div>';
+    return;
+  }
+  syncHubReseedTenantState();
+  const tenantLabel = tenantName(currentTenantId) || currentTenantId;
+  const spokes = listTenantReseedSpokes();
+  const selectedTemplate = getSelectedHubReseedTemplate();
+  if (hubReseedState.step === "progress") {
+    const rows = getHubReseedRows();
+    const canClose = isHubReseedComplete();
+    container.innerHTML = `
+      <div class="setup-card">
+        <div class="setup-card-header">
+          <h2>Reseed Template</h2>
+          <p>${escHtml(tenantLabel)}</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+          <span class="stat-pill">Template ${escHtml(hubReseedState.progressTemplateName || "—")}</span>
+          <span class="stat-pill">Job ${escHtml(hubReseedState.jobId || "pending")}</span>
+        </div>
+      </div>
+      <div class="setup-card" style="margin-top:16px;">
+        <div class="setup-card-header">
+          <h3>Step 3 — Progress</h3>
+          <p>Tracking reseed progress for selected spokes.</p>
+        </div>
+        <div class="table-scroll-v" style="margin-top:12px;">
+          <table class="data-table">
+            <thead><tr><th>Spoke</th><th>Template</th><th>Step</th><th>Status</th></tr></thead>
+            <tbody>${rows.length ? rows.map(row => {
+              const meta = reseedStatusMeta(row.status);
+              return `<tr>
+                <td><strong>${escHtml(row.spoke_name || row.spoke_id)}</strong><div class="tenant-card-subtitle">${escHtml(row.spoke_id || "")}</div></td>
+                <td>${escHtml(row.template_name || "—")}</td>
+                <td>${escHtml(row.step || meta.label)}</td>
+                <td><span class="status-badge ${meta.className}">${meta.icon} ${escHtml(meta.label)}</span></td>
+              </tr>`;
+            }).join("") : '<tr><td colspan="4" class="empty-state">Waiting for reseed updates…</td></tr>'}</tbody>
+          </table>
+        </div>
+        <div class="form-actions" style="margin-top:16px;">
+          <button id="reseed-close-btn" class="btn btn-secondary" type="button"${canClose ? "" : " disabled"}>Close</button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const selectedCount = hubReseedState.selectedSpokeIds.length;
+  const startDisabled = !selectedTemplate || !selectedCount || hubReseedState.submitting || hubReseedState.loading;
+  container.innerHTML = `
+    <div class="setup-card">
+      <div class="setup-card-header">
+        <h2>Reseed Template</h2>
+        <p>${escHtml(tenantLabel)}</p>
+      </div>
+      <div class="form-group" style="margin-top:12px;">
+        <label class="form-label" for="reseed-template-select">Step 1 — Pick template</label>
+        <div style="font-size:0.92rem;color:var(--muted);margin-bottom:8px;">Available templates in Azure:</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <select id="reseed-template-select" class="form-input" style="flex:1;min-width:280px;">
+            ${hubReseedState.templatesLoading ? '<option value="">Loading…</option>' : hubReseedState.templates.length ? hubReseedState.templates.map(template => `<option value="${escHtml(backupTemplateKey(template))}"${selectedTemplate && backupTemplateKey(template) === backupTemplateKey(selectedTemplate) ? ' selected' : ''}>${escHtml(renderBackupTemplateOptionLabel(template))}</option>`).join("") : '<option value="">No templates available</option>'}
+          </select>
+          <button id="reseed-refresh-templates-btn" class="btn btn-secondary btn-small" type="button"${hubReseedState.templatesLoading ? " disabled" : ""}>Refresh</button>
+        </div>
+        <div class="form-msg ${hubReseedState.templatesError ? "msg-error" : ""}">${escHtml(hubReseedState.templatesError)}</div>
+      </div>
+    </div>
+    <div class="setup-card" style="margin-top:16px;">
+      <div class="setup-card-header">
+        <h3>Step 2 — Pick target spokes</h3>
+        <p>Select one or more spokes in this tenant. Offline spokes will queue automatically.</p>
+      </div>
+      <div class="form-actions" style="justify-content:flex-start;margin-top:12px;">
+        <button id="reseed-select-all-btn" class="btn btn-secondary btn-small" type="button">Select All</button>
+        <button id="reseed-clear-btn" class="btn btn-secondary btn-small" type="button">Clear</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:12px;">
+        ${spokes.length ? spokes.map(spoke => {
+          const online = isOnline(spoke.last_seen);
+          const checked = hubReseedState.selectedSpokeIds.includes(spoke.id);
+          return `<label style="border:1px solid var(--border);border-radius:8px;padding:12px;display:flex;gap:10px;align-items:flex-start;background:var(--card-bg,#fff);">
+            <input type="checkbox" data-reseed-spoke-id="${escHtml(spoke.id)}"${checked ? " checked" : ""}>
+            <span>
+              <strong>${escHtml(spokePrimaryLabel(spoke))}</strong>${online ? "" : ' <span style="color:var(--muted);">(offline — queued)</span>'}
+              <div class="tenant-card-subtitle">${escHtml(spoke.id)} · ${escHtml(relativeTime(spoke.last_seen))}</div>
+            </span>
+          </label>`;
+        }).join("") : '<div class="empty-state" style="grid-column:1 / -1;">No approved spokes found for this tenant.</div>'}
+      </div>
+      <div class="form-actions" style="margin-top:16px;">
+        <button id="reseed-cancel-btn" class="btn btn-secondary" type="button">Cancel</button>
+        <button id="reseed-start-btn" class="btn btn-primary" type="button"${startDisabled ? " disabled" : ""}>Reseed Selected Spokes →</button>
+      </div>
+      <div class="form-msg ${hubReseedState.error ? "msg-error" : ""}">${escHtml(hubReseedState.error || (!selectedCount ? "Select at least one spoke." : ""))}</div>
+    </div>
+  `;
+}
+
+async function loadHubReseedPanel(force = false) {
+  ensureHubReseedUi();
+  syncHubReseedTenantState();
+  if (!currentUser || !currentTenantId) {
+    renderHubReseedPanel();
+    return;
+  }
+  hubReseedState.loading = true;
+  if (activeTab === "reseed") renderHubReseedPanel();
+  await Promise.all([
+    ensureSpokes(force),
+    loadHubReseedTemplates(force),
+  ]);
+  hubReseedState.loading = false;
+  if (activeTab === "reseed") renderHubReseedPanel();
+}
+
+async function startHubReseed() {
+  if (hubReseedState.submitting) return;
+  const template = getSelectedHubReseedTemplate();
+  const spokeIds = hubReseedState.selectedSpokeIds.slice();
+  if (!currentTenantId) {
+    hubReseedState.error = "Select a tenant first.";
+    renderHubReseedPanel();
+    return;
+  }
+  if (!template) {
+    hubReseedState.error = "Select an Azure template first.";
+    renderHubReseedPanel();
+    return;
+  }
+  if (!spokeIds.length) {
+    hubReseedState.error = "Select at least one spoke.";
+    renderHubReseedPanel();
+    return;
+  }
+  hubReseedState.submitting = true;
+  hubReseedState.error = "";
+  renderHubReseedPanel();
+  const res = await apiFetch("/api/backup/reseed", {
+    method: "POST",
+    body: {
+      tenant_id: currentTenantId,
+      template_name: template.template_name,
+      latest_blob: template.latest_blob,
+      spoke_ids: spokeIds,
+      vm_id: HUB_RESEED_VM_ID,
+    },
+  });
+  const data = await readJson(res);
+  hubReseedState.submitting = false;
+  if (!res || !res.ok) {
+    hubReseedState.error = data?.detail || "Unable to start reseed.";
+    renderHubReseedPanel();
+    return;
+  }
+  const spokeById = Object.fromEntries(listTenantReseedSpokes().map((spoke, index) => [spoke.id, { spoke, index }]));
+  hubReseedState.step = "progress";
+  hubReseedState.jobId = data?.job_id || "";
+  hubReseedState.progressTemplateName = template.template_name;
+  hubReseedState.progressRows = Object.fromEntries(spokeIds.map((spokeId, order) => {
+    const match = spokeById[spokeId];
+    const spoke = match?.spoke;
+    const online = isOnline(spoke?.last_seen);
+    return [spokeId, {
+      order: match?.index ?? order,
+      spoke_id: spokeId,
+      spoke_name: spoke ? spokePrimaryLabel(spoke) : spokeId,
+      template_name: template.template_name,
+      step: online ? "Queued" : "Queued (offline)",
+      status: "queued",
+      retries: 0,
+    }];
+  }));
+  hubReseedState.completionNotified = false;
+  renderHubReseedPanel();
+  showToast(`Reseed started for ${spokeIds.length} spoke${spokeIds.length === 1 ? "" : "s"}.`, "ok");
+}
+
+function updateHubReseedProgress(message) {
+  const spokeId = String(message.spoke_id || "");
+  if (!spokeId) return;
+  if (hubReseedState.jobId && message.job_id && message.job_id !== hubReseedState.jobId) return;
+  if (!hubReseedState.jobId && message.job_id) hubReseedState.jobId = message.job_id;
+  const knownSpoke = listTenantReseedSpokes().find(spoke => spoke.id === spokeId);
+  const current = hubReseedState.progressRows[spokeId] || {
+    order: getHubReseedRows().length,
+    spoke_id: spokeId,
+    spoke_name: knownSpoke ? spokePrimaryLabel(knownSpoke) : spokeId,
+    template_name: hubReseedState.progressTemplateName || getSelectedHubReseedTemplate()?.template_name || "—",
+    step: "Queued",
+    status: "queued",
+    retries: 0,
+  };
+  hubReseedState.step = "progress";
+  hubReseedState.progressRows[spokeId] = {
+    ...current,
+    spoke_name: knownSpoke ? spokePrimaryLabel(knownSpoke) : current.spoke_name,
+    template_name: message.template_name || current.template_name,
+    step: message.step || current.step,
+    status: message.status || current.status,
+    retries: Number.isFinite(Number(message.retries)) ? Number(message.retries) : current.retries,
+  };
+  if (message.template_name) hubReseedState.progressTemplateName = message.template_name;
+  if (activeTab === "reseed") renderHubReseedPanel();
+  if (!hubReseedState.completionNotified && isHubReseedComplete()) {
+    hubReseedState.completionNotified = true;
+    showToast("Reseed job finished.", "ok");
+  }
 }
 
 function renderInBatches(key, container, items, renderItem, batchSize = 40) {
@@ -8854,6 +9257,7 @@ function syncTenantContextChrome() {
 }
 
 function syncHubPermissionUI() {
+  ensureHubReseedUi();
   const isSuperadmin = Boolean(currentUser?.is_superadmin);
   [
     '#hub-admin-nav .tab[data-tab="hub-setup"]',
@@ -9003,6 +9407,7 @@ function disconnectWebSocket() {
 
 function logout(showMessage = true) {
   closeSuperadminBackupModal(true);
+  resetHubReseedState({ preserveTemplates: false });
   authToken = null;
   currentUser = null;
   currentTenantId = null;
@@ -9055,12 +9460,12 @@ async function setCurrentTenant(tenantId, reload = true) {
   syncTenantContextChrome();
   syncHubPermissionUI();
   populateCommandSpokeSelect();
-  if (reload && ["simulations", "clients", "vm-server", "api-server", "central", "spokes", "setup", "tenant-setup", "config", "commands"].includes(activeTab)) await refreshCurrentView(true);
+  if (reload && ["simulations", "clients", "vm-server", "api-server", "central", "spokes", "reseed", "setup", "tenant-setup", "config", "commands"].includes(activeTab)) await refreshCurrentView(true);
 }
 
 function showTab(rawTabId, opts = {}) {
   const tabId = rawTabId.startsWith('hub-') ? rawTabId.slice(4) : rawTabId;
-  if (["simulations", "clients", "vm-server", "api-server", "central", "spokes", "setup", "tenant-setup", "config", "commands", "superadmin"].includes(tabId) && !currentUser) {
+  if (["simulations", "clients", "vm-server", "api-server", "central", "spokes", "reseed", "setup", "tenant-setup", "config", "commands", "superadmin"].includes(tabId) && !currentUser) {
     openLoginModal();
     return;
   }
@@ -9110,6 +9515,8 @@ async function refreshCurrentView(force = false) {
     await loadHubCentralData(force);
   } else if (activeTab === "spokes") {
     await loadSpokes(force);
+  } else if (activeTab === "reseed") {
+    await loadHubReseedPanel(force);
   } else if (activeTab === "commands") {
     await loadCommands();
   } else if (activeTab === "setup") {
@@ -12598,6 +13005,7 @@ function connectHubWebSocket() {
       if (activeTab === "api-server") scheduleReload("ws-api-server", () => loadApiServer(true));
       if (activeTab === "central") scheduleReload("ws-hub-central", () => loadHubCentralData(true));
       if (activeTab === "spokes") scheduleReload("ws-spokes", () => loadSpokes(true));
+      if (activeTab === "reseed") scheduleReload("ws-reseed", () => ensureSpokes(true).then(() => renderHubReseedPanel()));
       if (activeTab === "tenant-setup") scheduleReload("ws-tenant-setup", () => loadTenantSetup(true));
       if (activeTab === "config") scheduleReload("ws-config", () => loadConfig(true));
       if (activeSpokeModal && data.tenant_id === activeSpokeModal.tenant_id && data.spoke_id === activeSpokeModal.spoke.id) {
@@ -12614,6 +13022,8 @@ function connectHubWebSocket() {
       if (activeTab === "setup") loadAcmeSettings();
     } else if (data.type === "backup_progress") {
       updateSuperadminBackupProgress(data);
+    } else if (data.type === "reseed_progress") {
+      updateHubReseedProgress(data);
     } else if (data.type === "pending_spoke_registered") {
       if (currentUser?.is_superadmin && activeTab === "superadmin") loadSuperadmin();
       if (canManageTenant() && !currentUser?.is_superadmin && data.tenant_hint === currentTenantId) {
@@ -12703,6 +13113,38 @@ function bindEvents() {
 
     if (event.target.closest("#sa-backup-config-save-btn")) {
       saveSuperadminBackupConfig();
+      return;
+    }
+
+    if (event.target.closest("#reseed-refresh-templates-btn")) {
+      loadHubReseedTemplates(true).catch(() => {});
+      return;
+    }
+
+    if (event.target.closest("#reseed-select-all-btn")) {
+      setHubReseedSelectedSpokeIds(listTenantReseedSpokes().map(spoke => spoke.id));
+      hubReseedState.error = "";
+      renderHubReseedPanel();
+      return;
+    }
+
+    if (event.target.closest("#reseed-clear-btn") || event.target.closest("#reseed-cancel-btn")) {
+      setHubReseedSelectedSpokeIds([]);
+      hubReseedState.error = "";
+      renderHubReseedPanel();
+      return;
+    }
+
+    if (event.target.closest("#reseed-start-btn")) {
+      startHubReseed();
+      return;
+    }
+
+    if (event.target.closest("#reseed-close-btn")) {
+      if (isHubReseedComplete()) {
+        resetHubReseedState({ preserveTemplates: true });
+        renderHubReseedPanel();
+      }
       return;
     }
  
@@ -12874,10 +13316,28 @@ function bindEvents() {
 
   document.addEventListener("change", event => {
     const spokeSelect = event.target.closest("#sa-spoke-select");
-    if (!spokeSelect) return;
-    superadminBackupState.selectedSpokeId = spokeSelect.value || "";
-    superadminBackupState.backupError = "";
-    renderSuperadminBackupModal();
+    if (spokeSelect) {
+      superadminBackupState.selectedSpokeId = spokeSelect.value || "";
+      superadminBackupState.backupError = "";
+      renderSuperadminBackupModal();
+      return;
+    }
+    const templateSelect = event.target.closest("#reseed-template-select");
+    if (templateSelect) {
+      hubReseedState.selectedTemplateKey = templateSelect.value || "";
+      hubReseedState.error = "";
+      renderHubReseedPanel();
+      return;
+    }
+    const spokeToggle = event.target.closest("[data-reseed-spoke-id]");
+    if (spokeToggle) {
+      const next = new Set(hubReseedState.selectedSpokeIds);
+      if (spokeToggle.checked) next.add(spokeToggle.dataset.reseedSpokeId);
+      else next.delete(spokeToggle.dataset.reseedSpokeId);
+      setHubReseedSelectedSpokeIds(Array.from(next));
+      hubReseedState.error = "";
+      renderHubReseedPanel();
+    }
   });
  
   $("#hub-logout-btn")?.addEventListener("click", () => logout(true));

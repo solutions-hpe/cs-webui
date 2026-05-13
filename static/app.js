@@ -1255,7 +1255,14 @@ function renderServerTab(data) {
   const ramUsed  = node.mem_used_kb  ? fmtSizeKB(node.mem_used_kb)  : '—';
   const ramTotal = node.mem_total_kb ? fmtSizeKB(node.mem_total_kb) : '—';
   setEl('server-ram', `${ramUsed} / ${ramTotal}`);
-  setEl('server-last-seen', formatRelativeTime(latestProxmoxData.last_seen));
+  // Cache last_seen to localStorage so we can show accurate "X ago" after restarts
+  const PROXMOX_LS_KEY = 'proxmox_last_seen';
+  if (latestProxmoxData.last_seen) {
+    try { localStorage.setItem(PROXMOX_LS_KEY, String(latestProxmoxData.last_seen)); } catch (_) {}
+  }
+  const displayLastSeen = latestProxmoxData.last_seen
+    || (() => { try { return parseFloat(localStorage.getItem(PROXMOX_LS_KEY) || ''); } catch (_) { return null; } })();
+  setEl('server-last-seen', formatRelativeTime(displayLastSeen || null));
 
   const storagePills = document.getElementById('server-storage-pills');
   if (storagePills && Array.isArray(node.storage)) {

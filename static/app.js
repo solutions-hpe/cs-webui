@@ -1096,17 +1096,13 @@ function proxmoxHostnameMatches(left, right) {
 function syncAgentUpdateButtonState(data = latestProxmoxData) {
   const btn = document.getElementById('agent-update-btn');
   if (!btn || btn.dataset.busy === 'true') return;
-  const hasToken = Boolean(currentSettings.github_token_configured);
   const host = String(data?.node?.hostname || '').trim();
   const approved = Array.isArray(data?.approved_proxmox) ? data.approved_proxmox : [];
   const hostReady = Boolean(host) && approved.some((entry) => proxmoxHostnameMatches(entry?.hostname, host));
-  const ready = hasToken && hostReady;
-  btn.disabled = !ready;
-  btn.title = !hasToken
-    ? 'GitHub token required — configure it in the GitHub settings tab'
-    : hostReady
-      ? 'Reinstall the Proxmox host agent from GitHub and restart it'
-      : 'Approve and connect the Proxmox host before updating the agent';
+  btn.disabled = !hostReady;
+  btn.title = hostReady
+    ? 'Reinstall the Proxmox host agent from GitHub and restart it'
+    : 'Approve and connect the Proxmox host before updating the agent';
 }
 
 function syncGithubGatedButtons() {
@@ -1127,8 +1123,6 @@ function syncGithubGatedButtons() {
       ? 'Trigger a repo sync on this spoke'
       : 'GitHub token required — configure it in the GitHub settings tab';
   }
-  // Re-evaluate agent update button
-  syncAgentUpdateButtonState();
 }
 
 async function triggerAgentUpdate() {

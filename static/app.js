@@ -7134,6 +7134,8 @@ let hubCentralData = null;
 let hubCentralActiveSubtab = "hcs-sites";
 let hubCentralSiteOpen = null;
 let hubConfigDraft = "";
+let hubConfigActiveSubtab = "api";
+let hubSimulationConfState = { tenantId: null, loaded: false, loading: false, rawContent: "", sha: "", fetchedAt: "", sections: {}, sectionOrder: [], keyOrder: {}, error: "" };
 let hubSimActiveTab = "hub-simtop-checks";
 let hubSimChecksFilter = "failing";
 let hubSimChecksSearch = "";
@@ -8439,6 +8441,7 @@ function applyAuthUI() {
     aggregateApiServerRows = [];
     aggregateCentralData = null;
     hubConfigDraft = "";
+    resetHubSimulationConfState(null);
     hubClientUiState.expandedByTenant = {};
     hubClientUiState.seenSitesByTenant = {};
     hubVmServerSelectedSpoke = null;
@@ -8545,6 +8548,7 @@ function logout(showMessage = true) {
   aggregateApiServerRows = [];
   aggregateCentralData = null;
   hubConfigDraft = "";
+  resetHubSimulationConfState(tenantId);
   hubClientUiState.expandedByTenant = {};
   hubClientUiState.seenSitesByTenant = {};
   hubVmServerSelectedSpoke = null;
@@ -8573,6 +8577,7 @@ async function setCurrentTenant(tenantId, reload = true) {
   aggregateApiServerRows = [];
   aggregateCentralData = null;
   hubConfigDraft = "";
+  resetHubSimulationConfState(tenantId);
   delete hubClientUiState.expandedByTenant[tenantId];
   delete hubClientUiState.seenSitesByTenant[tenantId];
   hubVmServerSelectedSpoke = null;
@@ -8729,6 +8734,317 @@ function renderConfigSummaryRow(label, summary) {
       <td>${escHtml(summary.detail)}</td>
     </tr>
   `;
+}
+
+const HUB_SIM_BOOL_VALUES = new Set(["on", "off", "yes", "no", "true", "false"]);
+const HUB_SIM_PASSWORD_KEY_RE = /pw$|password|secret/i;
+const HUB_SIM_FIXED_SECTION_ORDER = ["simulation", "server", "address", ...Array.from({ length: 10 }, (_, idx) => `s${idx}`)];
+const HUB_SIM_SLOT_KEYS = ["central_check", "wsite", "ssid", "ssidpw", "dhcp_fail", "dns_fail", "assoc_fail", "port_flap", "ping_test", "download", "www_traffic", "iperf", "sim_phy", "l1"];
+const HUB_SIM_SELECT_FIELDS = { sim_phy: ["wireless", "ethernet"] };
+
+function resetHubSimulationConfState(tenantId = currentTenantId) {
+  hubSimulationConfState = { tenantId, loaded: false, loading: false, rawContent: "", sha: "", fetchedAt: "", sections: {}, sectionOrder: [], keyOrder: {}, error: "" };
+}
+
+function hubSimFieldLabel(key) {
+  return String(key || "").replace(/_/g, " ").replace(/\b\w/g, ch => ch.toUpperCase());
+}
+
+function hubSimIsBoolValue(value) {
+  return HUB_SIM_BOOL_VALUES.has(String(value ?? "").trim().toLowerCase());
+}
+
+function hubSimBoolPair(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "yes" || normalized === "no") return ["yes", "no"];
+  if (normalized === "true" || normalized === "false") return ["true", "false"];
+  return ["on", "off"];
+}
+
+function parseHubSimulationIni(content = "") {
+  const sections = {};
+  const sectionOrder = [];
+  const keyOrder = {};
+  let currentSection = null;
+  String(content || "").split(/\r?\n/).forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith(";") || trimmed.startsWith("#")) return;
+    const sectionMatch = trimmed.match(/^\[([^\]]+)\]$/);
+    if (sectionMatch) {
+      currentSection = sectionMatch[1].trim();
+      if (!sections[currentSection]) {
+        sections[currentSection] = {};
+        sectionOrder.push(currentSection);
+        keyOrder[currentSection] = [];
+      }
+      return;
+    }
+    if (!currentSection) return;
+    const eqIdx = line.indexOf("=");
+    if (eqIdx < 0) return;
+    const key = line.slice(0, eqIdx).trim();
+    const value = line.slice(eqIdx + 1).trim();
+    if (!key) return;
+    if (!Object.prototype.hasOwnProperty.call(sections[currentSection], key)) keyOrder[currentSection].push(key);
+    sections[currentSection][key] = value;
+  });
+  return { sections, sectionOrder, keyOrder };
+}
+
+function serializeHubSimulationIni(sections = {}, sectionOrder = [], keyOrder = {}) {
+  const seen = new Set();
+  const orderedSections = [];
+  HUB_SIM_FIXED_SECTION_ORDER.forEach((section) => {
+    if (Object.prototype.hasOwnProperty.call(sections, section)) {
+      orderedSections.push(section);
+      seen.add(section);
+    }
+  });
+  sectionOrder.forEach((section) => {
+    if (!seen.has(section) && Object.prototype.hasOwnProperty.call(sections, section)) {
+      orderedSections.push(section);
+      seen.add(section);
+    }
+  });
+  Object.keys(sections).forEach((section) => {
+    if (!seen.has(section)) orderedSections.push(section);
+  });
+  return orderedSections.map((section) => {
+    const values = sections[section] || {};
+    const keys = [];
+    const seenKeys = new Set();
+    (keyOrder[section] || []).forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(values, key)) {
+        keys.push(key);
+        seenKeys.add(key);
+      }
+    });
+    Object.keys(values).forEach((key) => {
+      if (!seenKeys.has(key)) keys.push(key);
+    });
+    return `[${section}]\n${keys.map((key) => `${key}=${values[key] ?? ""}`).join("\n")}`;
+  }).join("\n\n");
+}
+
+function hubSimulationSectionKeys(section, values = {}) {
+  const ordered = hubSimulationConfState.keyOrder?.[section] || [];
+  if (String(section).match(/^s\d+$/)) {
+    const seen = new Set();
+    const keys = [];
+    HUB_SIM_SLOT_KEYS.forEach((key) => {
+      keys.push(key);
+      seen.add(key);
+    });
+    [...ordered, ...Object.keys(values || {})].forEach((key) => {
+      if (!seen.has(key)) {
+        keys.push(key);
+        seen.add(key);
+      }
+    });
+    return keys;
+  }
+  return ordered.length ? ordered : Object.keys(values || {});
+}
+
+function renderHubSimulationField(section, key, rawValue = "") {
+  const value = String(rawValue ?? "");
+  const label = hubSimFieldLabel(key);
+  if (hubSimIsBoolValue(value)) {
+    const [onValue, offValue] = hubSimBoolPair(value);
+    return `
+      <label class="toggle-label" style="justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:10px;gap:12px;">
+        <span>${escHtml(label)}</span>
+        <input type="checkbox" data-section="${escHtml(section)}" data-key="${escHtml(key)}" data-on="${escHtml(onValue)}" data-off="${escHtml(offValue)}"${value.toLowerCase() === onValue ? " checked" : ""}>
+      </label>
+    `;
+  }
+  if (HUB_SIM_SELECT_FIELDS[key]) {
+    return `
+      <label class="form-group">
+        <span class="form-label">${escHtml(label)}</span>
+        <select class="form-input" data-section="${escHtml(section)}" data-key="${escHtml(key)}">
+          ${HUB_SIM_SELECT_FIELDS[key].map((option) => `<option value="${escHtml(option)}"${option === value ? " selected" : ""}>${escHtml(option)}</option>`).join("")}
+        </select>
+      </label>
+    `;
+  }
+  return `
+    <label class="form-group">
+      <span class="form-label">${escHtml(label)}</span>
+      <input class="form-input" type="${HUB_SIM_PASSWORD_KEY_RE.test(key) ? "password" : "text"}" value="${escHtml(value)}" data-section="${escHtml(section)}" data-key="${escHtml(key)}">
+    </label>
+  `;
+}
+
+function renderHubSimulationSection(section, values = {}, { open = false } = {}) {
+  const keys = hubSimulationSectionKeys(section, values);
+  const title = String(section).match(/^s\d+$/) ? `Slot [${section}]` : `[${section}]`;
+  const fields = keys.length
+    ? keys.map((key) => renderHubSimulationField(section, key, values[key] ?? "")).join("")
+    : '<div class="muted">No fields found in this section.</div>';
+  return `
+    <details class="setup-card setup-section-gap"${open ? " open" : ""}>
+      <summary style="cursor:pointer;font-weight:600;">${escHtml(title)}</summary>
+      <div class="setup-form setup-section-gap">
+        <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">${fields}</div>
+      </div>
+    </details>
+  `;
+}
+
+function renderHubSimulationConfigPanel() {
+  const container = $("#hub-sim-config-panel");
+  if (!container) return;
+  const disabled = canManageTenant() ? "" : " disabled";
+  const fetched = hubSimulationConfState.fetchedAt ? fmtDate(hubSimulationConfState.fetchedAt) : "—";
+  const infoBar = `
+    <section class="setup-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div>
+          <div style="font-weight:600;">configs/simulation.conf</div>
+          <div class="muted" style="font-size:0.85rem;">Last fetched from GitHub: ${escHtml(fetched)}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button id="hub-sim-config-refresh-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+          <button id="hub-sim-config-save-btn" class="btn btn-primary btn-small" type="button"${disabled}>Save to GitHub</button>
+        </div>
+      </div>
+      <div id="hub-sim-config-msg" class="form-msg" style="margin-top:10px;"></div>
+    </section>
+  `;
+  if (hubSimulationConfState.loading) {
+    container.innerHTML = `${infoBar}<div class="empty-state">Loading simulation.conf from GitHub…</div>`;
+    return;
+  }
+  if (hubSimulationConfState.error) {
+    container.innerHTML = `
+      ${infoBar}
+      <section class="setup-card">
+        <div class="empty-state">${escHtml(hubSimulationConfState.error)}</div>
+        <div style="margin-top:12px;display:flex;gap:8px;justify-content:center;">
+          <button class="btn btn-secondary btn-small" type="button" data-open-tenant-setup="true">Open Setup</button>
+        </div>
+      </section>
+    `;
+    return;
+  }
+  const sections = hubSimulationConfState.sections || {};
+  const orderedSections = ["simulation", "server", "address"].filter((section) => Object.prototype.hasOwnProperty.call(sections, section));
+  const slotSections = HUB_SIM_FIXED_SECTION_ORDER.filter((section) => /^s\d+$/.test(section));
+  container.innerHTML = `
+    ${infoBar}
+    <div id="hub-sim-config-form">
+      ${orderedSections.map((section, index) => renderHubSimulationSection(section, sections[section] || {}, { open: index === 0 })).join("")}
+      ${slotSections.map((section, index) => renderHubSimulationSection(section, sections[section] || {}, { open: index === 0 && orderedSections.length === 0 })).join("")}
+    </div>
+  `;
+}
+
+async function loadHubSimulationConf(force = false) {
+  const tenantId = getActiveTenantId();
+  if (!tenantId || !currentUser) return null;
+  if (hubSimulationConfState.tenantId !== tenantId) resetHubSimulationConfState(tenantId);
+  if (!force && hubSimulationConfState.loaded) {
+    renderHubSimulationConfigPanel();
+    return hubSimulationConfState;
+  }
+  hubSimulationConfState.loading = true;
+  hubSimulationConfState.error = "";
+  renderHubSimulationConfigPanel();
+  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/config/simulation-conf`);
+  const data = await readJson(res);
+  if (!res || !res.ok) {
+    hubSimulationConfState.loading = false;
+    hubSimulationConfState.loaded = false;
+    hubSimulationConfState.error = data?.detail || "Unable to load simulation.conf from GitHub.";
+    renderHubSimulationConfigPanel();
+    return null;
+  }
+  const parsed = parseHubSimulationIni(data?.content || "");
+  hubSimulationConfState = {
+    tenantId,
+    loaded: true,
+    loading: false,
+    rawContent: data?.content || "",
+    sha: data?.sha || "",
+    fetchedAt: data?.fetched_at || "",
+    sections: parsed.sections,
+    sectionOrder: parsed.sectionOrder,
+    keyOrder: parsed.keyOrder,
+    error: "",
+  };
+  renderHubSimulationConfigPanel();
+  return hubSimulationConfState;
+}
+
+function collectHubSimulationConfContent() {
+  const form = $("#hub-sim-config-form");
+  if (!form) return hubSimulationConfState.rawContent || "";
+  const sections = JSON.parse(JSON.stringify(hubSimulationConfState.sections || {}));
+  form.querySelectorAll("[data-section][data-key]").forEach((input) => {
+    const section = input.dataset.section;
+    const key = input.dataset.key;
+    if (!sections[section]) sections[section] = {};
+    if (input.type === "checkbox") {
+      sections[section][key] = input.checked ? (input.dataset.on || "on") : (input.dataset.off || "off");
+      return;
+    }
+    sections[section][key] = input.value.trim();
+  });
+  return serializeHubSimulationIni(sections, hubSimulationConfState.sectionOrder, hubSimulationConfState.keyOrder);
+}
+
+async function saveHubSimulationConf() {
+  if (!canManageTenant()) {
+    setFormMessage("hub-sim-config-msg", "Tenant Viewer access is read-only.", false);
+    return;
+  }
+  const tenantId = getActiveTenantId();
+  if (!tenantId) return;
+  setFormMessage("hub-sim-config-msg", "Saving to GitHub…", true);
+  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/config/simulation-conf`, {
+    method: "PUT",
+    body: { content: collectHubSimulationConfContent() },
+  });
+  const data = await readJson(res);
+  if (!res || !res.ok) {
+    setFormMessage("hub-sim-config-msg", data?.detail || "Unable to save simulation.conf.", false);
+    return;
+  }
+  await loadHubSimulationConf(true);
+  setFormMessage("hub-sim-config-msg", `Saved to GitHub. Repo sync queued for ${data?.synced_spokes ?? 0} spoke(s).`, true);
+}
+
+async function saveTenantGithubSettings() {
+  if (!canManageTenant()) {
+    setFormMessage("tenant-github-msg", "Tenant Viewer access is read-only.", false);
+    return;
+  }
+  const tenantId = currentTenantId;
+  if (!tenantId) return;
+  const payload = {
+    sim_repo_url: $("#tenant-sim-repo-url")?.value.trim() || "",
+    sim_repo_branch: $("#tenant-sim-repo-branch")?.value.trim() || "main",
+  };
+  const tokenSecret = getSecretInputPayload($("#tenant-github-token"));
+  if (tokenSecret.include) payload.github_token = tokenSecret.value;
+  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/settings/github`, { method: "POST", body: payload });
+  const data = await readJson(res);
+  if (!res || !res.ok) {
+    setFormMessage("tenant-github-msg", data?.detail || "Unable to save GitHub settings.", false);
+    return;
+  }
+  if (tenantDetailState.data[tenantId]?.settings) tenantDetailState.data[tenantId].settings.github = data;
+  setFormMessage("tenant-github-msg", "GitHub settings saved.", true);
+  hydrateTenantSetupPanel({ settings: { github: data } });
+  resetHubSimulationConfState(tenantId);
+}
+
+function hydrateTenantSetupPanel(data = {}) {
+  const github = data?.settings?.github || {};
+  const configured = isConfiguredSecretValue(github.github_token_configured);
+  setSecretInputConfigured($("#tenant-github-token"), configured);
+  $("#tenant-github-token-status") && ($("#tenant-github-token-status").textContent = configured ? "Token configured" : "Token not configured");
 }
 
 async function loadTenantDetailData(force = false) {
@@ -8893,6 +9209,7 @@ function renderTenantSetupPanel(data) {
   const tenant = data.settings?.tenant || getTenantMeta(tenantId);
   const aruba = data.settings?.aruba || {};
   const notifications = data.settings?.notifications || {};
+  const github = data.settings?.github || {};
   const processingModes = {
     central_api: data.settings?.processing_modes?.central_api || 'centralized',
     teams: data.settings?.processing_modes?.teams || 'centralized',
@@ -8924,6 +9241,18 @@ function renderTenantSetupPanel(data) {
         </div>
       </section>
       <section class="setup-card">
+        <div class="setup-card-header"><h2>GitHub / Repo</h2><p>Credentials and source repo used for simulation.conf editing.</p></div>
+        <div class="setup-form">
+          <div class="form-group"><label class="form-label" for="tenant-sim-repo-url">Simulation Repo URL</label><input id="tenant-sim-repo-url" type="url" class="form-input" value="${escHtml(github.sim_repo_url || "")}" placeholder="https://github.com/owner/repo.git"${disabled}></div>
+          <div class="form-group"><label class="form-label" for="tenant-sim-repo-branch">Simulation Repo Branch</label><input id="tenant-sim-repo-branch" type="text" class="form-input" value="${escHtml(github.sim_repo_branch || "main")}" placeholder="main"${disabled}></div>
+          <div class="form-group"><label class="form-label" for="tenant-github-token">GitHub Token</label><input id="tenant-github-token" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true"${disabled}><span class="form-hint" id="tenant-github-token-status">${escHtml(github.github_token_configured ? "Token configured" : "Token not configured")}</span></div>
+          <div class="form-actions">
+            <button id="save-tenant-github-btn" class="btn btn-primary" type="button"${disabled}>Save GitHub Settings</button>
+            <span id="tenant-github-msg" class="form-msg"></span>
+          </div>
+        </div>
+      </section>
+      <section class="setup-card">
         <div class="setup-card-header"><h2>Aruba Central</h2></div>
         <table class="data-table">
           <tbody>
@@ -8944,6 +9273,16 @@ function renderTenantSetupPanel(data) {
             <tr><td>SMTP Host</td><td>${escHtml(notifications.smtp_host || "—")}</td></tr>
             <tr><td>SMTP User</td><td>${escHtml(notifications.smtp_user || "—")}</td></tr>
             <tr><td>Recipients</td><td>${escHtml((notifications.to_emails || []).join(", ") || "—")}</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>GitHub</h2><p>Saving these settings pushes the repo branch and token to approved spokes.</p></div>
+        <table class="data-table">
+          <tbody>
+            <tr><td>Repo URL</td><td>${escHtml(github.sim_repo_url || "—")}</td></tr>
+            <tr><td>Repo Branch</td><td>${escHtml(github.sim_repo_branch || "—")}</td></tr>
+            <tr><td>GitHub Token</td><td>${escHtml(github.github_token_configured ? "Configured" : "Not configured")}</td></tr>
           </tbody>
         </table>
       </section>
@@ -9043,6 +9382,7 @@ function renderTenantDetail(data = tenantDetailState.data[tenantDetailState.tena
   $("#tenant-detail-commands-panel") && ($("#tenant-detail-commands-panel").innerHTML = renderTenantCommandsPanel(data));
   $("#tenant-detail-setup-panel") && ($("#tenant-detail-setup-panel").innerHTML = renderTenantSetupPanel(data));
   $("#tenant-detail-config-panel") && ($("#tenant-detail-config-panel").innerHTML = renderTenantConfigPanel(data));
+  hydrateTenantSetupPanel(data);
 
   ["dashboard", "spokes", "commands", "setup", "config"].forEach(tabId => {
     $(`.tenant-detail-tab[data-tenant-detail-tab="${tabId}"]`)?.classList.toggle("active", tenantDetailState.activeTab === tabId);
@@ -9816,7 +10156,7 @@ function renderHubConfigPage(data) {
   }
   const readonly = canManageTenant() ? "" : " readonly";
   const disabled = canManageTenant() ? "" : " disabled";
-  const note = canManageTenant() ? "" : '<div class="tenant-detail-note">Tenant Viewer access: config push controls are read-only.</div>';
+  const note = canManageTenant() ? "" : '<div class="tenant-detail-note">Tenant Viewer access is read-only.</div>';
   const stateRows = approved.map(spoke => {
     const summary = summarizeHubConfigState(spoke);
     return `
@@ -9832,31 +10172,38 @@ function renderHubConfigPage(data) {
   }).join("");
   return `
     ${note}
-    <div class="setup-section-gap">${renderTenantConfigPanel(data)}</div>
-    <div class="tenant-detail-grid setup-section-gap">
-      <section class="setup-card">
-        <div class="setup-card-header"><h2>Push Config to Spokes</h2><p>Save tenant config on the hub and deliver it to each spoke on its next inbox check.</p></div>
-        <div class="setup-form">
-          <div class="form-group">
-            <label class="form-label" for="hub-config-payload">Config JSON</label>
-            <textarea id="hub-config-payload" class="form-input" rows="14" spellcheck="false"${readonly}>${escHtml(hubConfigDraft || "{}")}</textarea>
+    <nav class="setup-subnav setup-section-gap" role="tablist">
+      <button class="setup-subtab hub-config-subtab ${hubConfigActiveSubtab === "api" ? "active" : ""}" data-hub-config-subtab="api" type="button">API</button>
+      <button class="setup-subtab hub-config-subtab ${hubConfigActiveSubtab === "simulation" ? "active" : ""}" data-hub-config-subtab="simulation" type="button">Simulation Config</button>
+    </nav>
+    <div id="hub-config-api-panel" class="${hubConfigActiveSubtab === "api" ? "" : "hidden"}">
+      <div class="setup-section-gap">${renderTenantConfigPanel(data)}</div>
+      <div class="tenant-detail-grid setup-section-gap">
+        <section class="setup-card">
+          <div class="setup-card-header"><h2>Push Config to Spokes</h2><p>Save tenant config on the hub and deliver it to each spoke on its next inbox check.</p></div>
+          <div class="setup-form">
+            <div class="form-group">
+              <label class="form-label" for="hub-config-payload">Config JSON</label>
+              <textarea id="hub-config-payload" class="form-input" rows="14" spellcheck="false"${readonly}>${escHtml(hubConfigDraft || "{}")}</textarea>
+            </div>
+            <div class="form-actions">
+              <button id="save-config-push-btn" class="btn btn-primary" type="button"${disabled}>Store + Push Config</button>
+              <span id="hub-config-msg" class="form-msg"></span>
+            </div>
           </div>
-          <div class="form-actions">
-            <button id="save-config-push-btn" class="btn btn-primary" type="button"${disabled}>Store + Push Config</button>
-            <span id="hub-config-msg" class="form-msg"></span>
+        </section>
+        <section class="setup-card">
+          <div class="setup-card-header"><h2>Per-Spoke Config State</h2><p>Desired hub config version versus last applied version on each spoke.</p></div>
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead><tr><th>Spoke</th><th>Status</th><th>Desired</th><th>Applied</th><th>Last Applied</th><th>Fields</th></tr></thead>
+              <tbody>${stateRows || '<tr><td colspan="6" class="empty-state">No approved spokes in this tenant.</td></tr>'}</tbody>
+            </table>
           </div>
-        </div>
-      </section>
-      <section class="setup-card">
-        <div class="setup-card-header"><h2>Per-Spoke Config State</h2><p>Desired hub config version versus last applied version on each spoke.</p></div>
-        <div class="table-scroll">
-          <table class="data-table">
-            <thead><tr><th>Spoke</th><th>Status</th><th>Desired</th><th>Applied</th><th>Last Applied</th><th>Fields</th></tr></thead>
-            <tbody>${stateRows || '<tr><td colspan="6" class="empty-state">No approved spokes in this tenant.</td></tr>'}</tbody>
-          </table>
-        </div>
-      </section>
+        </section>
+      </div>
     </div>
+    <div id="hub-sim-config-panel" class="${hubConfigActiveSubtab === "simulation" ? "" : "hidden"}"></div>
   `;
 }
 
@@ -10258,6 +10605,7 @@ async function loadTenantSetup(force = false) {
   container.innerHTML = '<div class="empty-state">Loading…</div>';
   const data = await loadTenantDetailData(force);
   container.innerHTML = data ? renderTenantSetupPanel(data) : '<div class="empty-state">Unable to load tenant setup.</div>';
+  if (data) hydrateTenantSetupPanel(data);
   await loadCentral(force);
 }
 
@@ -10271,6 +10619,8 @@ async function loadConfig(force = false) {
   container.innerHTML = '<div class="empty-state">Loading…</div>';
   const data = await loadTenantDetailData(force);
   container.innerHTML = data ? renderHubConfigPage(data) : '<div class="empty-state">Unable to load tenant config.</div>';
+  renderHubSimulationConfigPanel();
+  if (hubConfigActiveSubtab === "simulation") await loadHubSimulationConf(force);
 }
 
 async function saveCentralSettings() {
@@ -11882,6 +12232,28 @@ function bindEvents() {
       return;
     }
 
+    const hubConfigSubtab = event.target.closest(".hub-config-subtab");
+    if (hubConfigSubtab) {
+      hubConfigActiveSubtab = hubConfigSubtab.dataset.hubConfigSubtab || "api";
+      if (tenantDetailState.open) {
+        renderTenantDetail();
+      } else {
+        loadConfig(false).catch(() => {});
+      }
+      if (hubConfigActiveSubtab === "simulation") loadHubSimulationConf().catch(() => {});
+      return;
+    }
+
+    if (event.target.closest("[data-open-tenant-setup]")) {
+      if (tenantDetailState.open) {
+        tenantDetailState.activeTab = "setup";
+        renderTenantDetail();
+      } else {
+        showTab("hub-tenant-setup", { source: "tenant" });
+      }
+      return;
+    }
+
     if (event.target.closest("#tenant-detail-back-btn")) {
       showTab("hub-dashboard", { source: "admin" });
       return;
@@ -11963,6 +12335,18 @@ function bindEvents() {
     }
     if (event.target.closest("#save-config-push-btn")) {
       saveConfigPush();
+      return;
+    }
+    if (event.target.closest("#save-tenant-github-btn")) {
+      saveTenantGithubSettings();
+      return;
+    }
+    if (event.target.closest("#hub-sim-config-refresh-btn")) {
+      loadHubSimulationConf(true).catch(() => {});
+      return;
+    }
+    if (event.target.closest("#hub-sim-config-save-btn")) {
+      saveHubSimulationConf();
     }
   });
 

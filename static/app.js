@@ -8601,14 +8601,20 @@ function showTab(rawTabId, opts = {}) {
   $("#hub-root")?.querySelectorAll(".tab-content").forEach(panel => panel.classList.add("hidden"));
   const panel = $("#hub-root")?.querySelector(`#tab-hub-${CSS.escape(tabId)}`);
   if (panel) panel.classList.remove("hidden");
-  $$("#tab-nav .hub-only .tab").forEach(button => button.classList.remove("active"));
+  $$("#tab-nav .hub-only .tab").forEach(button => {
+    button.classList.remove("active");
+    if (button.hasAttribute("role")) button.setAttribute("aria-selected", "false");
+  });
   if (opts.button) {
     opts.button.classList.add("active");
+    if (opts.button.hasAttribute("role")) opts.button.setAttribute("aria-selected", "true");
   } else {
     const selector = hubAdminTabIds.has(tabId) && !tenantContextActive
       ? `#hub-admin-nav .tab[data-tab="hub-${tabId}"]`
       : `#tenant-context-nav .tab[data-tab="hub-${tabId}"]`;
-    $(selector)?.classList.add("active");
+    const activeButton = $(selector);
+    activeButton?.classList.add("active");
+    if (activeButton?.hasAttribute("role")) activeButton.setAttribute("aria-selected", "true");
   }
   syncTenantContextChrome();
   syncHubPermissionUI();

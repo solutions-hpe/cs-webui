@@ -6827,11 +6827,93 @@ if (updateAllBtn && !updateAllBtn._bound) {
   updateAllBtn.addEventListener('click', triggerUpdateAll);
   updateAllBtn._bound = true;
 }
-connectWebSocket();
-loadSimulations();
+
+// ── Spoke authentication ───────────────────────────────────────────────────────
+// When admin_password is configured on the server, the page injects
+// window.__SPOKE_AUTH_REQUIRED__ / window.__SPOKE_AUTHENTICATED__.
+// Show the login overlay if needed; wire up login and logout buttons.
+(function initSpokeAuth() {
+  if (WEBUI_MODE !== 'spoke') return;
+
+  const overlay   = document.getElementById('spoke-login-overlay');
+  const loginBtn  = document.getElementById('spoke-login-btn');
+  const logoutBtn = document.getElementById('spoke-logout-btn');
+  const pwInput   = document.getElementById('spoke-login-password');
+  const errEl     = document.getElementById('spoke-login-error');
+
+  const authRequired = !!window.__SPOKE_AUTH_REQUIRED__;
+
+  if (!authRequired) return; // no password set — open access
+
+  // Show sign-out button in topbar whenever auth is active
+  if (logoutBtn) logoutBtn.style.display = '';
+
+  async function doSpokeLogin() {
+    const pw = pwInput?.value || '';
+    if (errEl) errEl.textContent = '';
+    if (loginBtn) loginBtn.disabled = true;
+    try {
+      const resp = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw }),
+      });
+      if (resp.ok) {
+        if (overlay) overlay.classList.add('hidden');
+      } else {
+        if (errEl) errEl.textContent = 'Invalid password';
+        if (pwInput) { pwInput.value = ''; pwInput.focus(); }
+      }
+    } catch (_) {
+      if (errEl) errEl.textContent = 'Login failed — try again';
+    } finally {
+      if (loginBtn) loginBtn.disabled = false;
+    }
+  }
+
+  if (loginBtn) loginBtn.addEventListener('click', doSpokeLogin);
+  if (pwInput) {
+    pwInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSpokeLogin(); });
+  }
+
+  if (logoutBtn && !logoutBtn._spokeBound) {
+    logoutBtn._spokeBound = true;
+    logoutBtn.addEventListener('click', async () => {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      window.location.reload();
+    });
+  }
+
+  // Block page if not authenticated
+  if (!window.__SPOKE_AUTHENTICATED__) {
+    if (overlay) overlay.classList.remove('hidden');
+    if (pwInput) setTimeout(() => pwInput.focus(), 100);
+    return; // skip connectWebSocket / init until logged in
+  }
+})();
+
+// Re-check auth on 401 responses from any API
+const _origFetch = window.fetch;
+if (WEBUI_MODE === 'spoke' && window.__SPOKE_AUTH_REQUIRED__) {
+  window.fetch = async function (...args) {
+    const resp = await _origFetch(...args);
+    if (resp.status === 401) {
+      const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
+      if (!url.includes('/api/auth/')) {
+        window.location.reload();
+      }
+    }
+    return resp;
+  };
+}
+
+// Only run spoke init if authenticated (or no password configured)
+const _spokeReady = WEBUI_MODE !== 'spoke' || !window.__SPOKE_AUTH_REQUIRED__ || window.__SPOKE_AUTHENTICATED__;
+if (_spokeReady) connectWebSocket();
+if (_spokeReady) loadSimulations();
 
 // Single init call replaces 5 separate REST calls — UI renders immediately from cache
-(async () => {
+if (_spokeReady) (async () => {
   try {
     const init = consumeInitPayload() || await requestJson('/api/init');
     // Proxmox

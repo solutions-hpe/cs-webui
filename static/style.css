@@ -2019,7 +2019,8 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   max-width: 400px;
 }
 
-#hub-login-overlay {
+#hub-login-overlay,
+#spoke-login-overlay {
   position: fixed;
   inset: 0;
   display: flex;
@@ -2028,6 +2029,8 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   background: var(--bg);
   z-index: 150;
 }
+
+#spoke-login-overlay.hidden { display: none; }
 
 #hub-login-card {
   background: var(--panel);

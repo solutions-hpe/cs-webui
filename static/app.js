@@ -1469,13 +1469,46 @@ function renderServerTab(data) {
     }
   }
 
+  // Snapshot checked VM IDs before rebuild so WS-driven re-renders don't clear selections
+  const _checkedVmids = new Set(
+    [...document.querySelectorAll('.vm-check:checked')].map((cb) => cb.dataset.vmid)
+  );
+  const _selectAllWasChecked = document.getElementById('server-select-all')?.checked ?? false;
+
   _renderVmGroup('sim', simVms);
   _renderVmGroup('other', otherVms);
   _renderVmGroup('containers', containerVms);
 
-  // Reset select-all
-  const selectAll = document.getElementById('server-select-all');
-  if (selectAll) selectAll.checked = false;
+  // Restore checked state preserved from before the rebuild
+  if (_checkedVmids.size) {
+    ['sim', 'other', 'containers'].forEach((cat) => {
+      const tbody = document.getElementById(`server-vm-tbody-${cat}`);
+      if (!tbody) return;
+      let allChecked = true;
+      const boxes = [...tbody.querySelectorAll('.vm-check:not([disabled])')];
+      boxes.forEach((cb) => {
+        if (_checkedVmids.has(cb.dataset.vmid)) {
+          cb.checked = true;
+        } else {
+          allChecked = false;
+        }
+      });
+      // Sync per-category th-check
+      const thChk = document.getElementById(`server-th-check-${cat}`);
+      if (thChk && boxes.length) thChk.checked = allChecked && boxes.some((b) => b.checked);
+    });
+
+    // Restore global select-all checkbox
+    const selectAll = document.getElementById('server-select-all');
+    if (selectAll) {
+      const allBoxes = [...document.querySelectorAll('.vm-check:not([disabled])')];
+      selectAll.checked = allBoxes.length > 0 && allBoxes.every((cb) => cb.checked);
+    }
+  } else {
+    // Nothing was checked — reset to clean state
+    const selectAll = document.getElementById('server-select-all');
+    if (selectAll) selectAll.checked = false;
+  }
 }
 
 function renderProxmoxApproveState(pending, approved) {

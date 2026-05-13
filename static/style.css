@@ -2033,12 +2033,12 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 #spoke-login-overlay.hidden { display: none; }
 
 #hub-login-card {
-  background: var(--panel);
-  border: 1px solid var(--border);
+  background: var(--hpe-navy);
+  border: 1px solid rgba(255,255,255,0.1);
   border-radius: 12px;
   padding: 40px 48px;
   width: min(360px, calc(100vw - 32px));
-  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -2047,7 +2047,7 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 .hub-login-brand {
   display: flex;
   align-items: center;
-  color: var(--hpe-navy);
+  color: #ffffff;
 }
 
 .hub-login-brand .hpe-logo-mark {
@@ -2072,12 +2072,31 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 .hub-login-copy h2 {
   margin: 0;
   font-size: 1.6rem;
-  color: var(--text);
+  color: #ffffff;
 }
 
 .hub-login-subtitle {
   margin: 0;
-  color: var(--muted);
+  color: rgba(255,255,255,0.65);
+}
+
+#hub-login-card .form-label {
+  color: rgba(255,255,255,0.85);
+}
+
+#hub-login-card .form-input {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.2);
+  color: #ffffff;
+}
+
+#hub-login-card .form-input::placeholder {
+  color: rgba(255,255,255,0.35);
+}
+
+#hub-login-card .form-input:focus {
+  border-color: var(--hpe-green);
+  background: rgba(255,255,255,0.12);
 }
 
 .hub-login-form {

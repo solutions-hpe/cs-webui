@@ -7172,6 +7172,22 @@ const PROCESSING_FEATURES = ["aruba_polling", "teams_webhook", "email", "heartbe
 const spokeUiState = { expandedByTenant: {}, search: "" };
 const renderTokens = {};
 const scheduledReloads = {};
+let superadminBackupConfig = null;
+const superadminBackupState = {
+  open: false,
+  activeTab: "backup",
+  step: "confirm",
+  loading: false,
+  configLoading: false,
+  configSaving: false,
+  configMessage: "",
+  configMessageOk: true,
+  backupError: "",
+  selectedSpokeId: "",
+  jobId: "",
+  vmProgress: {},
+  completionNotified: false,
+};
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
@@ -8322,6 +8338,437 @@ async function readJson(response) {
   return response.json().catch(() => null);
 }
 
+function formatBackupBytes(bytes) {
+  const value = Number(bytes);
+  if (!Number.isFinite(value) || value <= 0) return "-";
+  if (value >= 1024 ** 4) return `${(value / (1024 ** 4)).toFixed(1)} TB`;
+  if (value >= 1024 ** 3) return `${(value / (1024 ** 3)).toFixed(1)} GB`;
+  if (value >= 1024 ** 2) return `${(value / (1024 ** 2)).toFixed(1)} MB`;
+  if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${value} B`;
+}
+
+function parseBackupVmIds(value) {
+  return Array.from(new Set(String(value || "")
+    .split(",")
+    .map(item => item.trim())
+    .filter(Boolean)
+    .map(item => Number.parseInt(item, 10))
+    .filter(item => Number.isFinite(item))));
+}
+
+function listSuperadminBackupSpokes() {
+  return tenants.flatMap(tenant => (spokeCache[tenant.id] || [])
+    .filter(spoke => spoke.status === "approved")
+    .map(spoke => ({ ...spoke, tenant_id: spoke.tenant_id || tenant.id })))
+    .sort((left, right) => {
+      const tenantCmp = tenantName(left.tenant_id).localeCompare(tenantName(right.tenant_id), undefined, { numeric: true, sensitivity: "base" });
+      if (tenantCmp !== 0) return tenantCmp;
+      return spokePrimaryLabel(left).localeCompare(spokePrimaryLabel(right), undefined, { numeric: true, sensitivity: "base" });
+    });
+}
+
+function listScopedSuperadminBackupSpokes(tenantId = currentTenantId) {
+  const allSpokes = listSuperadminBackupSpokes();
+  if (!tenantId) return allSpokes;
+  const scoped = allSpokes.filter(spoke => spoke.tenant_id === tenantId);
+  return scoped.length ? scoped : allSpokes;
+}
+
+function getSelectedSuperadminBackupSpoke() {
+  const spokes = listScopedSuperadminBackupSpokes();
+  if (superadminBackupState.selectedSpokeId) {
+    const selected = spokes.find(spoke => spoke.id === superadminBackupState.selectedSpokeId);
+    if (selected) return selected;
+  }
+  const preferred = spokes.find(spoke => spoke.tenant_id === currentTenantId) || spokes[0] || null;
+  superadminBackupState.selectedSpokeId = preferred?.id || "";
+  return preferred;
+}
+
+function getSuperadminBackupVmIds(spokeId = superadminBackupState.selectedSpokeId) {
+  const values = superadminBackupConfig?.spokes?.[spokeId]?.vm_ids;
+  return Array.isArray(values) ? values.map(value => Number.parseInt(value, 10)).filter(value => Number.isFinite(value)) : [];
+}
+
+function getSuperadminBackupRows() {
+  const configured = getSuperadminBackupVmIds();
+  const knownIds = Object.keys(superadminBackupState.vmProgress);
+  const ordered = Array.from(new Set([...configured.map(String), ...knownIds])).sort((left, right) => Number(left) - Number(right));
+  return ordered.map(id => {
+    const row = superadminBackupState.vmProgress[id] || {};
+    return {
+      vm_id: row.vm_id ?? (Number.parseInt(id, 10) || id),
+      status: String(row.status || "queued").toLowerCase(),
+      pct: Number.isFinite(Number(row.pct)) ? Number(row.pct) : null,
+      size: row.size,
+      file: row.file || "",
+    };
+  });
+}
+
+function isSuperadminBackupComplete() {
+  const rows = getSuperadminBackupRows();
+  return rows.length > 0 && rows.every(row => ["done", "error"].includes(row.status));
+}
+
+function backupStatusMeta(status) {
+  const value = String(status || "queued").toLowerCase();
+  if (value === "done") return { label: "✅ done", className: "status-online" };
+  if (value === "error") return { label: "❌ error", className: "status-offline" };
+  if (value === "running") return { label: "⏳ running", className: "status-unknown" };
+  return { label: "⌛ queued", className: "status-unknown" };
+}
+
+function ensureSuperadminBackupUi() {
+  if (!document.getElementById("hub-superadmin-btn")) {
+    document.body.insertAdjacentHTML("beforeend", `<button id="hub-superadmin-btn" title="Superadmin" style="
+  position:fixed; bottom:18px; right:18px; z-index:9999;
+  background:none; border:none; cursor:pointer; font-size:18px; opacity:0.3;
+  transition:opacity 0.2s;
+" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.3'">🔒</button>`);
+  }
+  if (!document.getElementById("sa-backup-modal")) {
+    document.body.insertAdjacentHTML("beforeend", `
+      <div id="sa-backup-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="sa-backup-modal-title">
+        <div class="modal-box modal-box-large">
+          <div class="modal-header">
+            <h2 id="sa-backup-modal-title">VM Backup</h2>
+            <button id="sa-backup-modal-x" class="btn btn-secondary btn-small" type="button">✕ Close</button>
+          </div>
+          <nav class="setup-subnav" style="margin-top:12px;">
+            <button class="setup-subtab sa-backup-tab active" data-sa-backup-tab="backup" type="button">Backup</button>
+            <button class="setup-subtab sa-backup-tab" data-sa-backup-tab="config" type="button">⚙️ Config</button>
+          </nav>
+          <div id="sa-backup-modal-body" class="setup-subpanel" style="margin-top:12px;"></div>
+        </div>
+      </div>
+    `);
+  }
+}
+
+function syncSuperadminBackupAccess() {
+  const btn = document.getElementById("hub-superadmin-btn");
+  if (!currentUser?.is_superadmin || !authToken) {
+    btn?.remove();
+    if (document.getElementById("sa-backup-modal")) closeSuperadminBackupModal(true);
+    return;
+  }
+  ensureSuperadminBackupUi();
+}
+
+function renderSuperadminBackupModal() {
+  ensureSuperadminBackupUi();
+  const modal = document.getElementById("sa-backup-modal");
+  const body = document.getElementById("sa-backup-modal-body");
+  const title = document.getElementById("sa-backup-modal-title");
+  const closeX = document.getElementById("sa-backup-modal-x");
+  if (!modal || !body || !title || !closeX) return;
+
+  modal.classList.toggle("hidden", !superadminBackupState.open);
+  if (!superadminBackupState.open) return;
+
+  $$(".sa-backup-tab").forEach(button => button.classList.toggle("active", button.dataset.saBackupTab === superadminBackupState.activeTab));
+  const canClose = superadminBackupState.step !== "status" || isSuperadminBackupComplete();
+  closeX.disabled = !canClose;
+
+  if (superadminBackupState.activeTab === "config") {
+    title.textContent = "Backup Configuration";
+    const configRows = listSuperadminBackupSpokes();
+    body.innerHTML = `
+      <div class="setup-card">
+        <div class="setup-card-header">
+          <h3>Superadmin Backup Settings</h3>
+          <p>Configure VM IDs per spoke and Azure destination settings.</p>
+        </div>
+        ${superadminBackupState.configLoading ? '<div class="empty-state">Loading backup configuration…</div>' : `
+          <div class="form-group">
+            <label class="form-label" for="sa-backup-config-retention">Retention count</label>
+            <input id="sa-backup-config-retention" type="number" min="1" class="form-input" value="${escHtml(superadminBackupConfig?.retention ?? 3)}">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="sa-backup-config-account">Azure account name</label>
+            <input id="sa-backup-config-account" type="text" class="form-input" value="${escHtml(superadminBackupConfig?.azure_account || "")}">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="sa-backup-config-container">Azure container</label>
+            <input id="sa-backup-config-container" type="text" class="form-input" value="${escHtml(superadminBackupConfig?.azure_container || "")}">
+          </div>
+          <div class="table-scroll-v" style="max-height:45vh;margin-top:12px;">
+            <table class="data-table">
+              <thead><tr><th>Tenant</th><th>Spoke</th><th>VM IDs</th></tr></thead>
+              <tbody>${configRows.length ? configRows.map(spoke => `
+                <tr>
+                  <td>${escHtml(tenantName(spoke.tenant_id))}</td>
+                  <td><strong>${escHtml(spokePrimaryLabel(spoke))}</strong><div class="tenant-card-subtitle">${escHtml(spoke.id)}</div></td>
+                  <td><input class="form-input form-input-sm sa-backup-config-vms" data-spoke-id="${escHtml(spoke.id)}" type="text" value="${escHtml(getSuperadminBackupVmIds(spoke.id).join(", "))}" placeholder="100, 101, 102"></td>
+                </tr>
+              `).join("") : '<tr><td colspan="3" class="empty-state">No approved spokes found.</td></tr>'}</tbody>
+            </table>
+          </div>
+          <div id="sa-backup-config-msg" class="form-msg ${superadminBackupState.configMessage ? (superadminBackupState.configMessageOk ? "msg-ok" : "msg-error") : ""}">${escHtml(superadminBackupState.configMessage)}</div>
+          <div class="form-actions" style="margin-top:16px;">
+            <button id="sa-backup-config-save-btn" class="btn btn-primary" type="button"${superadminBackupState.configSaving ? " disabled" : ""}>Save</button>
+          </div>
+        `}
+      </div>
+    `;
+    return;
+  }
+
+  if (superadminBackupState.step === "status") {
+    const rows = getSuperadminBackupRows();
+    title.textContent = "Backup in Progress";
+    body.innerHTML = `
+      <div class="setup-card">
+        <div class="setup-card-header">
+          <h3>Backup in Progress</h3>
+          <p>Job ID: ${escHtml(superadminBackupState.jobId || "pending")}</p>
+        </div>
+        <div class="table-scroll-v" style="margin-top:12px;">
+          <table class="data-table">
+            <thead><tr><th>VM ID</th><th>Status</th><th>Progress</th><th>Size</th><th>File</th></tr></thead>
+            <tbody>${rows.length ? rows.map(row => {
+              const meta = backupStatusMeta(row.status);
+              return `<tr>
+                <td>${escHtml(row.vm_id)}</td>
+                <td><span class="status-badge ${meta.className}">${meta.label}</span></td>
+                <td>${row.pct === null ? "-" : `${escHtml(row.pct)}%`}</td>
+                <td>${escHtml(formatBackupBytes(row.size))}</td>
+                <td>${escHtml(row.file || "-")}</td>
+              </tr>`;
+            }).join("") : '<tr><td colspan="5" class="empty-state">Waiting for backup updates…</td></tr>'}</tbody>
+          </table>
+        </div>
+        <div class="form-actions" style="margin-top:16px;">
+          <button id="sa-backup-close-btn" class="btn btn-secondary" type="button"${canClose ? "" : " disabled"}>Close</button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const spokes = listScopedSuperadminBackupSpokes();
+  const selectedSpoke = getSelectedSuperadminBackupSpoke();
+  const vmIds = getSuperadminBackupVmIds(selectedSpoke?.id);
+  const proceedDisabled = !selectedSpoke || !vmIds.length || superadminBackupState.loading || superadminBackupState.configLoading;
+  if (superadminBackupState.step === "key") {
+    title.textContent = "Enter Azure Storage Key";
+    body.innerHTML = `
+      <div class="setup-card">
+        <div class="setup-card-header">
+          <h3>Enter Azure Storage Key</h3>
+          <p>${selectedSpoke ? `${escHtml(tenantName(selectedSpoke.tenant_id))} — ${escHtml(spokePrimaryLabel(selectedSpoke))}` : "No spoke selected."}</p>
+        </div>
+        <p>Key will be used for this backup only and never stored.</p>
+        <input type="password" id="sa-azure-key" placeholder="Azure storage account key" class="form-input" style="width:100%">
+        <div class="form-actions" style="margin-top:16px;">
+          <button id="sa-backup-back-btn" class="btn btn-secondary" type="button">← Back</button>
+          <button id="sa-backup-start-btn" class="btn btn-primary" type="button"${superadminBackupState.loading ? " disabled" : ""}>Start Backup</button>
+        </div>
+        <div class="form-msg ${superadminBackupState.backupError ? "msg-error" : ""}">${escHtml(superadminBackupState.backupError)}</div>
+      </div>
+    `;
+    document.getElementById("sa-azure-key")?.focus();
+    return;
+  }
+
+  title.textContent = "VM Backup";
+  body.innerHTML = `
+    <div class="setup-card">
+      <div class="setup-card-header">
+        <h3>VM Backup</h3>
+        <p>Select spoke to back up:</p>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="sa-spoke-select">Spoke</label>
+        <select id="sa-spoke-select" class="form-input">
+          ${spokes.length ? spokes.map(spoke => `<option value="${escHtml(spoke.id)}"${selectedSpoke?.id === spoke.id ? " selected" : ""}>${escHtml(tenantName(spoke.tenant_id))} — ${escHtml(spokePrimaryLabel(spoke))}</option>`).join("") : '<option value="">No approved spokes available</option>'}
+        </select>
+      </div>
+      <div class="setup-card" style="margin-top:12px;">
+        <div><strong>VMs configured:</strong> ${vmIds.length ? escHtml(vmIds.join(", ")) : "—"}</div>
+        <div style="margin-top:8px;"><strong>Azure:</strong> ${escHtml(superadminBackupConfig?.azure_account || "—")} / ${escHtml(superadminBackupConfig?.azure_container || "—")}</div>
+        <div style="margin-top:8px;"><strong>Retention:</strong> keep last ${escHtml(superadminBackupConfig?.retention ?? "—")}</div>
+      </div>
+      <div class="form-actions" style="margin-top:16px;">
+        <button id="sa-backup-cancel-btn" class="btn btn-secondary" type="button">Cancel</button>
+        <button id="sa-backup-proceed-btn" class="btn btn-primary" type="button"${proceedDisabled ? " disabled" : ""}>Proceed →</button>
+      </div>
+      <div class="form-msg ${superadminBackupState.backupError ? "msg-error" : ""}">${escHtml(superadminBackupState.backupError || (!vmIds.length && selectedSpoke ? "No VM IDs configured for this spoke." : ""))}</div>
+    </div>
+  `;
+}
+
+async function loadSuperadminBackupConfig(force = false) {
+  if (!currentUser?.is_superadmin) return superadminBackupConfig;
+  if (superadminBackupConfig && !force) return superadminBackupConfig;
+  superadminBackupState.configLoading = true;
+  superadminBackupState.configMessage = "";
+  if (superadminBackupState.open) renderSuperadminBackupModal();
+  const res = await apiFetch("/api/backup/config");
+  const data = await readJson(res);
+  if (!res || !res.ok) {
+    superadminBackupConfig = superadminBackupConfig || { spokes: {}, retention: 3, azure_account: "", azure_container: "" };
+    superadminBackupState.configMessage = data?.detail || "Failed to load backup configuration.";
+    superadminBackupState.configMessageOk = false;
+  } else {
+    superadminBackupConfig = {
+      spokes: data?.spokes || {},
+      retention: data?.retention ?? 3,
+      azure_account: data?.azure_account || "",
+      azure_container: data?.azure_container || "",
+    };
+  }
+  superadminBackupState.configLoading = false;
+  if (superadminBackupState.open) renderSuperadminBackupModal();
+  return superadminBackupConfig;
+}
+
+async function openSuperadminBackupModal() {
+  if (!currentUser?.is_superadmin) return;
+  ensureSuperadminBackupUi();
+  superadminBackupState.open = true;
+  superadminBackupState.activeTab = "backup";
+  superadminBackupState.step = "confirm";
+  superadminBackupState.loading = true;
+  superadminBackupState.backupError = "";
+  superadminBackupState.jobId = "";
+  superadminBackupState.vmProgress = {};
+  superadminBackupState.completionNotified = false;
+  renderSuperadminBackupModal();
+  await Promise.all([
+    Promise.all(tenants.map(tenant => ensureTenantSpokesFor(tenant.id, false))),
+    loadSuperadminBackupConfig(true),
+  ]);
+  getSelectedSuperadminBackupSpoke();
+  superadminBackupState.loading = false;
+  renderSuperadminBackupModal();
+}
+
+function closeSuperadminBackupModal(force = false) {
+  if (!force && superadminBackupState.step === "status" && !isSuperadminBackupComplete()) return;
+  superadminBackupState.open = false;
+  superadminBackupState.activeTab = "backup";
+  superadminBackupState.step = "confirm";
+  superadminBackupState.loading = false;
+  superadminBackupState.backupError = "";
+  superadminBackupState.jobId = "";
+  superadminBackupState.vmProgress = {};
+  superadminBackupState.completionNotified = false;
+  document.getElementById("sa-backup-modal")?.classList.add("hidden");
+}
+
+async function saveSuperadminBackupConfig() {
+  if (!currentUser?.is_superadmin || superadminBackupState.configSaving) return;
+  const retention = Number.parseInt(document.getElementById("sa-backup-config-retention")?.value || "", 10);
+  if (!Number.isFinite(retention) || retention < 1) {
+    superadminBackupState.configMessage = "Retention count must be at least 1.";
+    superadminBackupState.configMessageOk = false;
+    renderSuperadminBackupModal();
+    return;
+  }
+  const payload = {
+    spokes: JSON.parse(JSON.stringify(superadminBackupConfig?.spokes || {})),
+    retention,
+    azure_account: document.getElementById("sa-backup-config-account")?.value.trim() || "",
+    azure_container: document.getElementById("sa-backup-config-container")?.value.trim() || "",
+  };
+  document.querySelectorAll(".sa-backup-config-vms").forEach(input => {
+    const spokeId = input.dataset.spokeId;
+    if (!spokeId) return;
+    payload.spokes[spokeId] = { ...(payload.spokes[spokeId] || {}), vm_ids: parseBackupVmIds(input.value) };
+  });
+  superadminBackupState.configSaving = true;
+  superadminBackupState.configMessage = "Saving…";
+  superadminBackupState.configMessageOk = true;
+  renderSuperadminBackupModal();
+  const res = await apiFetch("/api/backup/config", { method: "POST", body: payload });
+  const data = await readJson(res);
+  superadminBackupState.configSaving = false;
+  if (!res || !res.ok) {
+    superadminBackupState.configMessage = data?.detail || "Failed to save backup configuration.";
+    superadminBackupState.configMessageOk = false;
+    renderSuperadminBackupModal();
+    return;
+  }
+  superadminBackupConfig = {
+    spokes: data?.spokes || payload.spokes,
+    retention: data?.retention ?? payload.retention,
+    azure_account: data?.azure_account ?? payload.azure_account,
+    azure_container: data?.azure_container ?? payload.azure_container,
+  };
+  superadminBackupState.configMessage = "Backup configuration saved.";
+  superadminBackupState.configMessageOk = true;
+  renderSuperadminBackupModal();
+}
+
+function updateSuperadminBackupProgress(message) {
+  if (!superadminBackupState.jobId || message.job_id !== superadminBackupState.jobId) return;
+  const vmId = String(message.vm_id ?? "");
+  if (!vmId) return;
+  const current = superadminBackupState.vmProgress[vmId] || { vm_id: Number.parseInt(vmId, 10) || vmId, status: "queued", pct: 0, size: null, file: "" };
+  superadminBackupState.vmProgress[vmId] = {
+    ...current,
+    vm_id: message.vm_id ?? current.vm_id,
+    status: message.status || current.status,
+    pct: Number.isFinite(Number(message.pct)) ? Number(message.pct) : current.pct,
+    size: message.size ?? current.size,
+    file: message.file ?? current.file,
+  };
+  if (superadminBackupState.open && superadminBackupState.step === "status") renderSuperadminBackupModal();
+  if (!superadminBackupState.completionNotified && isSuperadminBackupComplete()) {
+    superadminBackupState.completionNotified = true;
+    showToast("VM backup finished.", "ok");
+  }
+}
+
+async function startSuperadminBackup() {
+  const spoke = getSelectedSuperadminBackupSpoke();
+  if (!spoke) {
+    superadminBackupState.backupError = "Select a spoke first.";
+    renderSuperadminBackupModal();
+    return;
+  }
+  const configuredVmIds = getSuperadminBackupVmIds(spoke.id);
+  if (!configuredVmIds.length) {
+    superadminBackupState.backupError = "No VM IDs configured for this spoke.";
+    superadminBackupState.step = "confirm";
+    renderSuperadminBackupModal();
+    return;
+  }
+  let keyValue = document.getElementById("sa-azure-key")?.value || "";
+  if (!keyValue) {
+    superadminBackupState.backupError = "Azure storage account key is required.";
+    renderSuperadminBackupModal();
+    return;
+  }
+  superadminBackupState.loading = true;
+  superadminBackupState.backupError = "";
+  const responsePromise = apiFetch(`/api/backup/trigger/${encodeURIComponent(spoke.tenant_id)}/${encodeURIComponent(spoke.id)}`, {
+    method: "POST",
+    body: { azure_key: keyValue },
+  });
+  const keyInput = document.getElementById("sa-azure-key");
+  if (keyInput) keyInput.value = "";
+  keyValue = "";
+  renderSuperadminBackupModal();
+  const res = await responsePromise;
+  const data = await readJson(res);
+  superadminBackupState.loading = false;
+  if (!res || !res.ok) {
+    superadminBackupState.backupError = data?.detail || "Unable to start backup.";
+    renderSuperadminBackupModal();
+    return;
+  }
+  superadminBackupState.step = "status";
+  superadminBackupState.jobId = data?.job_id || "";
+  superadminBackupState.vmProgress = Object.fromEntries(configuredVmIds.map(vmId => [String(vmId), { vm_id: vmId, status: "queued", pct: 0, size: null, file: "" }]));
+  superadminBackupState.completionNotified = false;
+  renderSuperadminBackupModal();
+  showToast(`Backup started for ${spokePrimaryLabel(spoke)}.`, "ok");
+}
+
 function renderInBatches(key, container, items, renderItem, batchSize = 40) {
   renderTokens[key] = (renderTokens[key] || 0) + 1;
   const token = renderTokens[key];
@@ -8413,6 +8860,7 @@ function syncHubPermissionUI() {
     $$(selector).forEach(el => el.classList.toggle("hidden", !isSuperadmin));
   });
   $("#dashboard-add-tenant-btn")?.classList.toggle("hidden", !isSuperadmin);
+  syncSuperadminBackupAccess();
 }
 
 function exitTenantContext() {
@@ -8441,6 +8889,7 @@ function applyAuthUI() {
   $("#hub-user-name") && ($("#hub-user-name").textContent = currentUser?.username || "—");
   $$(".auth-tab").forEach(tab => tab.classList.toggle("hidden", !loggedIn));
   $$(".superadmin-tab").forEach(tab => tab.classList.toggle("hidden", !(loggedIn && currentUser?.is_superadmin)));
+  syncSuperadminBackupAccess();
   if (!loggedIn) {
     openLoginModal();
     currentTenantId = null;
@@ -8551,6 +9000,7 @@ function disconnectWebSocket() {
 }
 
 function logout(showMessage = true) {
+  closeSuperadminBackupModal(true);
   authToken = null;
   currentUser = null;
   currentTenantId = null;
@@ -12160,6 +12610,8 @@ function connectHubWebSocket() {
     } else if (data.type === "cert_renewed") {
       showToast(`TLS certificate renewed — expires ${data.expires || "unknown"}`, "ok");
       if (activeTab === "setup") loadAcmeSettings();
+    } else if (data.type === "backup_progress") {
+      updateSuperadminBackupProgress(data);
     } else if (data.type === "pending_spoke_registered") {
       if (currentUser?.is_superadmin && activeTab === "superadmin") loadSuperadmin();
       if (canManageTenant() && !currentUser?.is_superadmin && data.tenant_hint === currentTenantId) {
@@ -12202,6 +12654,56 @@ function bindEvents() {
       return;
     }
 
+    if (event.target.closest("#hub-superadmin-btn")) {
+      openSuperadminBackupModal().catch(() => {
+        superadminBackupState.backupError = "Failed to open backup panel.";
+        superadminBackupState.open = true;
+        renderSuperadminBackupModal();
+      });
+      return;
+    }
+
+    if (event.target.id === "sa-backup-modal") {
+      closeSuperadminBackupModal(false);
+      return;
+    }
+
+    const backupTabButton = event.target.closest(".sa-backup-tab");
+    if (backupTabButton) {
+      superadminBackupState.activeTab = backupTabButton.dataset.saBackupTab || "backup";
+      renderSuperadminBackupModal();
+      return;
+    }
+
+    if (event.target.closest("#sa-backup-modal-x") || event.target.closest("#sa-backup-cancel-btn") || event.target.closest("#sa-backup-close-btn")) {
+      closeSuperadminBackupModal(false);
+      return;
+    }
+
+    if (event.target.closest("#sa-backup-proceed-btn")) {
+      superadminBackupState.backupError = "";
+      superadminBackupState.step = "key";
+      renderSuperadminBackupModal();
+      return;
+    }
+
+    if (event.target.closest("#sa-backup-back-btn")) {
+      superadminBackupState.backupError = "";
+      superadminBackupState.step = "confirm";
+      renderSuperadminBackupModal();
+      return;
+    }
+
+    if (event.target.closest("#sa-backup-start-btn")) {
+      startSuperadminBackup();
+      return;
+    }
+
+    if (event.target.closest("#sa-backup-config-save-btn")) {
+      saveSuperadminBackupConfig();
+      return;
+    }
+ 
     const tabButton = event.target.closest("#tab-nav .tab");
     if (tabButton) {
       if (tabButton.dataset.tenantId) setCurrentTenant(tabButton.dataset.tenantId, false);
@@ -12368,6 +12870,14 @@ function bindEvents() {
     }
   });
 
+  document.addEventListener("change", event => {
+    const spokeSelect = event.target.closest("#sa-spoke-select");
+    if (!spokeSelect) return;
+    superadminBackupState.selectedSpokeId = spokeSelect.value || "";
+    superadminBackupState.backupError = "";
+    renderSuperadminBackupModal();
+  });
+ 
   $("#hub-logout-btn")?.addEventListener("click", () => logout(true));
   $("#login-submit-btn")?.addEventListener("click", submitLogin);
   $("#login-username")?.addEventListener("keydown", event => { if (event.key === "Enter") submitLogin(); });

@@ -9361,6 +9361,7 @@ async function loadUserContext() {
   if (!currentUser?.is_superadmin && currentTenantId && canManageTenant()) {
     loadTenantPendingSpokes();
   }
+}
 
 async function submitLogin() {
   const username = $("#login-username")?.value.trim();

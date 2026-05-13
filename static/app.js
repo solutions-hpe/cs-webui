@@ -189,7 +189,7 @@ let configLoaded = false;
 let centralTokenValid = null;
 let centralLastSyncedTs = null;
 let centralStatusInitialized = false;
-let latestProxmoxData = { vms: [], usb_state: [], unknown_usb: [], reclone_state: null, vh_devices: null };
+let latestProxmoxData = { vms: [], usb_state: [], unknown_usb: [], reclone_state: null, vh_devices: null };  // physical_usb removed
 let latestRecloneState = null;
 let usbCountdownTimer = null;
 let activeVmCat = 'sim';   // 'sim' | 'other' | 'containers' | 'templates'
@@ -2502,13 +2502,10 @@ function updateUsbCountdowns() {
 function renderVhDevices(proxmoxData = latestProxmoxData) {
   const pills = document.getElementById('vh-stat-pills');
   const list = document.getElementById('vh-device-list');
-  const physCard = document.getElementById('vh-physical-usb-card');
-  const physList = document.getElementById('vh-physical-usb-list');
   if (!pills || !list) return;
 
   const vh = proxmoxData?.vh_devices || {};
   const devices = Array.isArray(vh.devices) ? vh.devices : [];
-  const physicalUsb = Array.isArray(vh.physical_usb) ? vh.physical_usb : [];
   const svcActive = vh.vh_service_active;
   const connected = vh.vh_connected;
   const autoUseAll = vh.auto_use_all;
@@ -2521,11 +2518,11 @@ function renderVhDevices(proxmoxData = latestProxmoxData) {
   const countLabel = count > 0
     ? `🔌 ${count} device${count !== 1 ? 's' : ''} — ${inUse} in use, ${available} available`
     : '⚫ No VH devices detected';
-  pills.innerHTML = [svcLabel, autoLabel, connected ? countLabel : '⚫ Not connected']
+  pills.innerHTML = [svcLabel, autoLabel, connected ? countLabel : '⚫ Not connected to VH server']
     .map(l => `<span class="server-stat-pill">${l}</span>`).join('');
 
   if (!devices.length) {
-    list.innerHTML = '<p class="muted" style="padding:8px 0;">No VirtualHere devices reported. Ensure the VH client service is running and connected to a server.</p>';
+    list.innerHTML = '<p class="muted" style="padding:8px 0;">No VirtualHere adapters found. Ensure the VH client service is running and connected to a server.</p>';
   } else {
     const byServer = new Map();
     devices.forEach(d => {
@@ -2538,7 +2535,7 @@ function renderVhDevices(proxmoxData = latestProxmoxData) {
       html += `<div style="margin-bottom:16px;">
         <div style="font-size:0.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">Server: ${escHtml(server)}</div>
         <table class="data-table">
-          <thead><tr><th>Device Name</th><th>Address</th><th>Status</th></tr></thead>
+          <thead><tr><th>Adapter Name</th><th>Address</th><th>Status</th></tr></thead>
           <tbody>${devs.map(d => `<tr>
             <td><strong>${escHtml(d.name || 'Unknown')}</strong></td>
             <td><code>${escHtml(d.address || '—')}</code></td>
@@ -2547,17 +2544,6 @@ function renderVhDevices(proxmoxData = latestProxmoxData) {
         </table></div>`;
     });
     list.innerHTML = html;
-  }
-
-  if (physCard && physList) {
-    physCard.classList.toggle('hidden', physicalUsb.length === 0);
-    if (physicalUsb.length) {
-      const rows = physicalUsb.map(d => `<tr>
-        <td>${escHtml(d.name || 'Unknown')}</td>
-        <td><code>${escHtml(d.vidpid || '—')}</code></td>
-      </tr>`).join('');
-      physList.innerHTML = `<table class="data-table"><thead><tr><th>Device Name</th><th>VID:PID</th></tr></thead><tbody>${rows}</tbody></table>`;
-    }
   }
 }
 

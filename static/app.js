@@ -7126,6 +7126,8 @@ let dashboardTenantRows = [];
 let aggregateDashboardData = null;
 let aggregateClientRows = [];
 let aggregateProxmoxHosts = [];
+let aggregateFleetRecloneStatus = null;
+let aggregateUsbProvisioningStatus = null;
 let aggregateApiServerRows = [];
 let aggregateCentralData = null;
 let hubCentralData = null;
@@ -7140,6 +7142,9 @@ let hubHwOpenCheckId = null;
 let hubCcOpenWsite = null;
 const hubClientUiState = { search: "", status: "all", expandedByTenant: {}, seenSitesByTenant: {} };
 let hubVmServerSelectedSpoke = null;
+let hubVmServerFleetPollTimer = null;
+let hubVmServerFleetConcurrencyDraft = 3;
+let hubVmServerFleetConcurrencyTenant = null;
 let hubClientTypeFilter = "all";
 const tenantDashboardSort = { key: "name", direction: "asc" };
 
@@ -9218,10 +9223,98 @@ function summarizeHubConfigState(spoke) {
   return { label: "No push yet", className: "offline" };
 }
 
+function defaultFleetRecloneStatus() {
+  return { any_running: false, total_vms: 0, completed: 0, failed: 0, default_concurrency: 3, spokes: [] };
+}
+
+function defaultUsbProvisioningStatus() {
+  return { total_slots: 0, used_slots: 0, auto_provision_on: false, spokes: [] };
+}
+
+function normalizeHubVmServerConcurrency(value, fallback = 3) {
+  const parsed = Number.parseInt(String(value ?? fallback), 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(1, Math.min(10, parsed));
+}
+
+function syncHubVmServerConcurrencyFromStatus() {
+  const tenantId = getActiveTenantId();
+  if (!tenantId) return;
+  const status = aggregateFleetRecloneStatus || defaultFleetRecloneStatus();
+  if (hubVmServerFleetConcurrencyTenant !== tenantId) {
+    hubVmServerFleetConcurrencyTenant = tenantId;
+    hubVmServerFleetConcurrencyDraft = normalizeHubVmServerConcurrency(status.default_concurrency, 3);
+  }
+}
+
+function hubVmServerFleetStatusMeta(status) {
+  if (status?.any_running) return { label: "Running", className: "badge-blue" };
+  if (Number(status?.total_vms || 0) > 0 && Number(status?.completed || 0) + Number(status?.failed || 0) >= Number(status?.total_vms || 0)) {
+    return { label: "Done", className: "badge-grey" };
+  }
+  return { label: "Idle", className: "badge-grey" };
+}
+
+function scheduleHubVmServerFleetPoll() {
+  if (hubVmServerFleetPollTimer) {
+    clearTimeout(hubVmServerFleetPollTimer);
+    hubVmServerFleetPollTimer = null;
+  }
+  if (activeTab !== "vm-server" || hubVmServerSelectedSpoke || !(aggregateFleetRecloneStatus?.any_running)) return;
+  hubVmServerFleetPollTimer = window.setTimeout(async () => {
+    hubVmServerFleetPollTimer = null;
+    if (activeTab !== "vm-server" || hubVmServerSelectedSpoke) return;
+    await loadHubVmServerAggregateStatus();
+    renderHubVmServer();
+  }, 10000);
+}
+
+async function loadHubVmServerAggregateStatus() {
+  const tenantId = getActiveTenantId();
+  if (!currentUser || !tenantId) {
+    aggregateFleetRecloneStatus = defaultFleetRecloneStatus();
+    aggregateUsbProvisioningStatus = defaultUsbProvisioningStatus();
+    return;
+  }
+  const [fleetRes, usbRes] = await Promise.all([
+    apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/fleet-reclone-status`),
+    apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/usb-provisioning-status`),
+  ]);
+  aggregateFleetRecloneStatus = fleetRes?.ok ? ((await fleetRes.json()) || defaultFleetRecloneStatus()) : (aggregateFleetRecloneStatus || defaultFleetRecloneStatus());
+  aggregateUsbProvisioningStatus = usbRes?.ok ? ((await usbRes.json()) || defaultUsbProvisioningStatus()) : (aggregateUsbProvisioningStatus || defaultUsbProvisioningStatus());
+  syncHubVmServerConcurrencyFromStatus();
+}
+
+async function startHubFleetReclone() {
+  const tenantId = getActiveTenantId();
+  if (!tenantId || !canManageTenant(tenantId)) {
+    showToast("Tenant Viewer access is read-only.", "warn");
+    return;
+  }
+  const input = $("#hub-fleet-reclone-concurrency");
+  const concurrency = normalizeHubVmServerConcurrency(input?.value, hubVmServerFleetConcurrencyDraft || 3);
+  hubVmServerFleetConcurrencyDraft = concurrency;
+  if (input) input.value = String(concurrency);
+  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/fleet-reclone`, {
+    method: "POST",
+    body: { concurrency },
+  });
+  const data = await readJson(res);
+  if (!res?.ok) {
+    showToast(data?.detail || "Unable to queue fleet reclone.", "error");
+    return;
+  }
+  showToast(`Queued fleet reclone for ${data?.queued || 0} spoke(s).`, "ok");
+  await loadVmServer(true);
+}
+
 function renderHubVmServer() {
   const container = $("#hub-vm-server-content");
   if (!container) return;
+  const tenantId = getActiveTenantId();
   const hosts = aggregateProxmoxHosts || [];
+  const fleet = aggregateFleetRecloneStatus || defaultFleetRecloneStatus();
+  const usbProvisioning = aggregateUsbProvisioningStatus || defaultUsbProvisioningStatus();
   const vmCount = hosts.reduce((sum, h) => sum + Number(h.vm_count || 0), 0);
   const usbCount = hosts.reduce((sum, h) => sum + Number(h.usb_count || 0), 0);
   $("#hub-vm-hosts-pill") && ($("#hub-vm-hosts-pill").textContent = `${hosts.length} hosts`);
@@ -9234,39 +9327,76 @@ function renderHubVmServer() {
     return;
   }
 
-  if (!hosts.length) {
-    container.innerHTML = '<div class="empty-state">No Proxmox telemetry reported for this tenant.</div>';
-    return;
-  }
-
+  const fleetMeta = hubVmServerFleetStatusMeta(fleet);
+  const fleetPct = Number(fleet.total_vms || 0) > 0 ? Math.max(0, Math.min(100, Math.round((Number(fleet.completed || 0) / Number(fleet.total_vms || 0)) * 100))) : 0;
+  const usbPct = Number(usbProvisioning.total_slots || 0) > 0 ? Math.max(0, Math.min(100, Math.round((Number(usbProvisioning.used_slots || 0) / Number(usbProvisioning.total_slots || 0)) * 100))) : 0;
+  const disabled = fleet.any_running || !canManageTenant(tenantId);
+  const readonlyNote = canManageTenant(tenantId) ? "" : '<div class="tenant-detail-note">Tenant Viewer access: fleet controls are read-only.</div>';
   container.innerHTML = `
-    <div class="hub-vmserver-list">
-      ${hosts.map(host => {
-        const online = host.spoke_online;
-        const reclone = host.reclone_state || {};
-        const recloneStatus = reclone.status || "idle";
-        return `
-          <div class="setup-card hub-vmserver-spoke-card" role="button" tabindex="0"
-               data-spoke-id="${escHtml(host.spoke_id)}" style="cursor:pointer;">
-            <div class="panel-header">
-              <span class="server-node-name">${escHtml(spokeDisplayName(host, "Spoke"))}</span>
-              <span class="stat-pill ${online ? "online" : "offline"}">${online ? "Online" : "Offline"}</span>
-              <span class="stat-pill">${escHtml(String(host.vm_count || 0))} VMs</span>
-              <span class="stat-pill">${escHtml(String(host.usb_count || 0))} USB</span>
-              ${recloneStatus !== "idle" ? `<span class="stat-pill badge-${recloneStatus === "running" ? "blue" : "grey"}">${escHtml(recloneStatus)}</span>` : ""}
-              <span class="stat-pill" style="margin-left:auto;">Click to open →</span>
-            </div>
-            <div style="padding:8px 16px;font-size:0.82rem;color:var(--muted);">
-              Agent ${escHtml(host.proxmox?.agent_version || "—")} &nbsp;·&nbsp;
-              PVE ${escHtml(host.proxmox?.pve_version || "—")} &nbsp;·&nbsp;
-              ${host.proxmox?.connected
-                ? "🟢 Proxmox connected"
-                : (host.spoke_online ? "⚠️ Proxmox agent not reporting" : "⚫ Proxmox disconnected")}
-            </div>
-          </div>`;
-      }).join("")}
-    </div>`;
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:16px;">
+      <section class="setup-card">
+        <div class="setup-card-header" style="display:flex;align-items:center;gap:12px;justify-content:space-between;">
+          <div><h2>Fleet Reclone</h2><p>Queue a rolling reclone on every approved spoke.</p></div>
+          <span class="badge ${fleetMeta.className}">${escHtml(fleetMeta.label)}</span>
+        </div>
+        <div style="font-weight:600;margin-bottom:6px;">${escHtml(String(fleet.completed || 0))} / ${escHtml(String(fleet.total_vms || 0))} VMs recloned</div>
+        <div class="progress-bar-wrap" style="margin-bottom:8px;"><div class="progress-bar" style="width:${fleetPct}%"></div></div>
+        <div class="muted" style="font-size:0.82rem;margin-bottom:12px;">${fleet.any_running ? "Polling every 10s while fleet reclone is running." : `Failed: ${escHtml(String(fleet.failed || 0))}`}</div>
+        ${readonlyNote}
+        <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
+          <label class="form-group" style="margin:0;min-width:100px;">
+            <span class="form-label">Concurrency</span>
+            <input id="hub-fleet-reclone-concurrency" class="form-input" type="number" min="1" max="10" value="${escHtml(String(hubVmServerFleetConcurrencyDraft || 3))}"${canManageTenant(tenantId) ? "" : " disabled"}>
+          </label>
+          <button id="hub-fleet-reclone-btn" class="btn btn-primary" type="button"${disabled ? " disabled" : ""}>🔄 Reclone All Spokes</button>
+        </div>
+      </section>
+      <section class="setup-card">
+        <div class="setup-card-header" style="display:flex;align-items:center;gap:12px;justify-content:space-between;">
+          <div><h2>Auto-Provisioning</h2><p>USB provisioning capacity reported across approved spokes.</p></div>
+          <span class="badge ${usbProvisioning.auto_provision_on ? "badge-blue" : "badge-grey"}">${usbProvisioning.auto_provision_on ? "On" : "Off"}</span>
+        </div>
+        <div style="font-weight:600;margin-bottom:6px;">${escHtml(String(usbProvisioning.used_slots || 0))} / ${escHtml(String(usbProvisioning.total_slots || 0))} slots in use</div>
+        <div class="progress-bar-wrap" style="margin-bottom:8px;"><div class="progress-bar" style="width:${usbPct}%"></div></div>
+        <div class="muted" style="font-size:0.82rem;">${escHtml(String((usbProvisioning.spokes || []).filter(spoke => spoke.auto_provision).length))} spoke(s) with auto-provisioning enabled.</div>
+      </section>
+    </div>
+    ${hosts.length ? `
+      <div class="hub-vmserver-list">
+        ${hosts.map(host => {
+          const online = host.spoke_online;
+          const reclone = host.reclone_state || {};
+          const recloneStatus = reclone.status || "idle";
+          return `
+            <div class="setup-card hub-vmserver-spoke-card" role="button" tabindex="0"
+                 data-spoke-id="${escHtml(host.spoke_id)}" style="cursor:pointer;">
+              <div class="panel-header">
+                <span class="server-node-name">${escHtml(spokeDisplayName(host, "Spoke"))}</span>
+                <span class="stat-pill ${online ? "online" : "offline"}">${online ? "Online" : "Offline"}</span>
+                <span class="stat-pill">${escHtml(String(host.vm_count || 0))} VMs</span>
+                <span class="stat-pill">${escHtml(String(host.usb_count || 0))} USB</span>
+                ${recloneStatus !== "idle" ? `<span class="stat-pill badge-${recloneStatus === "running" ? "blue" : "grey"}">${escHtml(recloneStatus)}</span>` : ""}
+                <span class="stat-pill" style="margin-left:auto;">Click to open →</span>
+              </div>
+              <div style="padding:8px 16px;font-size:0.82rem;color:var(--muted);">
+                Agent ${escHtml(host.proxmox?.agent_version || "—")} &nbsp;·&nbsp;
+                PVE ${escHtml(host.proxmox?.pve_version || "—")} &nbsp;·&nbsp;
+                ${host.proxmox?.connected
+                  ? "🟢 Proxmox connected"
+                  : (host.spoke_online ? "⚠️ Proxmox agent not reporting" : "⚫ Proxmox disconnected")}
+              </div>
+            </div>`;
+        }).join("")}
+      </div>`
+      : '<div class="empty-state">No Proxmox telemetry reported for this tenant.</div>'}
+  `;
 
+  $("#hub-fleet-reclone-concurrency", container)?.addEventListener("input", event => {
+    hubVmServerFleetConcurrencyDraft = normalizeHubVmServerConcurrency(event.target.value, hubVmServerFleetConcurrencyDraft || 3);
+  });
+  $("#hub-fleet-reclone-btn", container)?.addEventListener("click", () => {
+    startHubFleetReclone().catch(err => showToast(err?.message || "Unable to queue fleet reclone.", "error"));
+  });
   container.querySelectorAll(".hub-vmserver-spoke-card").forEach(card => {
     const openCard = () => {
       hubVmServerSelectedSpoke = card.dataset.spokeId;
@@ -9275,6 +9405,7 @@ function renderHubVmServer() {
     card.addEventListener("click", openCard);
     card.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") openCard(); });
   });
+  scheduleHubVmServerFleetPoll();
 }
 
 // ── Hub VM Server drill-in view ──────────────────────────────────────────────
@@ -9732,41 +9863,46 @@ function renderHubConfigPage(data) {
 async function loadVmServer(force = false) {
   const container = $("#hub-vm-server-content");
   if (!container) return;
-  if (!currentTenantId || !currentUser) {
+  const tenantId = getActiveTenantId();
+  if (!tenantId || !currentUser) {
     aggregateProxmoxHosts = [];
+    aggregateFleetRecloneStatus = defaultFleetRecloneStatus();
+    aggregateUsbProvisioningStatus = defaultUsbProvisioningStatus();
     renderHubVmServer();
     return;
   }
 
-  const cacheKey = `hub_vmserver_${currentTenantId}`;
+  const cacheKey = `hub_vmserver_${tenantId}`;
   const saveCache = (hosts) => { try { localStorage.setItem(cacheKey, JSON.stringify(hosts)); } catch (_) {} };
   const loadCache = () => { try { const s = localStorage.getItem(cacheKey); return s ? JSON.parse(s) : null; } catch (_) { return null; } };
 
   const revalidate = async () => {
-    const fresh = await loadAggregateData("proxmox");
+    const [fresh] = await Promise.all([
+      loadAggregateData("proxmox"),
+      loadHubVmServerAggregateStatus(),
+    ]);
     const hosts = fresh?.hosts || [];
     aggregateProxmoxHosts = hosts;
     saveCache(hosts);
     renderHubVmServer();
   };
 
-  // In-memory hit — render immediately + silent background revalidate
   if (!force && aggregateProxmoxHosts.length) {
+    await loadHubVmServerAggregateStatus();
     renderHubVmServer();
     revalidate();
     return;
   }
 
-  // localStorage hit — render stale immediately + background revalidate
   const cached = loadCache();
   if (!force && cached && cached.length) {
     aggregateProxmoxHosts = cached;
+    await loadHubVmServerAggregateStatus();
     renderHubVmServer();
     revalidate();
     return;
   }
 
-  // No cache — blocking fetch
   container.innerHTML = '<div class="empty-state">Loading…</div>';
   await revalidate();
 }

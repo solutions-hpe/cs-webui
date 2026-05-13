@@ -10024,16 +10024,13 @@ function closeHubSiteDetail() {
 function renderHubCentralAlerts() {
   const container = $("#hcs-alerts-content");
   if (!container || !hubCentralData) return;
-  const alerts = (hubCentralData.spokes || []).flatMap(s =>
-    (s.hardware_alerts || []).map(a => ({ ...a, spoke_name: s.spoke_name }))
-  );
+  const alerts = (hubCentralData.spokes || []).flatMap(s => s.hardware_alerts || []);
   if (!alerts.length) {
     container.innerHTML = '<div class="empty-state">No active hardware alerts.</div>';
     return;
   }
   const rows = alerts.map(a => `
     <tr>
-      <td>${escHtml(a.spoke_name || '—')}</td>
       <td>${escHtml(a.name || a.id || '—')}</td>
       <td>${a.total ?? 0}</td>
       <td>${escHtml(Object.keys(a.sites || {}).join(', ') || '—')}</td>
@@ -10041,7 +10038,7 @@ function renderHubCentralAlerts() {
   container.innerHTML = `
     <div class="setup-card">
       <table class="data-table">
-        <thead><tr><th>Spoke</th><th>Alert</th><th>Affected</th><th>Sites</th></tr></thead>
+        <thead><tr><th>Alert</th><th>Affected</th><th>Sites</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
@@ -10053,7 +10050,6 @@ function renderHubCentralClients() {
   const rows = (hubCentralData.spokes || []).flatMap(s =>
     (s.sites || []).map(site => `
       <tr>
-        <td>${escHtml(s.spoke_name || s.spoke_id)}</td>
         <td>${escHtml(site.wsite)}</td>
         <td>${escHtml(site.central_site || '—')}</td>
         <td>${site.wireless_clients ?? '—'}</td>
@@ -10066,7 +10062,7 @@ function renderHubCentralClients() {
   container.innerHTML = `
     <div class="setup-card">
       <table class="data-table">
-        <thead><tr><th>Spoke</th><th>Site</th><th>Central Site</th><th>Wireless Clients</th></tr></thead>
+        <thead><tr><th>Site</th><th>Central Site</th><th>Wireless Clients</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;

@@ -440,7 +440,6 @@
       <div class="page-toolbar"><span class="server-node-name">Setup</span></div>
       <nav class="setup-subnav">
         <button class="setup-subtab settings-subtab active" data-subtab="settings-account" type="button">Account</button>
-        <button class="setup-subtab settings-subtab" data-subtab="settings-aruba" type="button">Aruba Central</button>
         <button class="setup-subtab settings-subtab" data-subtab="settings-notifications" type="button">Notifications</button>
         <button class="setup-subtab settings-subtab" data-subtab="settings-api" type="button">API Info</button>
         <button class="setup-subtab settings-subtab" data-subtab="settings-tls" type="button">TLS Certificate</button>
@@ -458,25 +457,6 @@
               <div class="form-actions">
                 <button id="pw-save-btn" class="btn btn-primary" type="button">Save Password</button>
                 <span id="pw-msg" class="form-msg"></span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div id="settings-aruba" class="setup-subpanel hidden" style="margin-top:16px;">
-          <div class="setup-card" style="max-width:600px;">
-            <div class="setup-card-header"><h2>Aruba Central Config</h2><p>Configure Aruba Central API credentials for this tenant.</p></div>
-            <div class="setup-form">
-              <div class="form-group"><label class="form-label" for="aruba-api-version">API Version</label>
-                <select id="aruba-api-version" class="form-input"><option value="classic">Classic</option><option value="new_central">Central / HPE GreenLake</option></select>
-              </div>
-              <div class="form-group"><label class="form-label" for="aruba-cluster-url">Cluster URL</label><input id="aruba-cluster-url" type="url" class="form-input" placeholder="https://apigw-prod2.central.arubanetworks.com"></div>
-              <div class="form-group"><label class="form-label" for="aruba-client-id">Client ID</label><input id="aruba-client-id" type="text" class="form-input"></div>
-              <div class="form-group"><label class="form-label" for="aruba-client-secret">Client Secret</label><input id="aruba-client-secret" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true"></div>
-              <div class="form-group"><label class="form-label" for="aruba-customer-id">Customer ID (CID)</label><input id="aruba-customer-id" type="text" class="form-input"></div>
-              <div class="form-actions">
-                <button id="aruba-save-btn" class="btn btn-primary" type="button">Save Config</button>
-                <span id="aruba-msg" class="form-msg"></span>
               </div>
             </div>
           </div>

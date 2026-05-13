@@ -10441,20 +10441,14 @@ async function loadHubSettings() {
   $("#api-inbox-url") && ($("#api-inbox-url").textContent = `GET ${apiBase}/inbox`);
   $("#api-ack-url") && ($("#api-ack-url").textContent = `POST ${apiBase}/ack`);
   const disabled = !canManageTenant();
-  ["aruba-save-btn", "notif-save-btn", "acme-request-btn"].forEach(id => { const btn = document.getElementById(id); if (btn) btn.disabled = disabled; });
+  ["notif-save-btn", "acme-request-btn"].forEach(id => { const btn = document.getElementById(id); if (btn) btn.disabled = disabled; });
   // Load tenant admin pending spokes whenever settings tab opens
   if (canManageTenant() && !currentUser?.is_superadmin) loadTenantPendingSpokes();
   if (canManageTenant()) loadHubConfig();
   const res = await apiFetch(`/api/${encodeURIComponent(currentTenantId)}/settings`);
   if (!res || !res.ok) return;
   const data = await res.json();
-  const aruba = data.aruba || {};
   const notifications = data.notifications || {};
-  $("#aruba-api-version") && ($("#aruba-api-version").value = aruba.api_version || "classic");
-  $("#aruba-cluster-url") && ($("#aruba-cluster-url").value = aruba.cluster_url || "");
-  $("#aruba-client-id") && ($("#aruba-client-id").value = aruba.client_id || "");
-  $("#aruba-customer-id") && ($("#aruba-customer-id").value = aruba.customer_id || data.tenant?.aruba_cid || "");
-  setSecretInputConfigured($("#aruba-client-secret"), isConfiguredSecretValue(aruba.client_secret_configured ?? aruba.client_secret_set ?? aruba.client_secret));
   $("#notif-enabled") && ($("#notif-enabled").checked = Boolean(notifications.enabled));
   setSecretInputConfigured($("#notif-teams"), isConfiguredSecretValue(notifications.teams_webhook_url_configured ?? notifications.teams_webhook_url_set ?? notifications.teams_webhook_url));
   $("#notif-smtp-host") && ($("#notif-smtp-host").value = notifications.smtp_host || "");
@@ -10486,27 +10480,6 @@ async function savePassword() {
   }
   setFormMessage("pw-msg", "Password updated.", true);
   ["pw-current", "pw-new", "pw-confirm"].forEach(id => { const input = document.getElementById(id); if (input) input.value = ""; });
-}
-
-async function saveArubaSettings() {
-  if (!currentTenantId) return;
-  const payload = {
-    api_version: $("#aruba-api-version")?.value || "classic",
-    cluster_url: $("#aruba-cluster-url")?.value.trim() || "",
-    client_id: $("#aruba-client-id")?.value.trim() || "",
-    customer_id: $("#aruba-customer-id")?.value.trim() || "",
-  };
-  const arubaSecret = getSecretInputPayload($("#aruba-client-secret"));
-  if (arubaSecret.include) payload.client_secret = arubaSecret.value;
-
-  const res = await apiFetch(`/api/${encodeURIComponent(currentTenantId)}/settings/aruba`, { method: "POST", body: payload });
-  if (!res || !res.ok) {
-    const err = await readJson(res);
-    setFormMessage("aruba-msg", err?.detail || "Unable to save Aruba settings.", false);
-    return;
-  }
-  setFormMessage("aruba-msg", "Aruba settings saved.", true);
-  await loadHubSettings();
 }
 
 async function saveNotificationSettings() {
@@ -11537,7 +11510,7 @@ function bindEvents() {
     if (setupButton) {
       const subtab = setupButton.dataset.subtab;
       $$(".settings-subtab").forEach(button => button.classList.toggle("active", button.dataset.subtab === subtab));
-      ["settings-account", "settings-aruba", "settings-notifications", "settings-api", "settings-tls", "settings-pending-spokes"].forEach(panelId => {
+      ["settings-account", "settings-notifications", "settings-api", "settings-tls", "settings-pending-spokes"].forEach(panelId => {
         document.getElementById(panelId)?.classList.toggle("hidden", panelId !== subtab);
       });
       if (subtab === "settings-tls") loadAcmeSettings().catch(() => {});
@@ -11655,7 +11628,6 @@ function bindEvents() {
   $("#spoke-modal")?.addEventListener("click", event => { if (event.target === event.currentTarget) closeSpokeModal(); });
   $("#mode-save-btn")?.addEventListener("click", saveSpokeProcessingMode);
   $("#pw-save-btn")?.addEventListener("click", savePassword);
-  $("#aruba-save-btn")?.addEventListener("click", saveArubaSettings);
   $("#notif-save-btn")?.addEventListener("click", saveNotificationSettings);
   $("#hub-config-save-btn")?.addEventListener("click", saveHubConfig);
   $("#hub-config-enabled-toggle")?.addEventListener("change", function () {

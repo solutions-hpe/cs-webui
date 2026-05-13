@@ -9417,7 +9417,7 @@ function logout(showMessage = true) {
   aggregateApiServerRows = [];
   aggregateCentralData = null;
   hubConfigDraft = "";
-  resetHubSimulationConfState(tenantId);
+  resetHubSimulationConfState(currentTenantId);
   hubClientUiState.expandedByTenant = {};
   hubClientUiState.seenSitesByTenant = {};
   hubVmServerSelectedSpoke = null;

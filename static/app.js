@@ -11976,25 +11976,25 @@ function renderHubCentralClients() {
 
 async function populateSpokeSelect(selectEl, tenantId, preferredSpokeId = "") {
   if (!selectEl || !tenantId) return "";
-  const data = await loadAggregateDataForTenant(tenantId, "proxmox");
-  const hosts = Array.isArray(data?.hosts) ? data.hosts : [];
+  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes`);
+  const spokes = (res?.ok ? await res.json() : null) || [];
   selectEl.innerHTML = "";
-  if (!hosts.length) {
+  if (!spokes.length) {
     const opt = document.createElement("option");
     opt.value = "";
     opt.textContent = "No spokes available";
     selectEl.appendChild(opt);
     return "";
   }
-  hosts.forEach((host) => {
+  spokes.forEach((spoke) => {
     const opt = document.createElement("option");
-    opt.value = host.spoke_id;
-    opt.textContent = host.spoke_name || host.spoke_id;
+    opt.value = spoke.id;
+    opt.textContent = spoke.spoke_name || spoke.hostname || spoke.id;
     selectEl.appendChild(opt);
   });
-  const nextValue = hosts.some((host) => host.spoke_id === preferredSpokeId)
+  const nextValue = spokes.some((s) => s.id === preferredSpokeId)
     ? preferredSpokeId
-    : (hosts[0]?.spoke_id || "");
+    : (spokes[0]?.id || "");
   selectEl.value = nextValue;
   return selectEl.value;
 }

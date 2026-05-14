@@ -9858,6 +9858,14 @@ async function loadUserContext() {
   if (tenants.length && !tenants.some(tenant => tenant.id === currentTenantId)) {
     currentTenantId = tenants[0].id;
   }
+  // Non-superadmin users go straight into tenant context — they have no dashboard to select from
+  if (!currentUser.is_superadmin && currentTenantId) {
+    tenantContextActive = true;
+  }
+  // Non-superadmin users go straight into tenant context — they have no dashboard to select from
+  if (!currentUser.is_superadmin && currentTenantId) {
+    tenantContextActive = true;
+  }
   applyAuthUI();
   syncHubPermissionUI();
   populateCommandSpokeSelect();
@@ -9865,6 +9873,13 @@ async function loadUserContext() {
   // appears immediately on login without needing to open Hub Setup first.
   if (!currentUser?.is_superadmin && currentTenantId && canManageTenant()) {
     loadTenantPendingSpokes();
+  }
+  // For tenant users, load spokes immediately and navigate to spokes tab
+  if (!currentUser.is_superadmin && currentTenantId) {
+    ensureTenantSpokesFor(currentTenantId, true).then(() => {
+      if (activeTab === "dashboard") showTab("spokes");
+      else refreshCurrentView(true).catch(() => {});
+    }).catch(() => {});
   }
 }
 

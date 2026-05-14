@@ -157,6 +157,7 @@ let currentSettings = {
   relay_poll_interval: 60,
   relay_api_key_configured: false,
   admin_password_configured: false,
+  session_timeout_minutes: 30,
   auth_provider: 'local',
   auth_ldap_url: '',
   auth_ldap_bind_dn: '',
@@ -707,6 +708,7 @@ const adminPasswordInput = document.getElementById('admin-password-input');
 const adminPasswordStatus = document.getElementById('admin-password-status');
 const adminPasswordSaveBtn = document.getElementById('admin-password-save-btn');
 const adminPasswordMsg = document.getElementById('admin-password-message');
+const sessionTimeoutMinutesInput = document.getElementById('session-timeout-minutes-input');
 const spokeUserPill = document.getElementById('spoke-user-pill');
 const spokeUserName = document.getElementById('spoke-user-name');
 const spokeUserRole = document.getElementById('spoke-user-role');
@@ -920,6 +922,7 @@ function mergeSettings(next = {}) {
     relay_poll_interval: next.relay_poll_interval ?? currentSettings.relay_poll_interval ?? 60,
     relay_api_key_configured: next.relay_api_key_configured ?? currentSettings.relay_api_key_configured ?? false,
     admin_password_configured: next.admin_password_configured ?? currentSettings.admin_password_configured ?? false,
+    session_timeout_minutes: next.session_timeout_minutes ?? currentSettings.session_timeout_minutes ?? 30,
     auth_provider: next.auth_provider ?? currentSettings.auth_provider ?? 'local',
     auth_ldap_url: next.auth_ldap_url ?? currentSettings.auth_ldap_url ?? '',
     auth_ldap_bind_dn: next.auth_ldap_bind_dn ?? currentSettings.auth_ldap_bind_dn ?? '',
@@ -1124,6 +1127,9 @@ function applySpokeAuthSettingsToUI(settings = currentSettings) {
   window.__SPOKE_AUTH_PROVIDER__ = provider;
   setInputValueIfIdle(spokeLdapUrlInput, settings.auth_ldap_url || '');
   setInputValueIfIdle(spokeLdapBindDnInput, settings.auth_ldap_bind_dn || '');
+  if (sessionTimeoutMinutesInput && !sessionTimeoutMinutesInput.matches(':focus')) {
+    sessionTimeoutMinutesInput.value = settings.session_timeout_minutes ?? 30;
+  }
   setSecretInputConfigured(spokeLdapBindPasswordInput, settings.auth_ldap_bind_password_configured);
   setInputValueIfIdle(spokeLdapUserBaseInput, settings.auth_ldap_user_base || '');
   setInputValueIfIdle(spokeLdapUserFilterInput, settings.auth_ldap_user_filter || '(&(objectClass=user)(sAMAccountName={username}))');
@@ -1150,8 +1156,16 @@ async function loadSpokeAuthSettings(settingsData = null) {
 
 async function saveSpokeAuthSettings() {
   const provider = normalizeSpokeAuthProvider(String(spokeAuthProviderSelect?.value || currentSettings.auth_provider || 'local').trim().toLowerCase());
+  const sessionTimeoutMinutes = Number.parseInt(sessionTimeoutMinutesInput?.value || currentSettings.session_timeout_minutes || 30, 10);
+  if (!Number.isFinite(sessionTimeoutMinutes) || sessionTimeoutMinutes < 5 || sessionTimeoutMinutes > 1440) {
+    const error = new Error('Session timeout must be between 5 and 1440 minutes.');
+    error.handled = true;
+    showInlineMessage(spokeAuthSettingsMsg, error.message, true, 7000);
+    throw error;
+  }
   const payload = {
     auth_provider: provider,
+    session_timeout_minutes: sessionTimeoutMinutes,
     auth_ldap_url: spokeLdapUrlInput?.value?.trim() || '',
     auth_ldap_bind_dn: spokeLdapBindDnInput?.value?.trim() || '',
     auth_ldap_user_base: spokeLdapUserBaseInput?.value?.trim() || '',
@@ -2098,7 +2112,7 @@ if (spokeAuthSettingsSaveBtn) {
     try {
       await saveSpokeAuthSettings();
     } catch (error) {
-      showInlineMessage(spokeAuthSettingsMsg, `Error: ${error.message}`, true, 7000);
+      if (!error?.handled) showInlineMessage(spokeAuthSettingsMsg, `Error: ${error.message}`, true, 7000);
     } finally {
       spokeAuthSettingsSaveBtn.disabled = false;
       spokeAuthSettingsSaveBtn.textContent = originalLabel;

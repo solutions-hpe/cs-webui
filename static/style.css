@@ -2026,8 +2026,15 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--hpe-navy-dark);
   z-index: 150;
+}
+
+#hub-login-overlay {
+  background: var(--hpe-navy-dark);
+}
+
+#spoke-login-overlay {
+  background: #ffffff;
 }
 
 #spoke-login-overlay.hidden { display: none; }

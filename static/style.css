@@ -702,6 +702,8 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   flex-wrap: wrap;
 }
 .setup-subtab {
+  display: inline-flex;
+  align-items: center;
   padding: 6px 16px;
   border: 1px solid var(--border);
   background: transparent;
@@ -710,6 +712,7 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   font-weight: 500;
   cursor: pointer;
   border-radius: 20px;
+  line-height: 1.2;
   transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
 .setup-subtab:hover { color: var(--text); background: var(--hover, #f0f0f0); }
@@ -2333,7 +2336,7 @@ details[open] > summary.panel-header { margin-bottom: 16px; }
 
 /* Topbar brand/right only — center div removed */
 .topbar-brand { display: flex; align-items: center; }
-.badge-count { background: var(--hpe-green); color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 11px; margin-left: 6px; }
+.badge-count { background: var(--hpe-green); color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 11px; margin-left: 6px; flex-shrink: 0; }
 
 .topbar-brand { display: flex; align-items: center; }
 .topbar-right { gap: 12px; }

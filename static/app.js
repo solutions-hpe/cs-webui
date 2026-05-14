@@ -7622,6 +7622,7 @@ let aggregateApiServerRows = [];
 let aggregateCentralData = null;
 let hubCentralData = null;
 let hubCentralActiveSubtab = "hcs-sites";
+let hubTenantSetupActiveSubtab = "ts-setup";
 let hubCentralSiteOpen = null;
 let hubConfigDraft = "";
 let hubConfigActiveSubtab = "api";
@@ -11973,6 +11974,363 @@ function renderHubCentralClients() {
     </div>`;
 }
 
+async function populateSpokeSelect(selectEl, tenantId, preferredSpokeId = "") {
+  if (!selectEl || !tenantId) return "";
+  const data = await loadAggregateDataForTenant(tenantId, "proxmox");
+  const hosts = Array.isArray(data?.hosts) ? data.hosts : [];
+  selectEl.innerHTML = "";
+  if (!hosts.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "No spokes available";
+    selectEl.appendChild(opt);
+    return "";
+  }
+  hosts.forEach((host) => {
+    const opt = document.createElement("option");
+    opt.value = host.spoke_id;
+    opt.textContent = host.spoke_name || host.spoke_id;
+    selectEl.appendChild(opt);
+  });
+  const nextValue = hosts.some((host) => host.spoke_id === preferredSpokeId)
+    ? preferredSpokeId
+    : (hosts[0]?.spoke_id || "");
+  selectEl.value = nextValue;
+  return selectEl.value;
+}
+
+async function loadSpokeConfig(tenantId, spokeId) {
+  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/config`);
+  const data = await readJson(res);
+  if (!res || !res.ok) throw new Error(data?.detail || "Unable to load spoke config.");
+  return data || {};
+}
+
+async function pushSpokeConfig(tenantId, spokeId, config) {
+  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/config`, {
+    method: "POST",
+    body: config,
+  });
+  const data = await readJson(res);
+  if (!res || !res.ok) throw new Error(data?.detail || "Unable to push spoke config.");
+  return data || {};
+}
+
+function setHubTenantSetupPanels(subtab = hubTenantSetupActiveSubtab) {
+  $$(".hub-ts-subtab").forEach((button) => button.classList.toggle("active", button.dataset.subtab === subtab));
+  [
+    "ts-setup-panel",
+    "ts-central-api-panel",
+    "ts-proxmox-panel",
+    "ts-github-panel",
+    "ts-security-panel",
+    "ts-notifications-panel",
+    "ts-troubleshoot-panel",
+  ].forEach((panelId) => {
+    document.getElementById(panelId)?.classList.toggle("hidden", panelId !== `${subtab}-panel`);
+  });
+}
+
+function ensureSelectHasOption(selectEl, value, label = value) {
+  if (!selectEl || !value) return;
+  if (![...selectEl.options].some((option) => option.value === value)) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    selectEl.appendChild(option);
+  }
+}
+
+function formatTsBool(value, positive = "Yes", negative = "No") {
+  if (value === null || value === undefined || value === "") return "—";
+  return value ? positive : negative;
+}
+
+function setTroubleshootField(id, value) {
+  const element = document.getElementById(id);
+  if (element) element.textContent = value ?? "—";
+}
+
+async function initTsProxmoxTab(tenantId) {
+  const select = $("#ts-proxmox-spoke-select");
+  const saveBtn = $("#ts-proxmox-save-btn");
+  const msg = $("#ts-proxmox-msg");
+  if (!select || !saveBtn || !tenantId) return;
+  saveBtn.disabled = !canManageTenant(tenantId);
+  const currentSpokeId = select.value;
+  await populateSpokeSelect(select, tenantId, currentSpokeId);
+
+  const loadProxmox = async () => {
+    const spokeId = select.value;
+    if (!spokeId) {
+      showInlineMessage(msg, "No spokes available for this tenant.", true);
+      return;
+    }
+    const data = await loadSpokeConfig(tenantId, spokeId);
+    const cfg = data.config || {};
+    const autoProvision = cfg.usb_auto_provision === true || String(cfg.usb_auto_provision || "").toLowerCase() === "on";
+    $("#ts-usb-auto-provision") && ($("#ts-usb-auto-provision").checked = autoProvision);
+    $("#ts-usb-missing-timeout") && ($("#ts-usb-missing-timeout").value = cfg.usb_missing_timeout ?? 60);
+    $("#ts-usb-max-slots") && ($("#ts-usb-max-slots").value = cfg.usb_max_slots ?? 24);
+    $("#ts-vm-image-1-template-id") && ($("#ts-vm-image-1-template-id").value = cfg.vm_image_1_template_id ?? 100);
+    $("#ts-vm-image-2-template-id") && ($("#ts-vm-image-2-template-id").value = cfg.vm_image_2_template_id ?? 200);
+    $("#ts-vm-image-1-pct") && ($("#ts-vm-image-1-pct").value = cfg.vm_image_1_pct ?? 50);
+    $("#ts-reclone-concurrency") && ($("#ts-reclone-concurrency").value = cfg.reclone_concurrency ?? 1);
+    showInlineMessage(msg, "", false, 0);
+  };
+
+  select.onchange = () => { void loadProxmox().catch((error) => showInlineMessage(msg, error.message || "Failed to load Proxmox settings.", true)); };
+  saveBtn.onclick = async () => {
+    const spokeId = select.value;
+    if (!spokeId) return;
+    const config = {
+      usb_auto_provision: $("#ts-usb-auto-provision")?.checked ? "on" : "off",
+      usb_missing_timeout: parseInt($("#ts-usb-missing-timeout")?.value || "60", 10) || 60,
+      usb_max_slots: parseInt($("#ts-usb-max-slots")?.value || "24", 10) || 24,
+      vm_image_1_template_id: parseInt($("#ts-vm-image-1-template-id")?.value || "100", 10) || 100,
+      vm_image_2_template_id: parseInt($("#ts-vm-image-2-template-id")?.value || "200", 10) || 200,
+      vm_image_1_pct: parseInt($("#ts-vm-image-1-pct")?.value || "50", 10) || 50,
+      reclone_concurrency: parseInt($("#ts-reclone-concurrency")?.value || "1", 10) || 1,
+    };
+    try {
+      await pushSpokeConfig(tenantId, spokeId, config);
+      showInlineMessage(msg, "Pushed to spoke ✓", false);
+    } catch (error) {
+      showInlineMessage(msg, error.message || "Failed to push Proxmox settings.", true);
+    }
+  };
+
+  await loadProxmox();
+}
+
+async function initTsGithubTab(tenantId) {
+  const select = $("#ts-github-spoke-select");
+  const saveBtn = $("#ts-github-save-btn");
+  const msg = $("#ts-github-msg");
+  const tokenInput = $("#ts-github-token-input");
+  if (!select || !saveBtn || !tenantId) return;
+  saveBtn.disabled = !canManageTenant(tenantId);
+  await populateSpokeSelect(select, tenantId, select.value);
+
+  const loadGithub = async () => {
+    const spokeId = select.value;
+    if (!spokeId) {
+      showInlineMessage(msg, "No spokes available for this tenant.", true);
+      return;
+    }
+    const data = await loadSpokeConfig(tenantId, spokeId);
+    const cfg = data.config || {};
+    $("#ts-branch-input") && ($("#ts-branch-input").value = cfg.repo_branch ?? "");
+    if (tokenInput) tokenInput.value = "";
+    resetSecretInput(tokenInput);
+    showInlineMessage(msg, "", false, 0);
+  };
+
+  select.onchange = () => { void loadGithub().catch((error) => showInlineMessage(msg, error.message || "Failed to load GitHub settings.", true)); };
+  saveBtn.onclick = async () => {
+    const spokeId = select.value;
+    if (!spokeId) return;
+    const payload = {
+      repo_branch: $("#ts-branch-input")?.value.trim() || "main",
+    };
+    const tokenSecret = getSecretInputPayload(tokenInput);
+    if (tokenSecret.include) payload.github_token = tokenSecret.value.trim();
+    try {
+      await pushSpokeConfig(tenantId, spokeId, payload);
+      resetSecretInput(tokenInput);
+      showInlineMessage(msg, "GitHub settings pushed ✓", false);
+    } catch (error) {
+      showInlineMessage(msg, error.message || "Failed to push GitHub settings.", true);
+    }
+  };
+
+  await loadGithub();
+}
+
+async function initTsSecurityTab(tenantId) {
+  const select = $("#ts-security-spoke-select");
+  const saveBtn = $("#ts-security-save-btn");
+  const msg = $("#ts-security-msg");
+  const providerSelect = $("#ts-auth-provider");
+  if (!select || !saveBtn || !tenantId) return;
+  saveBtn.disabled = !canManageTenant(tenantId);
+  await populateSpokeSelect(select, tenantId, select.value);
+
+  const loadSecurity = async () => {
+    const spokeId = select.value;
+    if (!spokeId) {
+      showInlineMessage(msg, "No spokes available for this tenant.", true);
+      return;
+    }
+    const data = await loadSpokeConfig(tenantId, spokeId);
+    const cfg = data.config || {};
+    $("#ts-session-timeout") && ($("#ts-session-timeout").value = cfg.session_timeout_minutes ?? 30);
+    const provider = String(cfg.auth_provider || "local").toLowerCase();
+    ensureSelectHasOption(providerSelect, provider, provider.toUpperCase());
+    if (providerSelect) providerSelect.value = provider;
+    showInlineMessage(msg, "", false, 0);
+  };
+
+  select.onchange = () => { void loadSecurity().catch((error) => showInlineMessage(msg, error.message || "Failed to load security settings.", true)); };
+  saveBtn.onclick = async () => {
+    const spokeId = select.value;
+    if (!spokeId) return;
+    const payload = {
+      session_timeout_minutes: parseInt($("#ts-session-timeout")?.value || "30", 10) || 30,
+      auth_provider: providerSelect?.value || "local",
+    };
+    try {
+      await pushSpokeConfig(tenantId, spokeId, payload);
+      showInlineMessage(msg, "Security settings pushed ✓", false);
+    } catch (error) {
+      showInlineMessage(msg, error.message || "Failed to push security settings.", true);
+    }
+  };
+
+  await loadSecurity();
+}
+
+async function initTsNotificationsTab(tenantId) {
+  const select = $("#ts-notifications-spoke-select");
+  const saveBtn = $("#ts-notifications-save-btn");
+  const msg = $("#ts-notifications-msg");
+  const smtpPasswordInput = $("#ts-notif-smtp-password");
+  const teamsWebhookInput = $("#ts-notif-teams-webhook");
+  if (!select || !saveBtn || !tenantId) return;
+  saveBtn.disabled = !canManageTenant(tenantId);
+  await populateSpokeSelect(select, tenantId, select.value);
+
+  const loadNotifications = async () => {
+    const spokeId = select.value;
+    if (!spokeId) {
+      showInlineMessage(msg, "No spokes available for this tenant.", true);
+      return;
+    }
+    const data = await loadSpokeConfig(tenantId, spokeId);
+    const notif = data.config?.notifications || {};
+    $("#ts-notif-email-enabled") && ($("#ts-notif-email-enabled").checked = !!notif.email_enabled);
+    $("#ts-notif-teams-enabled") && ($("#ts-notif-teams-enabled").checked = !!notif.teams_enabled);
+    $("#ts-notif-smtp-host") && ($("#ts-notif-smtp-host").value = notif.smtp_host || "");
+    $("#ts-notif-smtp-port") && ($("#ts-notif-smtp-port").value = notif.smtp_port ?? 587);
+    $("#ts-notif-smtp-user") && ($("#ts-notif-smtp-user").value = notif.smtp_user || "");
+    $("#ts-notif-smtp-from") && ($("#ts-notif-smtp-from").value = notif.smtp_from || "");
+    $("#ts-notif-smtp-to") && ($("#ts-notif-smtp-to").value = Array.isArray(notif.smtp_to) ? notif.smtp_to.join(", ") : (notif.smtp_to || ""));
+    if (smtpPasswordInput) {
+      smtpPasswordInput.value = "";
+      setSecretInputConfigured(smtpPasswordInput, Boolean(notif.smtp_password || notif.smtp_password_configured));
+    }
+    if (teamsWebhookInput) {
+      teamsWebhookInput.value = "";
+      setSecretInputConfigured(teamsWebhookInput, Boolean(notif.teams_webhook_url || notif.teams_webhook_url_configured));
+    }
+    showInlineMessage(msg, "", false, 0);
+  };
+
+  select.onchange = () => { void loadNotifications().catch((error) => showInlineMessage(msg, error.message || "Failed to load notification settings.", true)); };
+  saveBtn.onclick = async () => {
+    const spokeId = select.value;
+    if (!spokeId) return;
+    try {
+      const current = await loadSpokeConfig(tenantId, spokeId);
+      const existing = current.config?.notifications || {};
+      const notifications = {
+        ...existing,
+        email_enabled: $("#ts-notif-email-enabled")?.checked ?? false,
+        teams_enabled: $("#ts-notif-teams-enabled")?.checked ?? false,
+        smtp_host: $("#ts-notif-smtp-host")?.value.trim() || "",
+        smtp_port: parseInt($("#ts-notif-smtp-port")?.value || "587", 10) || 587,
+        smtp_user: $("#ts-notif-smtp-user")?.value.trim() || "",
+        smtp_from: $("#ts-notif-smtp-from")?.value.trim() || "",
+        smtp_to: ($("#ts-notif-smtp-to")?.value || "").split(",").map((item) => item.trim()).filter(Boolean),
+      };
+      const smtpSecret = getSecretInputPayload(smtpPasswordInput);
+      if (smtpSecret.include) notifications.smtp_password = smtpSecret.value;
+      const teamsSecret = getSecretInputPayload(teamsWebhookInput);
+      if (teamsSecret.include) notifications.teams_webhook_url = teamsSecret.value.trim();
+      await pushSpokeConfig(tenantId, spokeId, { notifications });
+      resetSecretInput(smtpPasswordInput);
+      resetSecretInput(teamsWebhookInput);
+      showInlineMessage(msg, "Notification settings pushed ✓", false);
+    } catch (error) {
+      showInlineMessage(msg, error.message || "Failed to push notification settings.", true);
+    }
+  };
+
+  await loadNotifications();
+}
+
+async function initTsTroubleshootTab(tenantId) {
+  const select = $("#ts-troubleshoot-spoke-select");
+  const updateBtn = $("#ts-troubleshoot-update-btn");
+  const msg = $("#ts-troubleshoot-msg");
+  if (!select || !updateBtn || !tenantId) return;
+  updateBtn.disabled = !canManageTenant(tenantId);
+  await populateSpokeSelect(select, tenantId, select.value);
+
+  const loadTroubleshoot = async () => {
+    const spokeId = select.value;
+    if (!spokeId) {
+      setTroubleshootField("ts-trbl-version", "—");
+      setTroubleshootField("ts-trbl-repo-synced", "—");
+      setTroubleshootField("ts-trbl-repo-error", "—");
+      setTroubleshootField("ts-trbl-installer-version", "—");
+      showInlineMessage(msg, "No spokes available for this tenant.", true);
+      return;
+    }
+    const data = await loadSpokeConfig(tenantId, spokeId);
+    const health = data.telemetry?.api_server?.health || {};
+    setTroubleshootField("ts-trbl-version", health.version || "—");
+    setTroubleshootField("ts-trbl-repo-synced", health.repo_synced != null ? formatTsBool(Boolean(health.repo_synced), "Yes", "No") : "—");
+    setTroubleshootField("ts-trbl-repo-error", health.repo_error || "None");
+    setTroubleshootField("ts-trbl-installer-version", health.installer_version || "—");
+    showInlineMessage(msg, "", false, 0);
+  };
+
+  select.onchange = () => { void loadTroubleshoot().catch((error) => showInlineMessage(msg, error.message || "Failed to load troubleshooting data.", true)); };
+  updateBtn.onclick = async () => {
+    const spokeId = select.value;
+    if (!spokeId) return;
+    const ok = await sendCommandToSpoke(tenantId, spokeId, "update_now");
+    showInlineMessage(msg, ok ? "Update queued for spoke ✓" : "Failed to queue update.", !ok);
+  };
+
+  await loadTroubleshoot();
+}
+
+async function initHubTenantSetupSubtab(subtab = hubTenantSetupActiveSubtab, force = false) {
+  const tenantId = getActiveTenantId();
+  if (!tenantId || !currentUser) return;
+  if (subtab === "ts-central-api") {
+    await loadCentral(force);
+    return;
+  }
+  if (subtab === "ts-proxmox") {
+    await initTsProxmoxTab(tenantId);
+    return;
+  }
+  if (subtab === "ts-github") {
+    await initTsGithubTab(tenantId);
+    return;
+  }
+  if (subtab === "ts-security") {
+    await initTsSecurityTab(tenantId);
+    return;
+  }
+  if (subtab === "ts-notifications") {
+    await initTsNotificationsTab(tenantId);
+    return;
+  }
+  if (subtab === "ts-troubleshoot") {
+    await initTsTroubleshootTab(tenantId);
+  }
+}
+
+async function activateHubTenantSetupSubtab(subtab = "ts-setup", force = false) {
+  hubTenantSetupActiveSubtab = subtab || "ts-setup";
+  setHubTenantSetupPanels(hubTenantSetupActiveSubtab);
+  await initHubTenantSetupSubtab(hubTenantSetupActiveSubtab, force);
+}
+
 async function loadSetup() {
   await loadHubSettings();
 }
@@ -11988,7 +12346,7 @@ async function loadTenantSetup(force = false) {
   const data = await loadTenantDetailData(force);
   container.innerHTML = data ? renderTenantSetupPanel(data) : '<div class="empty-state">Unable to load tenant setup.</div>';
   if (data) hydrateTenantSetupPanel(data);
-  await loadCentral(force);
+  await activateHubTenantSetupSubtab(hubTenantSetupActiveSubtab, force);
 }
 
 async function loadConfig(force = false) {
@@ -13900,10 +14258,7 @@ function bindEvents() {
     const hTsButton = event.target.closest(".hub-ts-subtab");
     if (hTsButton) {
       const subtab = hTsButton.dataset.subtab;
-      $$(".hub-ts-subtab").forEach(b => b.classList.toggle("active", b.dataset.subtab === subtab));
-      ["ts-setup-panel", "ts-central-api-panel"].forEach(panelId => {
-        document.getElementById(panelId)?.classList.toggle("hidden", panelId !== `${subtab}-panel`);
-      });
+      activateHubTenantSetupSubtab(subtab).catch(() => {});
       return;
     }
 

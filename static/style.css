@@ -2026,7 +2026,7 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg);
+  background: var(--hpe-navy-dark);
   z-index: 150;
 }
 

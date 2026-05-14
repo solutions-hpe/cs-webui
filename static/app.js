@@ -7646,6 +7646,30 @@ const superadminBackupState = {
   vmProgress: {},
   completionNotified: false,
 };
+const HUB_AUTH_DEFAULTS = {
+  auth_provider: "local",
+  auth_ldap_url: "",
+  auth_ldap_bind_dn: "",
+  auth_ldap_bind_password_configured: false,
+  auth_ldap_user_base: "",
+  auth_ldap_user_filter: "(&(objectClass=user)(sAMAccountName={username}))",
+  auth_ldap_group_superadmin: "",
+  auth_ldap_group_tenant_admin: "",
+  auth_ldap_tenant_id: "",
+  auth_radius_host: "",
+  auth_radius_port: 1812,
+  auth_radius_secret_configured: false,
+  auth_radius_role_attr: "Filter-Id",
+  auth_radius_superadmin_val: "superadmin",
+  auth_tacacs_host: "",
+  auth_tacacs_port: 49,
+  auth_tacacs_secret_configured: false,
+  auth_tacacs_superadmin_priv: 15,
+  auth_default_role: "superadmin",
+};
+let hubAuthConfig = { ...HUB_AUTH_DEFAULTS };
+let hubAuthConfigLoaded = false;
+
 const HUB_RESEED_VM_ID = 100;
 const hubReseedState = {
   tenantId: null,
@@ -7666,6 +7690,10 @@ const hubReseedState = {
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
+
+function hubAuthEl(id) {
+  return document.getElementById(id);
+}
 
 function escHtml(value) {
   return String(value ?? "")
@@ -12940,12 +12968,167 @@ async function requestAcmeCert() {
 window.saveAcmeConfig = saveAcmeConfig;
 window.requestAcmeCert = requestAcmeCert;
 
+function normalizeHubAuthProvider(provider) {
+  return ["local", "ldap", "radius", "tacacs"].includes(provider) ? provider : "local";
+}
+
+function normalizeHubAuthDefaultRole(role) {
+  return role === "tenant_admin" ? "tenant_admin" : "superadmin";
+}
+
+function normalizeHubAuthConfig(data = {}) {
+  return {
+    ...HUB_AUTH_DEFAULTS,
+    ...data,
+    auth_provider: normalizeHubAuthProvider(String(data.auth_provider || HUB_AUTH_DEFAULTS.auth_provider).trim().toLowerCase()),
+    auth_radius_port: Number.parseInt(data.auth_radius_port ?? HUB_AUTH_DEFAULTS.auth_radius_port, 10) || HUB_AUTH_DEFAULTS.auth_radius_port,
+    auth_tacacs_port: Number.parseInt(data.auth_tacacs_port ?? HUB_AUTH_DEFAULTS.auth_tacacs_port, 10) || HUB_AUTH_DEFAULTS.auth_tacacs_port,
+    auth_tacacs_superadmin_priv: Number.parseInt(data.auth_tacacs_superadmin_priv ?? HUB_AUTH_DEFAULTS.auth_tacacs_superadmin_priv, 10) || HUB_AUTH_DEFAULTS.auth_tacacs_superadmin_priv,
+    auth_default_role: normalizeHubAuthDefaultRole(String(data.auth_default_role || HUB_AUTH_DEFAULTS.auth_default_role).trim().toLowerCase()),
+  };
+}
+
+function renderHubAuthTenantOptions(selectedTenantId = "") {
+  const select = hubAuthEl("sa-auth-tenant-id");
+  if (!select) return;
+  const options = ['<option value="">Select tenant</option>'];
+  tenants.forEach((tenant) => {
+    const selected = tenant.id === selectedTenantId ? ' selected' : '';
+    options.push(`<option value="${escHtml(tenant.id)}"${selected}>${escHtml(tenant.name || tenant.id)}</option>`);
+  });
+  select.innerHTML = options.join("");
+}
+
+function updateHubAuthProviderVisibility(provider = hubAuthConfig.auth_provider || "local") {
+  const nextProvider = normalizeHubAuthProvider(String(provider || "local").trim().toLowerCase());
+  const providerSelect = hubAuthEl("sa-auth-provider");
+  if (providerSelect && !providerSelect.matches(":focus")) providerSelect.value = nextProvider;
+  hubAuthEl("sa-auth-ldap-fields")?.classList.toggle("hidden", nextProvider !== "ldap");
+  hubAuthEl("sa-auth-radius-fields")?.classList.toggle("hidden", nextProvider !== "radius");
+  hubAuthEl("sa-auth-tacacs-fields")?.classList.toggle("hidden", nextProvider !== "tacacs");
+}
+
+function applyHubAuthConfigToUi(config = hubAuthConfig) {
+  const next = normalizeHubAuthConfig(config);
+  hubAuthConfig = next;
+  renderHubAuthTenantOptions(next.auth_ldap_tenant_id || "");
+  setInputValueIfIdle(hubAuthEl("sa-auth-ldap-url"), next.auth_ldap_url || "");
+  setInputValueIfIdle(hubAuthEl("sa-auth-ldap-bind-dn"), next.auth_ldap_bind_dn || "");
+  setSecretInputConfigured(hubAuthEl("sa-auth-ldap-bind-password"), next.auth_ldap_bind_password_configured);
+  setInputValueIfIdle(hubAuthEl("sa-auth-ldap-user-base"), next.auth_ldap_user_base || "");
+  setInputValueIfIdle(hubAuthEl("sa-auth-ldap-user-filter"), next.auth_ldap_user_filter || HUB_AUTH_DEFAULTS.auth_ldap_user_filter);
+  setInputValueIfIdle(hubAuthEl("sa-auth-ldap-group-superadmin"), next.auth_ldap_group_superadmin || "");
+  setInputValueIfIdle(hubAuthEl("sa-auth-ldap-group-tenant-admin"), next.auth_ldap_group_tenant_admin || "");
+  setInputValueIfIdle(hubAuthEl("sa-auth-radius-host"), next.auth_radius_host || "");
+  setInputValueIfIdle(hubAuthEl("sa-auth-radius-role-attr"), next.auth_radius_role_attr || HUB_AUTH_DEFAULTS.auth_radius_role_attr);
+  setInputValueIfIdle(hubAuthEl("sa-auth-radius-superadmin-val"), next.auth_radius_superadmin_val || HUB_AUTH_DEFAULTS.auth_radius_superadmin_val);
+  setSecretInputConfigured(hubAuthEl("sa-auth-radius-secret"), next.auth_radius_secret_configured);
+  setInputValueIfIdle(hubAuthEl("sa-auth-tacacs-host"), next.auth_tacacs_host || "");
+  setSecretInputConfigured(hubAuthEl("sa-auth-tacacs-secret"), next.auth_tacacs_secret_configured);
+  const radiusPort = hubAuthEl("sa-auth-radius-port");
+  if (radiusPort && !radiusPort.matches(":focus")) radiusPort.value = next.auth_radius_port ?? HUB_AUTH_DEFAULTS.auth_radius_port;
+  const tacacsPort = hubAuthEl("sa-auth-tacacs-port");
+  if (tacacsPort && !tacacsPort.matches(":focus")) tacacsPort.value = next.auth_tacacs_port ?? HUB_AUTH_DEFAULTS.auth_tacacs_port;
+  const tacacsPriv = hubAuthEl("sa-auth-tacacs-superadmin-priv");
+  if (tacacsPriv && !tacacsPriv.matches(":focus")) tacacsPriv.value = next.auth_tacacs_superadmin_priv ?? HUB_AUTH_DEFAULTS.auth_tacacs_superadmin_priv;
+  const defaultSuperadmin = hubAuthEl("sa-auth-default-role-superadmin");
+  const defaultTenantAdmin = hubAuthEl("sa-auth-default-role-tenant-admin");
+  if (defaultSuperadmin) defaultSuperadmin.checked = next.auth_default_role !== "tenant_admin";
+  if (defaultTenantAdmin) defaultTenantAdmin.checked = next.auth_default_role === "tenant_admin";
+  updateHubAuthProviderVisibility(next.auth_provider);
+}
+
+function getHubAuthDefaultRole() {
+  return hubAuthEl("sa-auth-default-role-tenant-admin")?.checked ? "tenant_admin" : "superadmin";
+}
+
+async function loadHubAuthConfig(force = false) {
+  if (!currentUser?.is_superadmin) return null;
+  if (hubAuthConfigLoaded && !force) {
+    applyHubAuthConfigToUi(hubAuthConfig);
+    return hubAuthConfig;
+  }
+  const response = await apiFetch("/api/superadmin/auth-config");
+  const data = await readJson(response);
+  if (!response || !response.ok) {
+    showInlineMessage(hubAuthEl("sa-auth-msg"), data?.detail || "Failed to load auth configuration.", true, 7000);
+    return null;
+  }
+  hubAuthConfig = normalizeHubAuthConfig(data || {});
+  hubAuthConfigLoaded = true;
+  applyHubAuthConfigToUi(hubAuthConfig);
+  return hubAuthConfig;
+}
+
+async function saveHubAuthConfig() {
+  if (!currentUser?.is_superadmin) return;
+  const provider = normalizeHubAuthProvider(String(hubAuthEl("sa-auth-provider")?.value || hubAuthConfig.auth_provider || "local").trim().toLowerCase());
+  const payload = {
+    auth_provider: provider,
+    auth_ldap_url: hubAuthEl("sa-auth-ldap-url")?.value?.trim() || "",
+    auth_ldap_bind_dn: hubAuthEl("sa-auth-ldap-bind-dn")?.value?.trim() || "",
+    auth_ldap_user_base: hubAuthEl("sa-auth-ldap-user-base")?.value?.trim() || "",
+    auth_ldap_user_filter: hubAuthEl("sa-auth-ldap-user-filter")?.value?.trim() || HUB_AUTH_DEFAULTS.auth_ldap_user_filter,
+    auth_ldap_group_superadmin: hubAuthEl("sa-auth-ldap-group-superadmin")?.value?.trim() || "",
+    auth_ldap_group_tenant_admin: hubAuthEl("sa-auth-ldap-group-tenant-admin")?.value?.trim() || "",
+    auth_ldap_tenant_id: hubAuthEl("sa-auth-tenant-id")?.value || "",
+    auth_radius_host: hubAuthEl("sa-auth-radius-host")?.value?.trim() || "",
+    auth_radius_port: Number.parseInt(hubAuthEl("sa-auth-radius-port")?.value || HUB_AUTH_DEFAULTS.auth_radius_port, 10) || HUB_AUTH_DEFAULTS.auth_radius_port,
+    auth_radius_role_attr: hubAuthEl("sa-auth-radius-role-attr")?.value?.trim() || HUB_AUTH_DEFAULTS.auth_radius_role_attr,
+    auth_radius_superadmin_val: hubAuthEl("sa-auth-radius-superadmin-val")?.value?.trim() || HUB_AUTH_DEFAULTS.auth_radius_superadmin_val,
+    auth_tacacs_host: hubAuthEl("sa-auth-tacacs-host")?.value?.trim() || "",
+    auth_tacacs_port: Number.parseInt(hubAuthEl("sa-auth-tacacs-port")?.value || HUB_AUTH_DEFAULTS.auth_tacacs_port, 10) || HUB_AUTH_DEFAULTS.auth_tacacs_port,
+    auth_tacacs_superadmin_priv: Number.parseInt(hubAuthEl("sa-auth-tacacs-superadmin-priv")?.value || HUB_AUTH_DEFAULTS.auth_tacacs_superadmin_priv, 10) || HUB_AUTH_DEFAULTS.auth_tacacs_superadmin_priv,
+    auth_default_role: getHubAuthDefaultRole(),
+  };
+  const ldapSecret = getSecretInputPayload(hubAuthEl("sa-auth-ldap-bind-password"));
+  if (ldapSecret.include) payload.auth_ldap_bind_password = ldapSecret.value;
+  const radiusSecret = getSecretInputPayload(hubAuthEl("sa-auth-radius-secret"));
+  if (radiusSecret.include) payload.auth_radius_secret = radiusSecret.value;
+  const tacacsSecret = getSecretInputPayload(hubAuthEl("sa-auth-tacacs-secret"));
+  if (tacacsSecret.include) payload.auth_tacacs_secret = tacacsSecret.value;
+
+  showInlineMessage(hubAuthEl("sa-auth-msg"), "Saving authentication settings…", false, 0);
+  const response = await apiFetch("/api/superadmin/auth-config", { method: "POST", body: payload });
+  const data = await readJson(response);
+  if (!response || !response.ok) {
+    showInlineMessage(hubAuthEl("sa-auth-msg"), data?.detail || "Failed to save auth configuration.", true, 7000);
+    return;
+  }
+  resetSecretInput(hubAuthEl("sa-auth-ldap-bind-password"));
+  resetSecretInput(hubAuthEl("sa-auth-radius-secret"));
+  resetSecretInput(hubAuthEl("sa-auth-tacacs-secret"));
+  hubAuthConfigLoaded = false;
+  await loadHubAuthConfig(true).catch(() => {});
+  showInlineMessage(hubAuthEl("sa-auth-msg"), "Authentication settings saved.", false, 5000);
+}
+
+async function testHubAuthConnection() {
+  if (!currentUser?.is_superadmin) return;
+  const provider = normalizeHubAuthProvider(String(hubAuthEl("sa-auth-provider")?.value || hubAuthConfig.auth_provider || "local").trim().toLowerCase());
+  const response = await apiFetch("/api/superadmin/auth-test", {
+    method: "POST",
+    body: {
+      provider,
+      username: hubAuthEl("sa-auth-test-username")?.value?.trim() || "",
+      password: hubAuthEl("sa-auth-test-password")?.value || "",
+    },
+  });
+  const data = await readJson(response);
+  if (!response || !response.ok) {
+    showInlineMessage(hubAuthEl("sa-auth-msg"), data?.detail || "Failed to test auth provider.", true, 7000);
+    return;
+  }
+  showInlineMessage(hubAuthEl("sa-auth-msg"), data?.message || (data?.ok ? "Connection OK." : "Connection failed."), !data?.ok, 7000);
+}
+
 async function loadSuperadmin() {
   if (!currentUser?.is_superadmin) return;
-  const [tenantsRes, pendingRes, usersRes] = await Promise.all([
+  const [tenantsRes, pendingRes, usersRes, authRes] = await Promise.all([
     apiFetch("/api/superadmin/tenants"),
     apiFetch("/api/superadmin/pending-spokes"),
     apiFetch("/api/superadmin/users"),
+    apiFetch("/api/superadmin/auth-config"),
   ]);
   let tenantData = [];
   if (tenantsRes?.ok) {
@@ -12962,6 +13145,13 @@ async function loadSuperadmin() {
   }
   if (tenantsRes?.ok) renderSuperadminTenants(tenantData);
   if (pendingRes?.ok) renderPendingSpokes(await pendingRes.json());
+  if (authRes?.ok) {
+    hubAuthConfig = normalizeHubAuthConfig(await authRes.json());
+    hubAuthConfigLoaded = true;
+    applyHubAuthConfigToUi(hubAuthConfig);
+  } else {
+    hubAuthConfigLoaded = false;
+  }
   loadGkillState();
 }
 
@@ -13733,9 +13923,10 @@ function bindEvents() {
     if (saButton) {
       const subtab = saButton.dataset.subtab;
       $$(".sa-subtab").forEach(button => button.classList.toggle("active", button.dataset.subtab === subtab));
-      ["sa-pending", "sa-tenants", "sa-users", "sa-gkill"].forEach(panelId => {
+      ["sa-pending", "sa-tenants", "sa-users", "sa-security", "sa-gkill"].forEach(panelId => {
         document.getElementById(panelId)?.classList.toggle("hidden", panelId !== subtab);
       });
+      if (subtab === "sa-security") loadHubAuthConfig().catch(() => {});
       return;
     }
 
@@ -13884,6 +14075,9 @@ function bindEvents() {
     document.getElementById("hub-config-fields")?.classList.toggle("hidden", !this.checked);
   });
   $("#sa-gkill-refresh-btn")?.addEventListener("click", loadGkillState);
+  hubAuthEl("sa-auth-provider")?.addEventListener("change", () => updateHubAuthProviderVisibility(hubAuthEl("sa-auth-provider")?.value));
+  $("#sa-auth-test-btn")?.addEventListener("click", testHubAuthConnection);
+  $("#sa-auth-save-btn")?.addEventListener("click", saveHubAuthConfig);
   $("#sa-add-tenant-btn")?.addEventListener("click", () => $("#sa-tenant-form")?.classList.toggle("hidden"));
   $("#sa-cancel-tenant-btn")?.addEventListener("click", () => $("#sa-tenant-form")?.classList.add("hidden"));
   $("#sa-save-tenant-btn")?.addEventListener("click", createTenant);

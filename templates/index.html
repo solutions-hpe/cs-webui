@@ -784,6 +784,7 @@
           <button class="setup-subtab sa-subtab active" data-subtab="sa-pending" type="button">Pending Spokes</button>
           <button class="setup-subtab sa-subtab" data-subtab="sa-tenants" type="button">Tenants</button>
           <button class="setup-subtab sa-subtab" data-subtab="sa-users" type="button">Users</button>
+          <button class="setup-subtab sa-subtab" data-subtab="sa-security" type="button">Security</button>
           <button class="setup-subtab sa-subtab" data-subtab="sa-gkill" type="button">GKill</button>
         </nav>
 
@@ -843,6 +844,73 @@
                 <span id="sa-user-msg" class="form-msg"></span>
               </div>
             </div>
+          </div>
+        </div>
+
+        <div id="sa-security" class="setup-subpanel hidden" style="margin-top:16px;">
+          <div class="setup-card">
+            <div class="setup-card-header">
+              <h2>Enterprise Authentication</h2>
+              <p>Configure LDAP/AD, RADIUS, or TACACS+ login for the hub.</p>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="sa-auth-provider">Auth Provider</label>
+              <select id="sa-auth-provider" class="form-input">
+                <option value="local">Local</option>
+                <option value="ldap">LDAP / Active Directory</option>
+                <option value="radius">RADIUS</option>
+                <option value="tacacs">TACACS+</option>
+              </select>
+            </div>
+
+            <div id="sa-auth-ldap-fields" class="hidden">
+              <div class="setup-card-header" style="margin-top:12px;"><h3>LDAP / Active Directory</h3></div>
+              <div class="form-group"><label class="form-label" for="sa-auth-ldap-url">Server URL</label><input id="sa-auth-ldap-url" type="text" class="form-input" placeholder="ldap://dc01.example.com"></div>
+              <div class="form-group"><label class="form-label" for="sa-auth-ldap-bind-dn">Bind DN</label><input id="sa-auth-ldap-bind-dn" type="text" class="form-input"></div>
+              <div class="form-group"><label class="form-label" for="sa-auth-ldap-bind-password">Bind Password</label><input id="sa-auth-ldap-bind-password" type="password" class="form-input" placeholder="leave blank to keep existing" data-secret-field="true"></div>
+              <div class="form-group"><label class="form-label" for="sa-auth-ldap-user-base">User Search Base</label><input id="sa-auth-ldap-user-base" type="text" class="form-input"></div>
+              <div class="form-group"><label class="form-label" for="sa-auth-ldap-user-filter">User Filter</label><input id="sa-auth-ldap-user-filter" type="text" class="form-input" placeholder="(&(objectClass=user)(sAMAccountName={username}))"></div>
+              <div class="form-group"><label class="form-label" for="sa-auth-ldap-group-superadmin">Superadmin Group DN</label><input id="sa-auth-ldap-group-superadmin" type="text" class="form-input"></div>
+              <div class="form-group"><label class="form-label" for="sa-auth-ldap-group-tenant-admin">Tenant Admin Group DN</label><input id="sa-auth-ldap-group-tenant-admin" type="text" class="form-input"></div>
+              <div class="form-group"><label class="form-label" for="sa-auth-tenant-id">Tenant</label><select id="sa-auth-tenant-id" class="form-input"></select></div>
+            </div>
+
+            <div id="sa-auth-radius-fields" class="hidden">
+              <div class="setup-card-header" style="margin-top:12px;"><h3>RADIUS</h3></div>
+              <div class="form-group"><label class="form-label" for="sa-auth-radius-host">Host</label><input id="sa-auth-radius-host" type="text" class="form-input"></div>
+              <div class="form-group"><label class="form-label" for="sa-auth-radius-port">Port</label><input id="sa-auth-radius-port" type="number" class="form-input" min="1" value="1812"></div>
+              <div class="form-group"><label class="form-label" for="sa-auth-radius-secret">Secret</label><input id="sa-auth-radius-secret" type="password" class="form-input" placeholder="leave blank to keep existing" data-secret-field="true"></div>
+              <div class="form-group"><label class="form-label" for="sa-auth-radius-role-attr">Role Attribute</label><input id="sa-auth-radius-role-attr" type="text" class="form-input" value="Filter-Id"></div>
+              <div class="form-group"><label class="form-label" for="sa-auth-radius-superadmin-val">Superadmin Value</label><input id="sa-auth-radius-superadmin-val" type="text" class="form-input" value="superadmin"></div>
+            </div>
+
+            <div id="sa-auth-tacacs-fields" class="hidden">
+              <div class="setup-card-header" style="margin-top:12px;"><h3>TACACS+</h3></div>
+              <div class="form-group"><label class="form-label" for="sa-auth-tacacs-host">Host</label><input id="sa-auth-tacacs-host" type="text" class="form-input"></div>
+              <div class="form-group"><label class="form-label" for="sa-auth-tacacs-port">Port</label><input id="sa-auth-tacacs-port" type="number" class="form-input" min="1" value="49"></div>
+              <div class="form-group"><label class="form-label" for="sa-auth-tacacs-secret">Secret</label><input id="sa-auth-tacacs-secret" type="password" class="form-input" placeholder="leave blank to keep existing" data-secret-field="true"></div>
+              <div class="form-group"><label class="form-label" for="sa-auth-tacacs-superadmin-priv">Superadmin Priv Level</label><input id="sa-auth-tacacs-superadmin-priv" type="number" class="form-input" min="0" value="15"></div>
+            </div>
+
+            <div class="setup-card-header" style="margin-top:12px;"><h3>Fallback Access</h3></div>
+            <div class="form-group">
+              <span class="form-label">Default Role when no group match</span>
+              <div style="display:flex;gap:18px;flex-wrap:wrap;">
+                <label><input id="sa-auth-default-role-superadmin" name="sa-auth-default-role" type="radio" value="superadmin" checked> Superadmin</label>
+                <label><input id="sa-auth-default-role-tenant-admin" name="sa-auth-default-role" type="radio" value="tenant_admin"> Tenant Admin</label>
+              </div>
+            </div>
+
+            <div class="setup-card-header" style="margin-top:12px;"><h3>Test Connection</h3></div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+              <div class="form-group" style="margin:0;"><label class="form-label" for="sa-auth-test-username">Test Username</label><input id="sa-auth-test-username" type="text" class="form-input"></div>
+              <div class="form-group" style="margin:0;"><label class="form-label" for="sa-auth-test-password">Test Password</label><input id="sa-auth-test-password" type="password" class="form-input"></div>
+            </div>
+            <div class="form-actions" style="margin-top:16px;">
+              <button id="sa-auth-test-btn" class="btn btn-secondary" type="button">Test Connection</button>
+              <button id="sa-auth-save-btn" class="btn btn-primary" type="button">Save</button>
+            </div>
+            <div id="sa-auth-msg" class="settings-message hidden"></div>
           </div>
         </div>
 

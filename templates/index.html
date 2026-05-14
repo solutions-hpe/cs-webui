@@ -455,6 +455,11 @@
       <nav class="setup-subnav">
         <button class="setup-subtab hub-ts-subtab active" data-subtab="ts-setup" type="button">Setup</button>
         <button class="setup-subtab hub-ts-subtab" data-subtab="ts-central-api" type="button">Central API</button>
+        <button class="setup-subtab hub-ts-subtab" data-subtab="ts-proxmox" type="button">Proxmox</button>
+        <button class="setup-subtab hub-ts-subtab" data-subtab="ts-github" type="button">GitHub</button>
+        <button class="setup-subtab hub-ts-subtab" data-subtab="ts-security" type="button">Security</button>
+        <button class="setup-subtab hub-ts-subtab" data-subtab="ts-notifications" type="button">Notifications</button>
+        <button class="setup-subtab hub-ts-subtab" data-subtab="ts-troubleshoot" type="button">Troubleshooting</button>
       </nav>
       <div id="ts-setup-panel">
         <div id="hub-tenant-setup-content"></div>
@@ -468,6 +473,207 @@
           </div>
         </div>
         <div id="hub-central-content"></div>
+      </div>
+      <div id="ts-proxmox-panel" class="hidden">
+        <div class="page-toolbar">
+          <span class="server-node-name">Proxmox Settings</span>
+          <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+            <label class="form-label" style="margin:0;">Spoke:</label>
+            <select id="ts-proxmox-spoke-select" class="form-input" style="width:200px;"></select>
+            <button id="ts-proxmox-save-btn" class="btn btn-primary btn-small" type="button">💾 Push to Spoke</button>
+          </div>
+        </div>
+        <div id="ts-proxmox-content">
+          <div class="setup-card" style="margin:16px;">
+            <div class="setup-card-header"><h2>VM Auto-Provisioning</h2></div>
+            <div class="setup-form">
+              <div class="settings-section">
+                <div class="settings-section-title">Provisioning Behavior</div>
+                <div class="toggle-grid">
+                  <label class="toggle-label">
+                    <input type="checkbox" id="ts-usb-auto-provision">
+                    <span>Auto-Provision VMs</span>
+                  </label>
+                </div>
+                <div class="form-row" style="margin-top:12px;">
+                  <div class="form-group">
+                    <label class="form-label" for="ts-usb-missing-timeout">Destroy after missing (minutes)</label>
+                    <input id="ts-usb-missing-timeout" class="form-input" type="number" value="60" min="1" placeholder="60">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="ts-usb-max-slots">Max VMs per host</label>
+                    <input id="ts-usb-max-slots" class="form-input" type="number" value="24" min="1" max="256" placeholder="24">
+                  </div>
+                </div>
+              </div>
+              <div class="settings-section">
+                <div class="settings-section-title">VM Templates</div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label" for="ts-vm-image-1-template-id">VM Image 1 Template VMID</label>
+                    <input id="ts-vm-image-1-template-id" class="form-input" type="number" value="100" min="1">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="ts-vm-image-2-template-id">VM Image 2 Template VMID</label>
+                    <input id="ts-vm-image-2-template-id" class="form-input" type="number" value="200" min="1">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="ts-vm-image-1-pct">VM Image 1 % target</label>
+                    <input id="ts-vm-image-1-pct" class="form-input" type="number" value="50" min="0" max="100">
+                  </div>
+                </div>
+              </div>
+              <div class="settings-section">
+                <div class="settings-section-title">Parallel Provisioning</div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label" for="ts-reclone-concurrency">Max parallel operations</label>
+                    <input id="ts-reclone-concurrency" class="form-input" type="number" value="1" min="1" max="20" placeholder="1">
+                  </div>
+                </div>
+              </div>
+              <div id="ts-proxmox-msg" class="settings-message hidden"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="ts-github-panel" class="hidden">
+        <div class="page-toolbar">
+          <span class="server-node-name">GitHub Settings</span>
+          <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+            <label class="form-label" style="margin:0;">Spoke:</label>
+            <select id="ts-github-spoke-select" class="form-input" style="width:200px;"></select>
+            <button id="ts-github-save-btn" class="btn btn-primary btn-small" type="button">💾 Push to Spoke</button>
+          </div>
+        </div>
+        <div class="setup-card" style="margin:16px;">
+          <div class="setup-card-header"><h2>Repository Settings</h2></div>
+          <div class="setup-form">
+            <div class="form-group">
+              <label class="form-label" for="ts-branch-input">Branch</label>
+              <input id="ts-branch-input" class="form-input" type="text" placeholder="e.g. main, lrb" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="ts-github-token-input">GitHub Token</label>
+              <input id="ts-github-token-input" class="form-input" type="password" placeholder="Paste token — leave blank to keep current" autocomplete="new-password" data-secret-field="true">
+            </div>
+            <div id="ts-github-msg" class="settings-message hidden"></div>
+          </div>
+        </div>
+      </div>
+      <div id="ts-security-panel" class="hidden">
+        <div class="page-toolbar">
+          <span class="server-node-name">Security Settings</span>
+          <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+            <label class="form-label" style="margin:0;">Spoke:</label>
+            <select id="ts-security-spoke-select" class="form-input" style="width:200px;"></select>
+            <button id="ts-security-save-btn" class="btn btn-primary btn-small" type="button">💾 Push to Spoke</button>
+          </div>
+        </div>
+        <div class="setup-card" style="margin:16px;">
+          <div class="setup-card-header"><h2>Security Settings</h2></div>
+          <div class="setup-form">
+            <div class="form-group">
+              <label class="form-label" for="ts-session-timeout">Session Timeout (minutes)</label>
+              <input id="ts-session-timeout" class="form-input" type="number" value="30" min="5" placeholder="30">
+              <span class="form-hint">How long before an inactive session expires.</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="ts-auth-provider">Auth Provider</label>
+              <select id="ts-auth-provider" class="form-input">
+                <option value="local">Local</option>
+                <option value="radius">RADIUS</option>
+              </select>
+            </div>
+            <div id="ts-security-msg" class="settings-message hidden"></div>
+          </div>
+        </div>
+      </div>
+      <div id="ts-notifications-panel" class="hidden">
+        <div class="page-toolbar">
+          <span class="server-node-name">Notifications</span>
+          <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+            <label class="form-label" style="margin:0;">Spoke:</label>
+            <select id="ts-notifications-spoke-select" class="form-input" style="width:200px;"></select>
+            <button id="ts-notifications-save-btn" class="btn btn-primary btn-small" type="button">💾 Push to Spoke</button>
+          </div>
+        </div>
+        <div class="setup-card" style="margin:16px;">
+          <div class="setup-card-header"><h2>Notification Settings</h2></div>
+          <div class="setup-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="toggle-label">
+                  <input type="checkbox" id="ts-notif-email-enabled">
+                  <span>Email enabled</span>
+                </label>
+              </div>
+              <div class="form-group">
+                <label class="toggle-label">
+                  <input type="checkbox" id="ts-notif-teams-enabled">
+                  <span>Teams enabled</span>
+                </label>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="ts-notif-smtp-host">SMTP Host</label>
+                <input id="ts-notif-smtp-host" class="form-input" type="text" placeholder="smtp.example.com">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="ts-notif-smtp-port">SMTP Port</label>
+                <input id="ts-notif-smtp-port" class="form-input" type="number" value="587" placeholder="587">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="ts-notif-smtp-user">SMTP User</label>
+                <input id="ts-notif-smtp-user" class="form-input" type="text" placeholder="user@example.com">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="ts-notif-smtp-password">SMTP Password</label>
+                <input id="ts-notif-smtp-password" class="form-input" type="password" placeholder="Leave blank to keep current" autocomplete="new-password" data-secret-field="true">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="ts-notif-smtp-from">SMTP From</label>
+                <input id="ts-notif-smtp-from" class="form-input" type="email" placeholder="client-sim@example.com">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="ts-notif-smtp-to">SMTP To</label>
+                <input id="ts-notif-smtp-to" class="form-input" type="text" placeholder="ops@example.com, noc@example.com">
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="ts-notif-teams-webhook">Teams Webhook URL</label>
+              <input id="ts-notif-teams-webhook" class="form-input" type="url" placeholder="https://outlook.office.com/webhook/..." data-secret-field="true">
+            </div>
+            <div id="ts-notifications-msg" class="settings-message hidden"></div>
+          </div>
+        </div>
+      </div>
+      <div id="ts-troubleshoot-panel" class="hidden">
+        <div class="page-toolbar">
+          <span class="server-node-name">Troubleshooting</span>
+          <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+            <label class="form-label" style="margin:0;">Spoke:</label>
+            <select id="ts-troubleshoot-spoke-select" class="form-input" style="width:200px;"></select>
+            <button id="ts-troubleshoot-update-btn" class="btn btn-primary btn-small" type="button">Trigger Update</button>
+          </div>
+        </div>
+        <div class="setup-card" style="margin:16px;">
+          <div class="setup-card-header"><h2>API Server Health</h2></div>
+          <table class="data-table">
+            <tbody>
+              <tr><td>Version</td><td id="ts-trbl-version">—</td></tr>
+              <tr><td>Repo Synced</td><td id="ts-trbl-repo-synced">—</td></tr>
+              <tr><td>Repo Error</td><td id="ts-trbl-repo-error">—</td></tr>
+              <tr><td>Installer Version</td><td id="ts-trbl-installer-version">—</td></tr>
+            </tbody>
+          </table>
+          <div id="ts-troubleshoot-msg" class="settings-message hidden" style="margin-top:12px;"></div>
+        </div>
       </div>
     </main>
 

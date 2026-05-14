@@ -687,6 +687,7 @@
         <button class="setup-subtab settings-subtab" data-subtab="settings-tls" type="button">TLS Certificate</button>
         <button class="setup-subtab settings-subtab" data-subtab="settings-pending-spokes" id="settings-pending-tab-btn" type="button" style="display:none;">Pending Spokes <span id="settings-pending-count" class="badge-count">0</span></button>
         <button class="setup-subtab settings-subtab" data-subtab="settings-spoke-config" id="settings-spoke-config-tab-btn" type="button" style="display:none;">Spoke Config</button>
+        <button class="setup-subtab settings-subtab" data-subtab="settings-onboarding" id="settings-onboarding-tab-btn" type="button">Onboarding</button>
       </nav>
 
         <div id="settings-account" class="setup-subpanel" style="margin-top:16px;">
@@ -984,6 +985,30 @@
             </div>
           </div>
         </div>
+
+        <div id="settings-onboarding" class="setup-subpanel hidden" style="margin-top:16px;">
+          <div class="setup-card" style="max-width:600px;">
+            <div class="setup-card-header">
+              <h2>Spoke Onboarding PSK</h2>
+              <p>Generate a Pre-Shared Key (PSK) that allows spokes to self-register to your tenant without manual approval. Spokes must supply the correct Tenant ID and PSK during installation.</p>
+            </div>
+            <div id="settings-onboarding-status" style="margin-bottom:16px;"></div>
+            <div class="form-actions" style="gap:8px;">
+              <button id="onboarding-psk-generate-btn" class="btn btn-primary" type="button">Generate New PSK</button>
+              <button id="onboarding-psk-revoke-btn" class="btn btn-danger" type="button">Revoke PSK</button>
+            </div>
+            <div id="onboarding-psk-reveal" class="hidden" style="margin-top:20px;">
+              <div class="setup-card-header" style="margin-bottom:8px;"><h3>Your Onboarding PSK</h3></div>
+              <p style="margin-bottom:8px; color:var(--color-warning, #b45309);">⚠️ This is shown <strong>once only</strong>. Copy it now — it cannot be retrieved again.</p>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <input id="onboarding-psk-value" type="text" class="form-input" readonly style="font-family:monospace; flex:1;">
+                <button id="onboarding-psk-copy-btn" class="btn btn-secondary" type="button">Copy</button>
+              </div>
+              <p id="onboarding-psk-install-hint" style="margin-top:12px; font-size:0.85em; color:var(--color-muted,#6b7280);"></p>
+            </div>
+          </div>
+        </div>
+
       </main>
       <main id="tab-hub-superadmin" class="page tab-content hidden">
         <nav class="setup-subnav">

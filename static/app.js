@@ -12944,6 +12944,9 @@ async function loadHubSettings() {
   // Load tenant admin pending spokes whenever settings tab opens
   if (canManageTenant() && !currentUser?.is_superadmin) loadTenantPendingSpokes();
   if (canManageTenant()) loadHubConfig();
+  // Show/hide Onboarding tab based on tenant admin access
+  const onboardingTabBtn = document.getElementById("settings-onboarding-tab-btn");
+  if (onboardingTabBtn) onboardingTabBtn.style.display = canManageTenant() ? "" : "none";
   const res = await apiFetch(`/api/${encodeURIComponent(currentTenantId)}/settings`);
   if (!res || !res.ok) return;
   const data = await res.json();
@@ -13713,6 +13716,76 @@ function renderTenantPendingSpokes(items) {
 }
 
 
+// ── Onboarding PSK ────────────────────────────────────────────────────────────
+
+async function loadOnboardingPskStatus() {
+  if (!currentTenantId || !canManageTenant()) return;
+  const statusEl = document.getElementById("settings-onboarding-status");
+  const revokeBtn = document.getElementById("onboarding-psk-revoke-btn");
+  const revealEl = document.getElementById("onboarding-psk-reveal");
+  if (!statusEl) return;
+  try {
+    const res = await fetch(`/api/tenant/${currentTenantId}/onboarding-psk`,
+      { headers: { Authorization: `Bearer ${authToken}` } });
+    if (!res.ok) { statusEl.innerHTML = '<span class="form-msg error">Failed to load PSK status.</span>'; return; }
+    const data = await res.json();
+    statusEl.innerHTML = data.has_psk
+      ? '<span class="form-msg ok">✅ A PSK is currently active. Spokes with the correct Tenant ID + PSK will auto-approve.</span>'
+      : '<span class="form-msg">No PSK configured. Spokes will require manual approval.</span>';
+    if (revokeBtn) revokeBtn.classList.toggle("hidden", !data.has_psk);
+    if (revealEl) revealEl.classList.add("hidden");
+  } catch (_) {
+    if (statusEl) statusEl.innerHTML = '<span class="form-msg error">Unable to reach hub API.</span>';
+  }
+}
+
+async function generateOnboardingPsk() {
+  if (!currentTenantId) return;
+  if (!confirm("Generate a new onboarding PSK?\n\nAny existing PSK will be replaced immediately.")) return;
+  const res = await fetch(`/api/tenant/${currentTenantId}/onboarding-psk`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
+  if (!res.ok) { showToast("Failed to generate PSK.", "error"); return; }
+  const data = await res.json();
+  const valueEl = document.getElementById("onboarding-psk-value");
+  const revealEl = document.getElementById("onboarding-psk-reveal");
+  const hintEl = document.getElementById("onboarding-psk-install-hint");
+  if (valueEl) valueEl.value = data.psk;
+  if (revealEl) revealEl.classList.remove("hidden");
+  if (hintEl) {
+    const tid = currentTenantId;
+    const hubUrl = window.location.origin;
+    hintEl.textContent = `Install command example: sudo bash <(curl -fsSL .../install-lxc.sh) --hub-url ${hubUrl} --hub-tenant ${tid} --hub-psk ${data.psk}`;
+  }
+  await loadOnboardingPskStatus();
+  showToast("PSK generated. Copy it now — it will not be shown again.", "ok");
+}
+
+async function revokeOnboardingPsk() {
+  if (!currentTenantId) return;
+  if (!confirm("Revoke the onboarding PSK?\n\nSpokes will require manual approval until a new one is generated.")) return;
+  const res = await fetch(`/api/tenant/${currentTenantId}/onboarding-psk`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
+  if (!res.ok) { showToast("Failed to revoke PSK.", "error"); return; }
+  await loadOnboardingPskStatus();
+  showToast("PSK revoked.", "ok");
+}
+
+document.addEventListener("click", e => {
+  if (e.target.id === "onboarding-psk-generate-btn") { generateOnboardingPsk(); return; }
+  if (e.target.id === "onboarding-psk-revoke-btn") { revokeOnboardingPsk(); return; }
+  if (e.target.id === "onboarding-psk-copy-btn") {
+    const val = document.getElementById("onboarding-psk-value")?.value;
+    if (val) navigator.clipboard.writeText(val).then(() => showToast("PSK copied.", "ok"));
+    return;
+  }
+});
+
+// ── End Onboarding PSK ────────────────────────────────────────────────────────
+
 function renderSuperadminTenants(items) {
   $("#sa-tenants-count") && ($("#sa-tenants-count").textContent = String(items.length));
   const tbody = $("#sa-tenants-tbody");
@@ -14281,10 +14354,11 @@ function bindEvents() {
     if (setupButton) {
       const subtab = setupButton.dataset.subtab;
       $$(".settings-subtab").forEach(button => button.classList.toggle("active", button.dataset.subtab === subtab));
-      ["settings-account", "settings-notifications", "settings-api", "settings-tls", "settings-pending-spokes"].forEach(panelId => {
+      ["settings-account", "settings-notifications", "settings-api", "settings-tls", "settings-pending-spokes", "settings-onboarding"].forEach(panelId => {
         document.getElementById(panelId)?.classList.toggle("hidden", panelId !== subtab);
       });
       if (subtab === "settings-tls") loadAcmeSettings().catch(() => {});
+      if (subtab === "settings-onboarding") loadOnboardingPskStatus().catch(() => {});
       return;
     }
 

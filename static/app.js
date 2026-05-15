@@ -1062,16 +1062,16 @@ function updateSpokeLoginProviderUi(provider = window.__SPOKE_AUTH_PROVIDER__ ||
   const usernameGroup = document.getElementById('spoke-login-username-group');
   const usernameInput = document.getElementById('spoke-login-username');
   const subtitle = document.querySelector('#spoke-login-overlay .hub-login-subtitle');
-  const needsUsername = nextProvider !== 'local';
-  usernameGroup?.classList.toggle('hidden', !needsUsername);
+  // Always show username field — local auth uses "admin" as the fixed username
+  // but external providers (ldap/radius/tacacs) let users type their own
+  const needsUsername = true;
+  usernameGroup?.classList.toggle('hidden', false);
   if (usernameInput) {
-    usernameInput.required = needsUsername;
-    if (!needsUsername) usernameInput.value = '';
+    usernameInput.required = true;
+    if (nextProvider === 'local') usernameInput.value = usernameInput.value || 'admin';
   }
   if (subtitle) {
-    subtitle.textContent = needsUsername
-      ? 'Enter your username and password to continue.'
-      : 'Enter the administrator password to continue.';
+    subtitle.textContent = 'Enter your username and password to continue.';
   }
 }
 

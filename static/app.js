@@ -10513,7 +10513,7 @@ async function _loadTsOnboardingStatus(tenantId, root = document) {
       <button class="btn btn-sm btn-secondary ts-psk-copy-btn" data-psk="${escHtml(psk)}" type="button">Copy</button>
       <button class="btn btn-sm btn-danger ts-psk-revoke-btn" data-psk="${escHtml(psk)}" type="button">Revoke</button>
     </div>
-    <div class="form-hint" style="margin-bottom:8px;font-size:11px;">sudo bash &lt;(curl -fsSL https://raw.githubusercontent.com/solutions-hpe/client-sim/main/install-lxc.sh) --hub-url ${escHtml(window.location.origin)} --hub-tenant ${escHtml(tenantId)} --hub-psk ${escHtml(psk)}</div>
+    <div class="form-hint" style="margin-bottom:8px;font-size:11px;">sudo bash &lt;(curl -fsSL https://raw.githubusercontent.com/solutions-hpe/client-sim/main/install-lxc.sh) --hub-url ${escHtml(window.location.origin)} --hub-tenant ${escHtml(getTenantMeta(tenantId).name || tenantId)} --hub-psk ${escHtml(psk)}</div>
   `).join("");
   listEl.querySelectorAll(".ts-psk-copy-btn").forEach((btn) => {
     btn.addEventListener("click", () => {

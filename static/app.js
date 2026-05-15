@@ -2902,7 +2902,7 @@ function renderVhDevices(proxmoxData = latestProxmoxData) {
     });
     let html = '';
     byServer.forEach((devs, server) => {
-      html += `<div style="margin-bottom:16px;">
+      html += `<div style="margin-bottom:8px;">
         <div style="font-size:0.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">Server: ${escHtml(server)}</div>
         <table class="data-table">
           <thead><tr><th>Adapter</th><th>Address</th><th>Vendor</th><th>VID:PID</th><th>Serial</th><th>Status</th></tr></thead>
@@ -3384,7 +3384,7 @@ function renderAutoProvisionStatus() {
   const resetBtn = document.getElementById('autoprov-reset-btn');
   if (resetBtn) resetBtn.style.display = run.running ? '' : 'none';
   if (!showPanel) {
-    liveSummary.innerHTML = `<div class="muted" style="padding:12px 0;">${
+    liveSummary.innerHTML = `<div class="muted" style="padding:6px 0;">${
       autoProv
         ? 'No provisioning in progress. Dongles inserted will trigger auto-provisioning.'
         : 'Auto-provisioning is disabled. Enable it in the USB settings below.'
@@ -8417,12 +8417,12 @@ function openHubSimDetail(checkId) {
       row.style.display = "flex";
       row.style.alignItems = "center";
       row.style.justifyContent = "space-between";
-      row.style.gap = "12px";
-      row.style.padding = "12px 16px";
+      row.style.gap = "8px";
+      row.style.padding = "8px 12px";
       row.style.cursor = "default";
       row.innerHTML = `
         <span class="sim-site-name">${escHtml(detailItem.spoke_name)} — ${escHtml(detailItem.wsite)}</span>
-        <span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;">
+        <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
           <span style="font-size:0.82rem;color:var(--muted);">${detailItem.count} event${detailItem.count === 1 ? "" : "s"}</span>
           <span class="sim-status-badge ${hubCheckStatusClass(detailItem.status)}">${escHtml(hubStatusLabel(detailItem.status))}</span>
         </span>
@@ -8496,7 +8496,7 @@ function openHubHwDetail(checkId) {
       spokeRow.style.display = "flex";
       spokeRow.style.flexDirection = "column";
       spokeRow.style.gap = "6px";
-      spokeRow.style.padding = "12px 16px";
+      spokeRow.style.padding = "8px 12px";
       spokeRow.style.cursor = "default";
       spokeRow.innerHTML = `<strong>${escHtml(spoke.spoke_name)}</strong><span style="font-size:0.82rem;color:var(--muted);">${spoke.total} device(s) affected</span>`;
       siteList.appendChild(spokeRow);
@@ -8506,7 +8506,7 @@ function openHubHwDetail(checkId) {
         empty.className = "sim-site-row";
         empty.style.display = "flex";
         empty.style.justifyContent = "space-between";
-        empty.style.padding = "10px 16px 10px 32px";
+        empty.style.padding = "8px 12px 8px 24px";
         empty.style.cursor = "default";
         empty.innerHTML = '<span class="sim-site-name">No site breakdown</span><span style="font-size:0.82rem;color:var(--muted);">—</span>';
         siteList.appendChild(empty);
@@ -8521,8 +8521,8 @@ function openHubHwDetail(checkId) {
           siteRow.style.display = "flex";
           siteRow.style.justifyContent = "space-between";
           siteRow.style.alignItems = "center";
-          siteRow.style.gap = "12px";
-          siteRow.style.padding = "10px 16px 10px 32px";
+          siteRow.style.gap = "8px";
+          siteRow.style.padding = "8px 12px 8px 24px";
           siteRow.style.cursor = "default";
           siteRow.innerHTML = `
             <span class="sim-site-name">${escHtml(info?.site_name || wsite)}</span>
@@ -8602,8 +8602,8 @@ function openHubCcDetail(wsite) {
       row.style.display = "flex";
       row.style.justifyContent = "space-between";
       row.style.alignItems = "center";
-      row.style.gap = "12px";
-      row.style.padding = "12px 16px";
+      row.style.gap = "8px";
+      row.style.padding = "8px 12px";
       row.style.cursor = "default";
       row.innerHTML = `
         <span>
@@ -8999,11 +8999,11 @@ function ensureSuperadminBackupUi() {
             <h2 id="sa-backup-modal-title">Upload Template to Azure</h2>
             <button id="sa-backup-modal-x" class="btn btn-secondary btn-small" type="button">✕ Close</button>
           </div>
-          <nav class="setup-subnav" style="margin-top:12px;">
+          <nav class="setup-subnav" style="margin-top:8px;">
             <button class="setup-subtab sa-backup-tab active" data-sa-backup-tab="backup" type="button">Upload</button>
             <button class="setup-subtab sa-backup-tab" data-sa-backup-tab="config" type="button">⚙️ Config</button>
           </nav>
-          <div id="sa-backup-modal-body" class="setup-subpanel" style="margin-top:12px;"></div>
+          <div id="sa-backup-modal-body" class="setup-subpanel" style="margin-top:8px;"></div>
         </div>
       </div>
     `);
@@ -9057,7 +9057,7 @@ function renderSuperadminBackupModal() {
             <label class="form-label" for="sa-backup-config-container">Azure container</label>
             <input id="sa-backup-config-container" type="text" class="form-input" value="${escHtml(superadminBackupConfig?.azure_container || "")}">
           </div>
-          <div class="table-scroll-v" style="max-height:45vh;margin-top:12px;">
+          <div class="table-scroll-v" style="max-height:45vh;margin-top:8px;">
             <table class="data-table">
               <thead><tr><th>Tenant</th><th>Spoke</th><th>VM IDs</th></tr></thead>
               <tbody>${configRows.length ? configRows.map(spoke => `
@@ -9070,7 +9070,7 @@ function renderSuperadminBackupModal() {
             </table>
           </div>
           <div id="sa-backup-config-msg" class="form-msg ${superadminBackupState.configMessage ? (superadminBackupState.configMessageOk ? "msg-ok" : "msg-error") : ""}">${escHtml(superadminBackupState.configMessage)}</div>
-          <div class="form-actions" style="margin-top:16px;">
+          <div class="form-actions" style="margin-top:10px;">
             <button id="sa-backup-config-save-btn" class="btn btn-primary" type="button"${superadminBackupState.configSaving ? " disabled" : ""}>Save</button>
           </div>
         `}
@@ -9088,7 +9088,7 @@ function renderSuperadminBackupModal() {
           <h3>Upload in Progress</h3>
           <p>Job ID: ${escHtml(superadminBackupState.jobId || "pending")}</p>
         </div>
-        <div class="table-scroll-v" style="margin-top:12px;">
+        <div class="table-scroll-v" style="margin-top:8px;">
           <table class="data-table">
             <thead><tr><th>VM ID</th><th>Status</th><th>Progress</th><th>Size</th><th>File</th></tr></thead>
             <tbody>${rows.length ? rows.map(row => {
@@ -9103,7 +9103,7 @@ function renderSuperadminBackupModal() {
             }).join("") : '<tr><td colspan="5" class="empty-state">Waiting for upload updates…</td></tr>'}</tbody>
           </table>
         </div>
-        <div class="form-actions" style="margin-top:16px;">
+        <div class="form-actions" style="margin-top:10px;">
           <button id="sa-backup-close-btn" class="btn btn-secondary" type="button"${canClose ? "" : " disabled"}>Close</button>
         </div>
       </div>
@@ -9125,7 +9125,7 @@ function renderSuperadminBackupModal() {
         </div>
         <p>Key will be used for this upload only and never stored.</p>
         <input type="password" id="sa-azure-key" placeholder="Azure storage account key" class="form-input" style="width:100%">
-        <div class="form-actions" style="margin-top:16px;">
+        <div class="form-actions" style="margin-top:10px;">
           <button id="sa-backup-back-btn" class="btn btn-secondary" type="button">← Back</button>
           <button id="sa-backup-start-btn" class="btn btn-primary" type="button"${superadminBackupState.loading ? " disabled" : ""}>Start Upload</button>
         </div>
@@ -9149,12 +9149,12 @@ function renderSuperadminBackupModal() {
           ${spokes.length ? spokes.map(spoke => `<option value="${escHtml(spoke.id)}"${selectedSpoke?.id === spoke.id ? " selected" : ""}>${escHtml(tenantName(spoke.tenant_id))} — ${escHtml(spokePrimaryLabel(spoke))}</option>`).join("") : '<option value="">No approved spokes available</option>'}
         </select>
       </div>
-      <div class="setup-card" style="margin-top:12px;">
+      <div class="setup-card" style="margin-top:8px;">
         <div><strong>VMs configured:</strong> ${vmIds.length ? escHtml(vmIds.join(", ")) : "—"}</div>
-        <div style="margin-top:8px;"><strong>Azure:</strong> ${escHtml(superadminBackupConfig?.azure_account || "—")} / ${escHtml(superadminBackupConfig?.azure_container || "—")}</div>
-        <div style="margin-top:8px;"><strong>Retention:</strong> keep last ${escHtml(superadminBackupConfig?.retention ?? "—")}</div>
+        <div style="margin-top:6px;"><strong>Azure:</strong> ${escHtml(superadminBackupConfig?.azure_account || "—")} / ${escHtml(superadminBackupConfig?.azure_container || "—")}</div>
+        <div style="margin-top:6px;"><strong>Retention:</strong> keep last ${escHtml(superadminBackupConfig?.retention ?? "—")}</div>
       </div>
-      <div class="form-actions" style="margin-top:16px;">
+      <div class="form-actions" style="margin-top:10px;">
         <button id="sa-backup-cancel-btn" class="btn btn-secondary" type="button">Cancel</button>
         <button id="sa-backup-proceed-btn" class="btn btn-primary" type="button"${proceedDisabled ? " disabled" : ""}>Proceed →</button>
       </div>
@@ -9523,17 +9523,17 @@ function renderHubReseedPanel() {
           <h2>Reseed Template</h2>
           <p>${escHtml(tenantLabel)}</p>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
           <span class="stat-pill">Template ${escHtml(hubReseedState.progressTemplateName || "—")}</span>
           <span class="stat-pill">Job ${escHtml(hubReseedState.jobId || "pending")}</span>
         </div>
       </div>
-      <div class="setup-card" style="margin-top:16px;">
+      <div class="setup-card" style="margin-top:10px;">
         <div class="setup-card-header">
           <h3>Step 3 — Progress</h3>
           <p>Tracking reseed progress for selected spokes.</p>
         </div>
-        <div class="table-scroll-v" style="margin-top:12px;">
+        <div class="table-scroll-v" style="margin-top:8px;">
           <table class="data-table">
             <thead><tr><th>Spoke</th><th>Template</th><th>Step</th><th>Status</th></tr></thead>
             <tbody>${rows.length ? rows.map(row => {
@@ -9547,7 +9547,7 @@ function renderHubReseedPanel() {
             }).join("") : '<tr><td colspan="4" class="empty-state">Waiting for reseed updates…</td></tr>'}</tbody>
           </table>
         </div>
-        <div class="form-actions" style="margin-top:16px;">
+        <div class="form-actions" style="margin-top:10px;">
           <button id="reseed-close-btn" class="btn btn-secondary" type="button"${canClose ? "" : " disabled"}>Close</button>
         </div>
       </div>
@@ -9563,9 +9563,9 @@ function renderHubReseedPanel() {
         <h2>Reseed Template</h2>
         <p>${escHtml(tenantLabel)}</p>
       </div>
-      <div class="form-group" style="margin-top:12px;">
+      <div class="form-group" style="margin-top:8px;">
         <label class="form-label" for="reseed-template-select">Step 1 — Pick template</label>
-        <div style="font-size:0.92rem;color:var(--muted);margin-bottom:8px;">Available templates in Azure:</div>
+        <div style="font-size:0.92rem;color:var(--muted);margin-bottom:6px;">Available templates in Azure:</div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <select id="reseed-template-select" class="form-input" style="flex:1;min-width:280px;">
             ${hubReseedState.templatesLoading ? '<option value="">Loading…</option>' : hubReseedState.templates.length ? hubReseedState.templates.map(template => `<option value="${escHtml(backupTemplateKey(template))}"${selectedTemplate && backupTemplateKey(template) === backupTemplateKey(selectedTemplate) ? ' selected' : ''}>${escHtml(renderBackupTemplateOptionLabel(template))}</option>`).join("") : '<option value="">No templates available</option>'}
@@ -9575,7 +9575,7 @@ function renderHubReseedPanel() {
         <div class="form-msg ${hubReseedState.templatesError ? "msg-error" : ""}">${escHtml(hubReseedState.templatesError)}</div>
       </div>
     </div>
-    <div class="setup-card" style="margin-top:16px;">
+    <div class="setup-card" style="margin-top:10px;">
       <div class="setup-card-header">
         <h3>Step 2 — Pick target spokes</h3>
         <p>Select one or more spokes in this tenant. Offline spokes will queue automatically.</p>
@@ -9584,11 +9584,11 @@ function renderHubReseedPanel() {
         <button id="reseed-select-all-btn" class="btn btn-secondary btn-small" type="button">Select All</button>
         <button id="reseed-clear-btn" class="btn btn-secondary btn-small" type="button">Clear</button>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:12px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:8px;">
         ${spokes.length ? spokes.map(spoke => {
           const online = isOnline(spoke.last_seen);
           const checked = hubReseedState.selectedSpokeIds.includes(spoke.id);
-          return `<label style="border:1px solid var(--border);border-radius:8px;padding:12px;display:flex;gap:10px;align-items:flex-start;background:var(--card-bg,#fff);">
+          return `<label style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;display:flex;gap:8px;align-items:flex-start;background:var(--card-bg,#fff);">
             <input type="checkbox" data-reseed-spoke-id="${escHtml(spoke.id)}"${checked ? " checked" : ""}>
             <span>
               <strong>${escHtml(spokePrimaryLabel(spoke))}</strong>${online ? "" : ' <span style="color:var(--muted);">(offline — queued)</span>'}
@@ -9597,7 +9597,7 @@ function renderHubReseedPanel() {
           </label>`;
         }).join("") : '<div class="empty-state" style="grid-column:1 / -1;">No approved spokes found for this tenant.</div>'}
       </div>
-      <div class="form-actions" style="margin-top:16px;">
+      <div class="form-actions" style="margin-top:10px;">
         <button id="reseed-cancel-btn" class="btn btn-secondary" type="button">Cancel</button>
         <button id="reseed-start-btn" class="btn btn-primary" type="button"${startDisabled ? " disabled" : ""}>Reseed Selected Spokes →</button>
       </div>
@@ -10293,7 +10293,7 @@ function renderHubSimulationField(section, key, rawValue = "") {
   if (hubSimIsBoolValue(value)) {
     const [onValue, offValue] = hubSimBoolPair(value);
     return `
-      <label class="toggle-label" style="justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:10px;gap:12px;">
+      <label class="toggle-label" style="justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:10px;gap:8px;">
         <span>${escHtml(label)}</span>
         <input type="checkbox" data-section="${escHtml(section)}" data-key="${escHtml(key)}" data-on="${escHtml(onValue)}" data-off="${escHtml(offValue)}"${value.toLowerCase() === onValue ? " checked" : ""}>
       </label>
@@ -10340,7 +10340,7 @@ function renderHubSimulationConfigPanel() {
   const fetched = hubSimulationConfState.fetchedAt ? fmtDate(hubSimulationConfState.fetchedAt) : "—";
   const infoBar = `
     <section class="setup-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
         <div>
           <div style="font-weight:600;">configs/simulation.conf</div>
           <div class="muted" style="font-size:0.85rem;">Last fetched from GitHub: ${escHtml(fetched)}</div>
@@ -10362,7 +10362,7 @@ function renderHubSimulationConfigPanel() {
       ${infoBar}
       <section class="setup-card">
         <div class="empty-state">${escHtml(hubSimulationConfState.error)}</div>
-        <div style="margin-top:12px;display:flex;gap:8px;justify-content:center;">
+        <div style="margin-top:8px;display:flex;gap:8px;justify-content:center;">
           <button class="btn btn-secondary btn-small" type="button" data-open-tenant-setup="true">Open Setup</button>
         </div>
       </section>
@@ -11245,17 +11245,17 @@ function renderHubVmServer() {
   const disabled = fleet.any_running || !canManageTenant(tenantId);
   const readonlyNote = canManageTenant(tenantId) ? "" : '<div class="tenant-detail-note">Tenant Viewer access: fleet controls are read-only.</div>';
   container.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:16px;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:12px;">
       <section class="setup-card">
-        <div class="setup-card-header" style="display:flex;align-items:center;gap:12px;justify-content:space-between;">
+        <div class="setup-card-header" style="display:flex;align-items:center;gap:8px;justify-content:space-between;">
           <div><h2>Fleet Reclone</h2><p>Queue a rolling reclone on every approved spoke.</p></div>
           <span class="badge ${fleetMeta.className}">${escHtml(fleetMeta.label)}</span>
         </div>
         <div style="font-weight:600;margin-bottom:6px;">${escHtml(String(fleet.completed || 0))} / ${escHtml(String(fleet.total_vms || 0))} VMs recloned</div>
         <div class="progress-bar-wrap" style="margin-bottom:8px;"><div class="progress-bar" style="width:${fleetPct}%"></div></div>
-        <div class="muted" style="font-size:0.82rem;margin-bottom:12px;">${fleet.any_running ? "Polling every 10s while fleet reclone is running." : `Failed: ${escHtml(String(fleet.failed || 0))}`}</div>
+        <div class="muted" style="font-size:0.82rem;margin-bottom:8px;">${fleet.any_running ? "Polling every 10s while fleet reclone is running." : `Failed: ${escHtml(String(fleet.failed || 0))}`}</div>
         ${readonlyNote}
-        <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;">
+        <div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
           <label class="form-group" style="margin:0;min-width:100px;">
             <span class="form-label">Concurrency</span>
             <input id="hub-fleet-reclone-concurrency" class="form-input" type="number" min="1" max="10" value="${escHtml(String(hubVmServerFleetConcurrencyDraft || 3))}"${canManageTenant(tenantId) ? "" : " disabled"}>
@@ -11264,7 +11264,7 @@ function renderHubVmServer() {
         </div>
       </section>
       <section class="setup-card">
-        <div class="setup-card-header" style="display:flex;align-items:center;gap:12px;justify-content:space-between;">
+        <div class="setup-card-header" style="display:flex;align-items:center;gap:8px;justify-content:space-between;">
           <div><h2>Auto-Provisioning</h2><p>USB provisioning capacity reported across approved spokes.</p></div>
           <span class="badge ${usbProvisioning.auto_provision_on ? "badge-blue" : "badge-grey"}">${usbProvisioning.auto_provision_on ? "On" : "Off"}</span>
         </div>
@@ -11365,7 +11365,7 @@ function renderHubVmServerDetail(container, host) {
 
   container.innerHTML = `
     <div class="hub-vmserver-detail">
-      <div class="hub-vmserver-detail-header" style="display:flex;align-items:center;gap:12px;padding:10px 0 12px;">
+      <div class="hub-vmserver-detail-header" style="display:flex;align-items:center;gap:8px;padding:8px 0 10px;">
         <button class="btn btn-secondary btn-small" id="hub-vmserver-back-btn" type="button">← Back</button>
         <strong style="font-size:1rem;">${spokeName}</strong>
         <span class="stat-pill ${host.spoke_online ? "online" : "offline"}">${host.spoke_online ? "Online" : "Offline"}</span>
@@ -11431,7 +11431,7 @@ function _hubVmActionButtons(spokeId, vm) {
 }
 
 function _hubVmTable(spokeId, vms, label) {
-  if (!vms.length) return `<div class="empty-state" style="padding:20px;">${label}: none.</div>`;
+  if (!vms.length) return `<div class="empty-state" style="padding:12px;">${label}: none.</div>`;
   return `
     <table class="data-table">
       <thead><tr><th>Status</th><th>VMID</th><th>Name</th><th>Type</th><th>USB</th><th>Actions</th></tr></thead>
@@ -11485,7 +11485,7 @@ function renderHubVmServerVmsPanel(spokeId, { simVms, otherVms, containerVms, te
 }
 
 function renderHubVmServerUsbPanel(usb) {
-  if (!usb.length) return '<div class="setup-card"><div class="empty-state" style="padding:32px;">No USB devices assigned.</div></div>';
+  if (!usb.length) return '<div class="setup-card"><div class="empty-state" style="padding:16px;">No USB devices assigned.</div></div>';
   return `
     <div class="setup-card setup-section-gap">
       <div class="table-scroll">
@@ -11512,7 +11512,7 @@ function renderHubVmServerReclonePanel(spokeId, reclone, actionVms) {
   const log = Array.isArray(reclone.log) ? reclone.log : [];
   return `
     <div class="setup-card setup-section-gap">
-      <div class="setup-card-header" style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+      <div class="setup-card-header" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
         <h2 style="font-size:1rem;margin:0;">Fleet Reclone</h2>
         <span class="badge ${statusColor}">${escHtml(status)}</span>
         <button class="btn btn-primary btn-small" id="hub-reclone-all-btn" type="button">⟳ Reclone All</button>
@@ -11523,17 +11523,17 @@ function renderHubVmServerReclonePanel(spokeId, reclone, actionVms) {
           &nbsp;·&nbsp;
           <span class="muted">${reclone.completed || 0} / ${reclone.total || 0}</span>
         </div>
-        <div class="progress-bar-wrap" style="margin-bottom:12px;">
+        <div class="progress-bar-wrap" style="margin-bottom:8px;">
           <div class="progress-bar" style="width:${pct}%"></div>
         </div>` : ""}
-      ${reclone.last_run ? `<div class="muted" style="font-size:0.82rem;margin-bottom:12px;">Last run: ${escHtml(String(reclone.last_run))}</div>` : ""}
+      ${reclone.last_run ? `<div class="muted" style="font-size:0.82rem;margin-bottom:8px;">Last run: ${escHtml(String(reclone.last_run))}</div>` : ""}
       ${log.length ? `
         <div class="setup-card-header"><h3 style="font-size:0.9rem;margin:0;">Recent Log</h3></div>
         <div class="autoprov-live-list" style="max-height:200px;overflow-y:auto;font-size:0.82rem;">
           ${log.slice(-30).reverse().map(e => `<div class="autoprov-log-item">${escHtml(typeof e === "string" ? e : JSON.stringify(e))}</div>`).join("")}
         </div>` : ""}
       ${actionVms.length ? `
-        <div class="setup-card-header" style="margin-top:16px;"><h3 style="font-size:0.9rem;margin:0;">Per-VM Reclone</h3></div>
+        <div class="setup-card-header" style="margin-top:10px;"><h3 style="font-size:0.9rem;margin:0;">Per-VM Reclone</h3></div>
         <div class="table-scroll">
           <table class="data-table">
             <thead><tr><th>VMID</th><th>Name</th><th>Status</th><th>Action</th></tr></thead>
@@ -11653,7 +11653,7 @@ function renderHubApiServer() {
               <div class="setup-status-item"><span class="setup-status-label">Clients</span><span class="setup-status-value">${escHtml(String(health.clients ?? "—"))}</span></div>
               <div class="setup-status-item"><span class="setup-status-label">Repo Sync</span><span class="setup-status-value">${escHtml(health.repo_synced ? "Synced" : health.repo_error || "Unknown")}</span></div>
             </div>
-            <pre class="setup-section-gap" style="margin:0;max-height:280px;overflow:auto;background:#0f172a;color:#e2e8f0;border-radius:10px;padding:12px;font-size:12px;line-height:1.45;">${escHtml(JSON.stringify(row.api_server || {}, null, 2))}</pre>
+            <pre class="setup-section-gap" style="margin:0;max-height:280px;overflow:auto;background:#0f172a;color:#e2e8f0;border-radius:10px;padding:10px;font-size:12px;line-height:1.35;">${escHtml(JSON.stringify(row.api_server || {}, null, 2))}</pre>
           </details>
         `;
       }).join("")}
@@ -12074,7 +12074,7 @@ function openHubSiteDetail(wsite) {
       </tr>`;
     }).join('');
     checksHtml = `
-      <div class="setup-card" style="margin-bottom:12px;">
+      <div class="setup-card" style="margin-bottom:8px;">
         <div class="setup-card-header"><h2>Check Status</h2></div>
         <table class="data-table">
           <thead><tr><th>Check</th><th>Type</th><th>Status</th><th>Count</th><th>Last Seen</th></tr></thead>
@@ -12082,7 +12082,7 @@ function openHubSiteDetail(wsite) {
         </table>
       </div>`;
   } else {
-    checksHtml = `<div class="setup-card" style="margin-bottom:12px;"><div class="empty-state">No check data available for this site.</div></div>`;
+    checksHtml = `<div class="setup-card" style="margin-bottom:8px;"><div class="empty-state">No check data available for this site.</div></div>`;
   }
 
   // Spokes section (distributed mode — shows which spokes see this site)
@@ -12094,7 +12094,7 @@ function openHubSiteDetail(wsite) {
       <td>${s.token_valid ? '✓ Valid' : '—'}</td>
     </tr>`).join('');
     spokesHtml = `
-      <div class="setup-card" style="margin-bottom:12px;">
+      <div class="setup-card" style="margin-bottom:8px;">
         <div class="setup-card-header"><h2>Reporting Spokes</h2></div>
         <table class="data-table">
           <thead><tr><th>Spoke</th><th>Status</th><th>Token</th></tr></thead>
@@ -12105,7 +12105,7 @@ function openHubSiteDetail(wsite) {
 
   // Summary card
   const summaryHtml = `
-    <div class="setup-card" style="margin-bottom:12px;">
+    <div class="setup-card" style="margin-bottom:8px;">
       <div class="setup-status-grid">
         <div class="setup-status-item"><span class="setup-status-label">Wireless Clients</span><span class="setup-status-value">${wirelessTotal}</span></div>
         <div class="setup-status-item"><span class="setup-status-label">Checks Passing</span><span class="setup-status-value" style="color:var(--hpe-green-dark);">${checks.filter(([,v]) => v.status === "OK").length} / ${checks.length}</span></div>
@@ -13131,10 +13131,10 @@ function renderSpokeConfigTab() {
   }
 
   panel.innerHTML = `
-    ${state?.error ? `<div class="settings-message error" style="margin-bottom:12px;">${escHtml(state.error)}</div>` : ""}
-    <div class="setup-card" style="margin-bottom:12px;">
+    ${state?.error ? `<div class="settings-message error" style="margin-bottom:8px;">${escHtml(state.error)}</div>` : ""}
+    <div class="setup-card" style="margin-bottom:8px;">
       <div class="setup-card-header"><h3>Telemetry Summary</h3><p>Latest telemetry reported by this spoke.</p></div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;">
         <div class="setup-status-item"><span class="setup-status-label">Online status</span><span class="setup-status-value">${online ? "Online" : "Offline"}</span></div>
         <div class="setup-status-item"><span class="setup-status-label">Last seen</span><span class="setup-status-value">${escHtml(lastSeen ? `${relativeTime(lastSeen)} (${fmtDate(lastSeen)})` : "—")}</span></div>
         <div class="setup-status-item"><span class="setup-status-label">USB count</span><span class="setup-status-value">${escHtml(String(usbCount || 0))}</span></div>
@@ -13143,9 +13143,9 @@ function renderSpokeConfigTab() {
       </div>
     </div>
     ${SPOKE_CONFIG_FIELD_GROUPS.map(group => `
-      <div class="setup-card" style="margin-bottom:12px;">
+      <div class="setup-card" style="margin-bottom:8px;">
         <div class="setup-card-header"><h3>${escHtml(group.title)}</h3></div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;align-items:start;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;align-items:start;">
           ${group.fields.map(field => {
             const inputId = `spoke-config-${field.id}`;
             const value = getSpokeConfigDisplayValue(field, config, spoke);
@@ -13159,7 +13159,7 @@ function renderSpokeConfigTab() {
             }
             if (field.type === "toggle") {
               return `
-                <label class="form-group" style="display:flex;align-items:center;gap:10px;margin:0;padding-top:26px;">
+                <label class="form-group" style="display:flex;align-items:center;gap:8px;margin:0;padding-top:18px;">
                   <input id="${inputId}" type="checkbox"${value === "on" ? " checked" : ""}${canManage ? "" : " disabled"}>
                   <span class="form-label" style="margin:0;">${escHtml(field.label)}</span>
                 </label>`;
@@ -13172,7 +13172,7 @@ function renderSpokeConfigTab() {
           }).join("")}
         </div>
       </div>`).join("")}
-    <div class="form-actions" style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <div class="form-actions" style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <button id="spoke-config-save-btn" class="btn btn-primary" type="button"${canManage ? "" : " disabled"}>Save Changes</button>
       <button id="spoke-config-reload-btn" class="btn btn-secondary" type="button">Reload</button>
       <button id="spoke-config-cancel-btn" class="btn btn-secondary" type="button">Cancel</button>

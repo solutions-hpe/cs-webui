@@ -10116,10 +10116,8 @@ function spokeSecondaryLabel(spoke, fallback = "—") {
   const parts = [];
   const hostname = String(spoke?.hostname || "").trim();
   const label = String(spoke?.label || "").trim();
-  const workspace = String(spoke?.workspace_id || spoke?.tenant_id || "").trim();
   if (hostname && hostname !== primary) parts.push(hostname);
   if (label && label !== primary && label !== hostname) parts.push(label);
-  if (!parts.length && workspace && workspace !== primary) parts.push(workspace);
   return parts.join(" · ") || fallback;
 }
 

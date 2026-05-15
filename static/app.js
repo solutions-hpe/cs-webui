@@ -10518,7 +10518,9 @@ async function _loadTsOnboardingStatus(tenantId, root = document) {
   const d = await res.json();
   if (statusEl) statusEl.textContent = d.has_psk ? "✅ PSK is configured." : "No PSK configured — spokes require manual approval.";
   if (revokeBtn) revokeBtn.style.display = d.has_psk ? "" : "none";
-  if (revealEl) revealEl.classList.add("hidden");
+  // Only hide the reveal panel if there is no PSK value currently displayed
+  const valueEl = query("#ts-onboarding-psk-value");
+  if (revealEl && !(valueEl && valueEl.value)) revealEl.classList.add("hidden");
 }
 
 async function _generateTsOnboardingPsk(tenantId, root = document) {

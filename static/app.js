@@ -7644,13 +7644,48 @@ let hubVmServerSelectedSpoke = null;
 let hubVmServerFleetPollTimer = null;
 let hubVmServerFleetConcurrencyDraft = 3;
 let hubVmServerFleetConcurrencyTenant = null;
-let hubVmServerUsbApprovedDraft = [];
-let hubVmServerUsbApprovedTenant = null;
-const HUB_USB_DEVICE_TYPES = ["wireless", "wired", "storage", "generic"];
 let hubClientTypeFilter = "all";
 const tenantDashboardSort = { key: "name", direction: "asc" };
 
 const PROCESSING_FEATURES = ["aruba_polling", "teams_webhook", "email", "heartbeat", "gkill", "schedules", "repo_sync"];
+const SPOKE_CONFIG_FIELD_GROUPS = [
+  {
+    title: "Proxmox Settings",
+    fields: [
+      { id: "proxmox_host", label: "Proxmox host" },
+      { id: "proxmox_user", label: "Proxmox user" },
+      { id: "proxmox_node", label: "Proxmox node" },
+      { id: "vm_template_id", label: "VM Template ID", keys: ["vm_template_id", "vm_image_1_template_id"], saveKey: "vm_image_1_template_id" },
+      { id: "proxmox_password", label: "Proxmox password", type: "secret" },
+    ],
+  },
+  {
+    title: "USB / Device Settings",
+    fields: [
+      { id: "usb_vidpids", label: "USB certified VID:PIDs", type: "vidpid-list", help: "One entry per line: vidpid type label" },
+      { id: "usb_ignored_vidpids", label: "USB ignored VID:PIDs", type: "vidpid-list", help: "One entry per line: vidpid type label" },
+      { id: "usb_auto_provision", label: "USB auto-provision", type: "toggle" },
+    ],
+  },
+  {
+    title: "Reclone Settings",
+    fields: [
+      { id: "reclone_target_count", label: "Reclone target count", type: "number", keys: ["reclone_target_count", "reclone_concurrency"], saveKey: "reclone_concurrency" },
+      { id: "reclone_schedule_enabled", label: "Reclone schedule enabled", type: "toggle" },
+      { id: "reclone_schedule", label: "Reclone schedule", keys: ["reclone_schedule", "reclone_schedule_cron"], saveKey: "reclone_schedule_cron" },
+    ],
+  },
+  {
+    title: "System",
+    fields: [
+      { id: "label", label: "Spoke label/name", fallback: spoke => spoke?.label || spoke?.spoke_name || spoke?.hostname || "" },
+      { id: "spoke_tls", label: "TLS enabled", type: "toggle" },
+      { id: "relay_enabled", label: "Relay enabled", type: "toggle" },
+    ],
+  },
+];
+const SPOKE_CONFIG_FIELDS = SPOKE_CONFIG_FIELD_GROUPS.flatMap(group => group.fields);
+let activeSpokeConfigRequestId = 0;
 const spokeUiState = { expandedByTenant: {}, search: "" };
 const renderTokens = {};
 const scheduledReloads = {};
@@ -11185,154 +11220,6 @@ async function startHubFleetReclone() {
   await loadVmServer(true);
 }
 
-function normalizeHubVmServerUsbDraft(devices = []) {
-  if (!Array.isArray(devices)) return [];
-  return devices.map((device) => {
-    const type = String(device?.type || "generic").trim().toLowerCase();
-    return {
-      vidpid: String(device?.vidpid || "").trim().toLowerCase(),
-      type: HUB_USB_DEVICE_TYPES.includes(type) ? type : "generic",
-      label: String(device?.label || "").trim(),
-    };
-  });
-}
-
-function collectHubVmServerUsbDraft(root = document) {
-  const rows = [...root.querySelectorAll(".hub-usb-approved-row")];
-  if (!rows.length) return normalizeHubVmServerUsbDraft(hubVmServerUsbApprovedDraft);
-  return rows.map((row) => ({
-    vidpid: row.querySelector('[data-field="vidpid"]')?.value?.trim().toLowerCase() || "",
-    type: row.querySelector('[data-field="type"]')?.value || "generic",
-    label: row.querySelector('[data-field="label"]')?.value?.trim() || "",
-  }));
-}
-
-function normalizeHubVmServerUsbSaveDevices(devices = []) {
-  const deduped = new Map();
-  normalizeHubVmServerUsbDraft(devices).forEach((device, index) => {
-    const vidpid = String(device?.vidpid || "").trim().toLowerCase();
-    const label = String(device?.label || "").trim();
-    if (!vidpid && !label) return;
-    if (!/^[0-9a-f]{4}:[0-9a-f]{4}$/i.test(vidpid)) {
-      throw new Error(`Row ${index + 1}: enter VID:PID as ####:####`);
-    }
-    const type = HUB_USB_DEVICE_TYPES.includes(String(device?.type || "").trim().toLowerCase())
-      ? String(device.type).trim().toLowerCase()
-      : "generic";
-    deduped.set(vidpid, { vidpid, type, label });
-  });
-  return [...deduped.values()].sort((left, right) => left.vidpid.localeCompare(right.vidpid));
-}
-
-async function loadHubVmServerUsbConfig(force = false) {
-  const tenantId = getActiveTenantId();
-  if (!currentUser || !tenantId) {
-    hubVmServerUsbApprovedDraft = [];
-    hubVmServerUsbApprovedTenant = null;
-    return;
-  }
-  if (!force && hubVmServerUsbApprovedTenant === tenantId) return;
-  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/usb-config`);
-  const data = await readJson(res);
-  if (!res?.ok) {
-    hubVmServerUsbApprovedDraft = [];
-    hubVmServerUsbApprovedTenant = tenantId;
-    return;
-  }
-  hubVmServerUsbApprovedDraft = normalizeHubVmServerUsbDraft(data?.usb_vidpids || []);
-  hubVmServerUsbApprovedTenant = tenantId;
-}
-
-function renderHubVmServerUsbApprovedSection(tenantId) {
-  const canManage = canManageTenant(tenantId);
-  const disabled = canManage ? "" : " disabled";
-  const rows = hubVmServerUsbApprovedDraft;
-  return `
-    <section class="setup-card setup-section-gap" id="hub-usb-approved-section">
-      <div class="setup-card-header" style="display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap;">
-        <div>
-          <h2>USB Approved Devices</h2>
-          <p>These devices are certified across all spokes in this tenant.</p>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button id="hub-usb-approved-add-btn" class="btn btn-secondary btn-small" type="button"${disabled}>Add Device</button>
-          <button id="hub-usb-approved-save-btn" class="btn btn-primary btn-small" type="button"${disabled}>Save & Push to All Spokes</button>
-        </div>
-      </div>
-      ${canManage ? "" : '<div class="tenant-detail-note">Tenant Viewer access: USB approved devices are read-only.</div>'}
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead><tr><th>VID:PID</th><th>Type</th><th>Label</th><th></th></tr></thead>
-          <tbody>
-            ${rows.length ? rows.map((device, index) => `
-              <tr class="hub-usb-approved-row" data-index="${index}">
-                <td><input class="form-input" data-field="vidpid" value="${escHtml(device.vidpid || "")}" placeholder="2357:011e"${disabled}></td>
-                <td>
-                  <select class="form-input" data-field="type"${disabled}>
-                    ${HUB_USB_DEVICE_TYPES.map((type) => `<option value="${type}"${device.type === type ? " selected" : ""}>${type}</option>`).join("")}
-                  </select>
-                </td>
-                <td><input class="form-input" data-field="label" value="${escHtml(device.label || "")}" placeholder="Device label"${disabled}></td>
-                <td style="white-space:nowrap;"><button class="btn btn-secondary btn-small hub-usb-approved-remove" data-index="${index}" type="button"${disabled}>✕</button></td>
-              </tr>`).join("") : '<tr><td colspan="4" class="empty-state">No approved USB devices configured for this tenant.</td></tr>'}
-          </tbody>
-        </table>
-      </div>
-    </section>`;
-}
-
-function wireHubVmServerUsbApprovedActions(container, tenantId) {
-  const section = container.querySelector("#hub-usb-approved-section");
-  if (!section) return;
-  const syncDraft = () => {
-    hubVmServerUsbApprovedDraft = collectHubVmServerUsbDraft(section);
-    hubVmServerUsbApprovedTenant = tenantId;
-  };
-  section.querySelectorAll('[data-field="vidpid"], [data-field="label"], [data-field="type"]').forEach((input) => {
-    input.addEventListener("input", syncDraft);
-    input.addEventListener("change", syncDraft);
-  });
-  section.querySelector("#hub-usb-approved-add-btn")?.addEventListener("click", () => {
-    syncDraft();
-    hubVmServerUsbApprovedDraft.push({ vidpid: "", type: "wireless", label: "" });
-    renderHubVmServer();
-  });
-  section.querySelectorAll(".hub-usb-approved-remove").forEach((button) => {
-    button.addEventListener("click", () => {
-      syncDraft();
-      hubVmServerUsbApprovedDraft.splice(Number(button.dataset.index || -1), 1);
-      renderHubVmServer();
-    });
-  });
-  section.querySelector("#hub-usb-approved-save-btn")?.addEventListener("click", async () => {
-    if (!canManageTenant(tenantId)) {
-      showToast("Tenant Viewer access is read-only.", "warn");
-      return;
-    }
-    syncDraft();
-    let usbVidpids = [];
-    try {
-      usbVidpids = normalizeHubVmServerUsbSaveDevices(hubVmServerUsbApprovedDraft);
-    } catch (error) {
-      showToast(error.message || "Unable to validate USB approved devices.", "error");
-      return;
-    }
-    const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/usb-config/push-all`, {
-      method: "POST",
-      body: { usb_vidpids: usbVidpids },
-    });
-    const data = await readJson(res);
-    if (!res?.ok) {
-      showToast(data?.detail || "Unable to save USB approved devices.", "error");
-      return;
-    }
-    hubVmServerUsbApprovedDraft = normalizeHubVmServerUsbDraft(data?.usb_vidpids || usbVidpids);
-    hubVmServerUsbApprovedTenant = tenantId;
-    showToast(`USB approved list saved and pushed to ${(data?.pushed_to || []).length} spoke(s).`, "ok");
-    renderHubVmServer();
-  });
-}
-
 function renderHubVmServer() {
   const container = $("#hub-vm-server-content");
   if (!container) return;
@@ -11386,7 +11273,6 @@ function renderHubVmServer() {
         <div class="muted" style="font-size:0.82rem;">${escHtml(String((usbProvisioning.spokes || []).filter(spoke => spoke.auto_provision).length))} spoke(s) with auto-provisioning enabled.</div>
       </section>
     </div>
-    ${renderHubVmServerUsbApprovedSection(tenantId)}
     ${hosts.length ? `
       <div class="hub-vmserver-list">
         ${hosts.map(host => {
@@ -11423,14 +11309,24 @@ function renderHubVmServer() {
   $("#hub-fleet-reclone-btn", container)?.addEventListener("click", () => {
     startHubFleetReclone().catch(err => showToast(err?.message || "Unable to queue fleet reclone.", "error"));
   });
-  wireHubVmServerUsbApprovedActions(container, tenantId);
   container.querySelectorAll(".hub-vmserver-spoke-card").forEach(card => {
-    const openCard = () => {
-      hubVmServerSelectedSpoke = card.dataset.spokeId;
-      renderHubVmServer();
+    const openCard = async () => {
+      const spokeId = card.dataset.spokeId;
+      const spoke = getSpokeFromCache(tenantId, spokeId) || (await ensureTenantSpokesFor(tenantId)).find(item => item.id === spokeId);
+      const host = hosts.find(item => item.spoke_id === spokeId) || null;
+      if (!spoke) {
+        showToast("Unable to load spoke details.", "error");
+        return;
+      }
+      await openSpokeConfigModal(spoke, tenantId, { vmHost: host });
     };
-    card.addEventListener("click", openCard);
-    card.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") openCard(); });
+    card.addEventListener("click", () => { openCard().catch(err => showToast(err?.message || "Unable to load spoke details.", "error")); });
+    card.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openCard().catch(err => showToast(err?.message || "Unable to load spoke details.", "error"));
+      }
+    });
   });
   scheduleHubVmServerFleetPoll();
 }
@@ -11902,8 +11798,6 @@ async function loadVmServer(force = false) {
     aggregateProxmoxHosts = [];
     aggregateFleetRecloneStatus = defaultFleetRecloneStatus();
     aggregateUsbProvisioningStatus = defaultUsbProvisioningStatus();
-    hubVmServerUsbApprovedDraft = [];
-    hubVmServerUsbApprovedTenant = null;
     renderHubVmServer();
     return;
   }
@@ -11916,7 +11810,6 @@ async function loadVmServer(force = false) {
     const [fresh] = await Promise.all([
       loadAggregateData("proxmox"),
       loadHubVmServerAggregateStatus(),
-      loadHubVmServerUsbConfig(force),
     ]);
     const hosts = fresh?.hosts || [];
     aggregateProxmoxHosts = hosts;
@@ -11925,10 +11818,7 @@ async function loadVmServer(force = false) {
   };
 
   if (!force && aggregateProxmoxHosts.length) {
-    await Promise.all([
-      loadHubVmServerAggregateStatus(),
-      loadHubVmServerUsbConfig(false),
-    ]);
+    await loadHubVmServerAggregateStatus();
     renderHubVmServer();
     revalidate();
     return;
@@ -11937,10 +11827,7 @@ async function loadVmServer(force = false) {
   const cached = loadCache();
   if (!force && cached && cached.length) {
     aggregateProxmoxHosts = cached;
-    await Promise.all([
-      loadHubVmServerAggregateStatus(),
-      loadHubVmServerUsbConfig(false),
-    ]);
+    await loadHubVmServerAggregateStatus();
     renderHubVmServer();
     revalidate();
     return;
@@ -13026,6 +12913,387 @@ function getSpokeFromCache(tenantId, spokeId) {
   return (spokeCache[tenantId] || []).find(spoke => spoke.id === spokeId) || null;
 }
 
+function getActiveSpokeConfigState() {
+  if (!activeSpokeModal) return null;
+  if (!activeSpokeModal.configState) {
+    activeSpokeModal.configState = {
+      loaded: false,
+      loading: false,
+      error: "",
+      config: activeSpokeModal.spoke?.config || {},
+      telemetry: activeSpokeModal.spoke?.telemetry || {},
+    };
+  }
+  return activeSpokeModal.configState;
+}
+
+function findSpokeConfigField(fieldId) {
+  return SPOKE_CONFIG_FIELDS.find(field => field.id === fieldId) || null;
+}
+
+function normalizeSpokeConfigToggle(value) {
+  return ["on", "true", "1", "enabled", "yes"].includes(String(value ?? "").trim().toLowerCase()) ? "on" : "off";
+}
+
+function parseSpokeConfigList(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+      return [];
+    }
+  }
+  return [];
+}
+
+function formatSpokeVidPidList(value) {
+  return parseSpokeConfigList(value).map(item => {
+    if (item && typeof item === "object") {
+      const vidpid = String(item.vidpid || item.id || "").trim();
+      const type = String(item.type || "").trim();
+      const label = String(item.label || "").trim();
+      return [vidpid, type, label].filter(Boolean).join(" ").trim();
+    }
+    return String(item || "").trim();
+  }).filter(Boolean).join("\n");
+}
+
+function parseSpokeVidPidListInput(rawValue) {
+  return String(rawValue || "")
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => {
+      const parts = line.split(/\s+/);
+      const vidpid = String(parts.shift() || "").trim();
+      if (!vidpid) return null;
+      const type = String(parts[0] || "").trim();
+      const label = parts.slice(type ? 1 : 0).join(" ").trim();
+      const item = { vidpid };
+      if (type) item.type = type;
+      if (label) item.label = label;
+      return item;
+    })
+    .filter(Boolean);
+}
+
+function getSpokeConfigFieldValue(field, sourceConfig = {}, spoke = {}) {
+  const keys = field.keys || [field.id];
+  for (const key of keys) {
+    if (sourceConfig && Object.prototype.hasOwnProperty.call(sourceConfig, key)) {
+      return sourceConfig[key];
+    }
+  }
+  if (typeof field.fallback === "function") return field.fallback(spoke);
+  return "";
+}
+
+function getSpokeConfigDisplayValue(field, sourceConfig = {}, spoke = {}) {
+  const raw = getSpokeConfigFieldValue(field, sourceConfig, spoke);
+  if (field.type === "toggle") return normalizeSpokeConfigToggle(raw);
+  if (field.type === "vidpid-list") return formatSpokeVidPidList(raw);
+  if (raw == null) return "";
+  return String(raw).trim();
+}
+
+function getSpokeConfigSaveKey(field, sourceConfig = {}) {
+  for (const key of field.keys || []) {
+    if (Object.prototype.hasOwnProperty.call(sourceConfig || {}, key)) return key;
+  }
+  return field.saveKey || (field.keys && field.keys[0]) || field.id;
+}
+
+function ensureSpokeConfigSubtab() {
+  const subnav = document.querySelector("#spoke-modal .setup-subnav");
+  if (subnav && !subnav.querySelector('[data-subtab="spoke-config"]')) {
+    const button = document.createElement("button");
+    button.className = "setup-subtab spoke-subtab";
+    button.dataset.subtab = "spoke-config";
+    button.type = "button";
+    button.textContent = "Config";
+    const serverTab = subnav.querySelector('[data-subtab="spoke-server"]');
+    if (serverTab && serverTab.nextSibling) {
+      subnav.insertBefore(button, serverTab.nextSibling);
+    } else {
+      subnav.appendChild(button);
+    }
+  }
+  const commandsPanel = document.getElementById("spoke-commands");
+  if (commandsPanel && !document.getElementById("spoke-config")) {
+    const panel = document.createElement("div");
+    panel.id = "spoke-config";
+    panel.className = "setup-subpanel hidden";
+    panel.style.marginTop = "12px";
+    commandsPanel.parentNode.insertBefore(panel, commandsPanel);
+  }
+}
+
+function updateSpokeModalTitle() {
+  if (!activeSpokeModal) return;
+  const title = document.getElementById("spoke-modal-title");
+  if (title) title.textContent = `${spokePrimaryLabel(activeSpokeModal.spoke)} — ${tenantName(activeSpokeModal.tenant_id)}`;
+}
+
+function syncActiveSpokeModalFromCache() {
+  if (!activeSpokeModal) return null;
+  const cached = getSpokeFromCache(activeSpokeModal.tenant_id, activeSpokeModal.spoke?.id);
+  if (!cached) return activeSpokeModal.spoke;
+  const state = getActiveSpokeConfigState();
+  if (state?.loaded) {
+    cached.config = state.config || {};
+    cached.telemetry = state.telemetry || {};
+    if (Object.prototype.hasOwnProperty.call(state.config || {}, "label")) {
+      cached.label = state.config.label;
+    }
+  }
+  activeSpokeModal.spoke = cached;
+  return cached;
+}
+
+async function loadSpokeConfig(force = false) {
+  if (!activeSpokeModal) return null;
+  ensureSpokeConfigSubtab();
+  const state = getActiveSpokeConfigState();
+  if (!state) return null;
+  if (state.loading && !force) return state;
+  if (state.loaded && !force) {
+    renderSpokeConfigTab();
+    return state;
+  }
+  state.loading = true;
+  state.error = "";
+  renderSpokeConfigTab();
+  const requestId = ++activeSpokeConfigRequestId;
+  activeSpokeModal.configRequestId = requestId;
+  const res = await apiFetch(`/api/${encodeURIComponent(activeSpokeModal.tenant_id)}/spokes/${encodeURIComponent(activeSpokeModal.spoke.id)}/config`);
+  const data = await readJson(res);
+  if (!activeSpokeModal || activeSpokeModal.configRequestId != requestId) return null;
+  state.loading = false;
+  if (!res || !res.ok) {
+    state.loaded = false;
+    state.error = data?.detail || "Unable to load spoke config.";
+    renderSpokeConfigTab();
+    return null;
+  }
+  state.loaded = true;
+  state.error = "";
+  state.config = data?.config || {};
+  state.telemetry = data?.telemetry || {};
+  const cached = getSpokeFromCache(activeSpokeModal.tenant_id, activeSpokeModal.spoke.id);
+  if (cached) {
+    cached.config = state.config;
+    cached.telemetry = state.telemetry;
+    if (Object.prototype.hasOwnProperty.call(state.config, "label")) cached.label = state.config.label;
+    activeSpokeModal.spoke = cached;
+  } else {
+    activeSpokeModal.spoke = {
+      ...activeSpokeModal.spoke,
+      config: state.config,
+      telemetry: state.telemetry,
+      ...(Object.prototype.hasOwnProperty.call(state.config, "label") ? { label: state.config.label } : {}),
+    };
+  }
+  updateSpokeModalTitle();
+  renderSpokeClientsTab();
+  renderSpokeServerTab();
+  renderSpokeCentralTab();
+  renderSpokeStatusTab();
+  renderSpokeConfigTab();
+  return state;
+}
+
+function renderSpokeConfigTab() {
+  if (!activeSpokeModal) return;
+  ensureSpokeConfigSubtab();
+  const panel = document.getElementById("spoke-config");
+  if (!panel) return;
+  const state = getActiveSpokeConfigState();
+  const spoke = syncActiveSpokeModalFromCache() || activeSpokeModal.spoke || {};
+  const config = state?.loaded ? (state.config || {}) : (spoke.config || {});
+  const telemetry = state?.loaded ? (state.telemetry || {}) : (spoke.telemetry || {});
+  const proxmox = telemetry?.proxmox || activeSpokeModal.vmHost?.proxmox || {};
+  const online = spoke.last_seen ? isOnline(spoke.last_seen) : Boolean(activeSpokeModal.vmHost?.spoke_online);
+  const usbCount = Array.isArray(proxmox.usb_state)
+    ? proxmox.usb_state.length
+    : Number(activeSpokeModal.vmHost?.usb_count ?? proxmox.usb_count ?? 0);
+  const lastSeen = spoke.last_seen || telemetry?.last_seen || activeSpokeModal.vmHost?.last_seen || null;
+  const proxmoxConnected = proxmox.connected == null ? "—" : (proxmox.connected ? "Yes" : "No");
+  const agentVersion = proxmox.agent_version || telemetry?.api_server?.health?.version || activeSpokeModal.vmHost?.proxmox?.agent_version || "—";
+  const canManage = canManageTenant(activeSpokeModal.tenant_id);
+
+  if (state?.loading && !state.loaded) {
+    panel.innerHTML = '<div class="setup-card"><div class="empty-state">Loading current spoke config…</div></div>';
+    return;
+  }
+
+  panel.innerHTML = `
+    ${state?.error ? `<div class="settings-message error" style="margin-bottom:12px;">${escHtml(state.error)}</div>` : ""}
+    <div class="setup-card" style="margin-bottom:12px;">
+      <div class="setup-card-header"><h3>Telemetry Summary</h3><p>Latest telemetry reported by this spoke.</p></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
+        <div class="setup-status-item"><span class="setup-status-label">Online status</span><span class="setup-status-value">${online ? "Online" : "Offline"}</span></div>
+        <div class="setup-status-item"><span class="setup-status-label">Last seen</span><span class="setup-status-value">${escHtml(lastSeen ? `${relativeTime(lastSeen)} (${fmtDate(lastSeen)})` : "—")}</span></div>
+        <div class="setup-status-item"><span class="setup-status-label">USB count</span><span class="setup-status-value">${escHtml(String(usbCount || 0))}</span></div>
+        <div class="setup-status-item"><span class="setup-status-label">Proxmox connected</span><span class="setup-status-value">${escHtml(proxmoxConnected)}</span></div>
+        <div class="setup-status-item"><span class="setup-status-label">Agent version</span><span class="setup-status-value">${escHtml(String(agentVersion || "—"))}</span></div>
+      </div>
+    </div>
+    ${SPOKE_CONFIG_FIELD_GROUPS.map(group => `
+      <div class="setup-card" style="margin-bottom:12px;">
+        <div class="setup-card-header"><h3>${escHtml(group.title)}</h3></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;align-items:start;">
+          ${group.fields.map(field => {
+            const inputId = `spoke-config-${field.id}`;
+            const value = getSpokeConfigDisplayValue(field, config, spoke);
+            if (field.type === "vidpid-list") {
+              return `
+                <label class="form-group" style="grid-column:1 / -1;margin:0;">
+                  <span class="form-label">${escHtml(field.label)}</span>
+                  <textarea id="${inputId}" class="form-input" rows="4"${canManage ? "" : " disabled"}>${escHtml(value)}</textarea>
+                  <span class="muted" style="font-size:0.82rem;">${escHtml(field.help || "")}</span>
+                </label>`;
+            }
+            if (field.type === "toggle") {
+              return `
+                <label class="form-group" style="display:flex;align-items:center;gap:10px;margin:0;padding-top:26px;">
+                  <input id="${inputId}" type="checkbox"${value === "on" ? " checked" : ""}${canManage ? "" : " disabled"}>
+                  <span class="form-label" style="margin:0;">${escHtml(field.label)}</span>
+                </label>`;
+            }
+            return `
+              <label class="form-group" style="margin:0;">
+                <span class="form-label">${escHtml(field.label)}</span>
+                <input id="${inputId}" class="form-input" type="${field.type === "secret" ? "password" : field.type === "number" ? "number" : "text"}" value="${field.type === "secret" ? "" : escHtml(value)}"${canManage ? "" : " disabled"}>
+              </label>`;
+          }).join("")}
+        </div>
+      </div>`).join("")}
+    <div class="form-actions" style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <button id="spoke-config-save-btn" class="btn btn-primary" type="button"${canManage ? "" : " disabled"}>Save Changes</button>
+      <button id="spoke-config-reload-btn" class="btn btn-secondary" type="button">Reload</button>
+      <button id="spoke-config-cancel-btn" class="btn btn-secondary" type="button">Cancel</button>
+      <span id="spoke-config-msg" class="form-msg">${canManage ? "" : "Read-only"}</span>
+    </div>
+  `;
+
+  const proxmoxPasswordInput = document.getElementById("spoke-config-proxmox_password");
+  bindSecretInput(proxmoxPasswordInput);
+  setSecretInputConfigured(proxmoxPasswordInput, Boolean(getSpokeConfigDisplayValue(findSpokeConfigField("proxmox_password"), config, spoke)));
+
+  document.getElementById("spoke-config-save-btn")?.addEventListener("click", () => {
+    saveSpokeConfigChanges().catch(err => {
+      setFormMessage("spoke-config-msg", err?.message || "Unable to save spoke config.", false);
+      showToast(err?.message || "Unable to save spoke config.", "error");
+    });
+  });
+  document.getElementById("spoke-config-reload-btn")?.addEventListener("click", () => {
+    loadSpokeConfig(true).catch(err => {
+      setFormMessage("spoke-config-msg", err?.message || "Unable to reload spoke config.", false);
+    });
+  });
+  document.getElementById("spoke-config-cancel-btn")?.addEventListener("click", closeSpokeModal);
+}
+
+async function saveSpokeConfigChanges() {
+  if (!activeSpokeModal || !canManageTenant(activeSpokeModal.tenant_id)) return;
+  const state = getActiveSpokeConfigState();
+  const sourceConfig = state?.config || activeSpokeModal.spoke?.config || {};
+  const payload = {};
+
+  for (const field of SPOKE_CONFIG_FIELDS) {
+    const input = document.getElementById(`spoke-config-${field.id}`);
+    if (!input) continue;
+    const saveKey = getSpokeConfigSaveKey(field, sourceConfig);
+    if (field.type === "secret") {
+      const secret = getSecretInputPayload(input);
+      if (!secret.include) continue;
+      const currentValue = String(secret.value ?? "");
+      const baseline = String(getSpokeConfigFieldValue(field, sourceConfig, activeSpokeModal.spoke) ?? "");
+      if (currentValue === baseline) continue;
+      payload[saveKey] = currentValue;
+      continue;
+    }
+    if (field.type === "vidpid-list") {
+      const currentList = parseSpokeVidPidListInput(input.value);
+      const baselineText = formatSpokeVidPidList(getSpokeConfigFieldValue(field, sourceConfig, activeSpokeModal.spoke));
+      const currentText = formatSpokeVidPidList(currentList);
+      if (currentText === baselineText) continue;
+      payload[saveKey] = currentList;
+      continue;
+    }
+    if (field.type === "toggle") {
+      const currentValue = input.checked ? "on" : "off";
+      const baseline = normalizeSpokeConfigToggle(getSpokeConfigFieldValue(field, sourceConfig, activeSpokeModal.spoke));
+      if (currentValue === baseline) continue;
+      payload[saveKey] = currentValue;
+      continue;
+    }
+    const currentValue = String(input.value ?? "").trim();
+    const baseline = String(getSpokeConfigFieldValue(field, sourceConfig, activeSpokeModal.spoke) ?? "").trim();
+    if (currentValue === baseline) continue;
+    payload[saveKey] = currentValue;
+  }
+
+  if (!Object.keys(payload).length) {
+    setFormMessage("spoke-config-msg", "No changes to save.", true);
+    showToast("No spoke config changes to save.", "ok");
+    return;
+  }
+
+  const saveBtn = document.getElementById("spoke-config-save-btn");
+  if (saveBtn) saveBtn.disabled = true;
+  setFormMessage("spoke-config-msg", "Saving…", true);
+  const res = await apiFetch(`/api/${encodeURIComponent(activeSpokeModal.tenant_id)}/spokes/${encodeURIComponent(activeSpokeModal.spoke.id)}/config`, {
+    method: "POST",
+    body: payload,
+  });
+  const data = await readJson(res);
+  if (saveBtn) saveBtn.disabled = false;
+  if (!res || !res.ok) {
+    const message = data?.detail || "Failed to save spoke config.";
+    setFormMessage("spoke-config-msg", message, false);
+    showToast(message, "error");
+    return;
+  }
+
+  if (state) {
+    state.loaded = true;
+    state.error = "";
+    state.config = { ...sourceConfig, ...payload };
+  }
+  const cached = getSpokeFromCache(activeSpokeModal.tenant_id, activeSpokeModal.spoke.id);
+  if (cached) {
+    cached.config = { ...(cached.config || {}), ...payload };
+    if (Object.prototype.hasOwnProperty.call(payload, "label")) cached.label = payload.label;
+  }
+  activeSpokeModal.spoke = {
+    ...activeSpokeModal.spoke,
+    config: { ...(activeSpokeModal.spoke?.config || {}), ...payload },
+    ...(Object.prototype.hasOwnProperty.call(payload, "label") ? { label: payload.label } : {}),
+  };
+  updateSpokeModalTitle();
+  renderSpokeConfigTab();
+  setFormMessage("spoke-config-msg", `Changes queued (config v${data?.config_version || "?"}).`, true);
+  showToast("Spoke config update queued.", "ok");
+  await loadSpokes(true);
+}
+
+async function openSpokeConfigModal(spoke, tenantId, options = {}) {
+  if (!spoke || !tenantId) return;
+  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spoke.id)}/config`);
+  const data = await readJson(res);
+  if (!res || !res.ok) {
+    const message = data?.detail || "Unable to load spoke config.";
+    showToast(message, "error");
+    return;
+  }
+  openSpokeModal(spoke, tenantId, "spoke-config", { ...options, configData: data });
+}
+
 function renderSpokeClientsTab() {
   const spoke = getSpokeFromCache(activeSpokeModal?.tenant_id, activeSpokeModal?.spoke?.id) || activeSpokeModal?.spoke;
   if (!spoke) return;
@@ -13280,15 +13548,44 @@ function renderSpokeStatusTab() {
   }
 }
 
-function openSpokeModal(spoke, tenantId, subtab = "spoke-clients") {
-  activeSpokeModal = { spoke, tenant_id: tenantId };
-  $("#spoke-modal-title") && ($("#spoke-modal-title").textContent = `${spokePrimaryLabel(spoke)} — ${tenantName(tenantId)}`);
+function openSpokeModal(spoke, tenantId, subtab = "spoke-clients", options = {}) {
+  ensureSpokeConfigSubtab();
+  const configData = options.configData || null;
+  const cached = getSpokeFromCache(tenantId, spoke?.id);
+  const mergedSpoke = {
+    ...(cached || spoke || {}),
+    ...(configData?.config ? { config: configData.config } : {}),
+    ...(configData?.telemetry ? { telemetry: configData.telemetry } : {}),
+    ...(Object.prototype.hasOwnProperty.call(configData?.config || {}, "label") ? { label: configData.config.label } : {}),
+  };
+  if (cached && configData) {
+    cached.config = configData.config || {};
+    cached.telemetry = configData.telemetry || {};
+    if (Object.prototype.hasOwnProperty.call(configData.config || {}, "label")) cached.label = configData.config.label;
+  }
+  activeSpokeModal = {
+    spoke: mergedSpoke,
+    tenant_id: tenantId,
+    vmHost: options.vmHost || null,
+    configState: {
+      loaded: Boolean(configData),
+      loading: false,
+      error: "",
+      config: configData?.config || mergedSpoke.config || {},
+      telemetry: configData?.telemetry || mergedSpoke.telemetry || {},
+    },
+  };
+  updateSpokeModalTitle();
   $("#spoke-modal")?.classList.remove("hidden");
   activateSpokeSubtab(subtab);
   renderSpokeClientsTab();
   renderSpokeServerTab();
   renderSpokeCentralTab();
   renderSpokeStatusTab();
+  if (subtab === "spoke-config") {
+    renderSpokeConfigTab();
+    if (!configData) loadSpokeConfig().catch(() => {});
+  }
   loadSpokeCommands();
   loadSpokeProcessingMode();
   loadSpokeAudit();
@@ -13308,14 +13605,20 @@ function openSpokeModal(spoke, tenantId, subtab = "spoke-clients") {
 
 function closeSpokeModal() {
   $("#spoke-modal")?.classList.add("hidden");
+  activeSpokeConfigRequestId += 1;
   activeSpokeModal = null;
 }
 
 function activateSpokeSubtab(subtabId) {
+  ensureSpokeConfigSubtab();
   $$(".spoke-subtab").forEach(button => button.classList.toggle("active", button.dataset.subtab === subtabId));
-  ["spoke-clients", "spoke-commands", "spoke-mode", "spoke-audit", "spoke-server", "spoke-central", "spoke-status"].forEach(panelId => {
+  ["spoke-clients", "spoke-config", "spoke-commands", "spoke-mode", "spoke-audit", "spoke-server", "spoke-central", "spoke-status"].forEach(panelId => {
     document.getElementById(panelId)?.classList.toggle("hidden", panelId !== subtabId);
   });
+  if (subtabId === "spoke-config") {
+    renderSpokeConfigTab();
+    loadSpokeConfig().catch(() => {});
+  }
   if (subtabId === "spoke-commands") loadSpokeCommands();
   if (subtabId === "spoke-mode") loadSpokeProcessingMode();
   if (subtabId === "spoke-audit") loadSpokeAudit();
@@ -14436,7 +14739,18 @@ function connectHubWebSocket() {
       if (activeTab === "tenant-setup") scheduleReload("ws-tenant-setup", () => loadTenantSetup(true));
       if (activeTab === "config") scheduleReload("ws-config", () => loadConfig(true));
       if (activeSpokeModal && data.tenant_id === activeSpokeModal.tenant_id && data.spoke_id === activeSpokeModal.spoke.id) {
-        scheduleReload("ws-modal", () => loadSpokes(true).then(() => renderSpokeClientsTab()));
+        scheduleReload("ws-modal", () => loadSpokes(true).then(() => {
+          renderSpokeClientsTab();
+          renderSpokeServerTab();
+          renderSpokeCentralTab();
+          renderSpokeStatusTab();
+          const configPanel = document.getElementById("spoke-config");
+          if (configPanel && !configPanel.classList.contains("hidden")) {
+            return loadSpokeConfig(true);
+          }
+          renderSpokeConfigTab();
+          return null;
+        }));
       }
     } else if (data.type === "heartbeat_update") {
       updateOnlineBadges(data.island_online);

@@ -11274,9 +11274,9 @@ function renderHubVmServer() {
       </section>
       <section class="setup-card">
         <div class="setup-card-header">
-          <div><h2>Update All</h2><p>Update Proxmox agents first, then spoke software after a 2-minute delay.</p></div>
+          <div><h2>Update All</h2><p>Update Proxmox agents first, then each spoke automatically once its agent confirms updated.</p></div>
         </div>
-        <div class="muted" style="font-size:0.82rem;margin-bottom:10px;">Agents update immediately. Spokes restart ~2 min later to ensure agents finish first.</div>
+        <div class="muted" style="font-size:0.82rem;margin-bottom:10px;">Agents update immediately via the live connection. Each spoke restarts as soon as its agent confirms the new version.</div>
         ${readonlyNote}
         <button id="hub-update-all-btn" class="btn btn-primary" type="button"${canManageTenant(tenantId) ? "" : " disabled"}>⬆️ Update All</button>
       </section>
@@ -13318,7 +13318,7 @@ function showUpdateProgressModal(tenantId, jobId, spokeCount) {
         <button id="update-progress-close" class="btn btn-secondary" style="padding:4px 10px;">✕</button>
       </div>
       <div class="muted" style="font-size:0.82rem;margin:6px 0 12px;">
-        Proxmox agents updating now &nbsp;·&nbsp; Spokes restart in ~2 min &nbsp;·&nbsp; Polling every 15s
+        Proxmox agents updating now &nbsp;·&nbsp; Each spoke restarts automatically once its agent confirms updated &nbsp;·&nbsp; Polling every 15s
       </div>
       <div id="update-progress-body">
         <div class="muted">Waiting for first status check…</div>

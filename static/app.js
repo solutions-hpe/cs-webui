@@ -1515,7 +1515,9 @@ function renderServerTab(data) {
     const networkTypes = new Set(['nfs', 'cifs', 'glusterfs', 'cephfs', 'rbd', 'iscsi', 'pbs']);
     storagePills.innerHTML = node.storage.map((s) => {
       const icon = networkTypes.has(s.type) ? '🌐' : '🗄️';
-      return `<span class="server-stat-pill" title="${s.name} (${s.type})">${icon} ${s.name}: ${fmtSizeKB(s.used)} / ${fmtSizeKB(s.total)}</span>`;
+      const storageName = escHtml(s.name || '—');
+      const storageType = escHtml(s.type || 'dir');
+      return `<span class="server-stat-pill" title="${storageName} (${storageType})">${icon} ${storageName}: ${fmtSizeKB(s.used)} / ${fmtSizeKB(s.total)}</span>`;
     }).join('');
   }
 
@@ -2996,10 +2998,11 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
     const vidpidHtml = hwName
       ? `${escHtml(device.vidpid || '—')}<div class="muted" style="font-size:0.78rem;margin-top:2px;">${escHtml(hwName)}</div>`
       : escHtml(device.vidpid || '—');
+    const usbType = escHtml(device.type || 'wireless');
     tr.innerHTML = `
       <td>${escHtml(device.label || device.vidpid || '—')}</td>
       <td>${vidpidHtml}</td>
-      <td class="usb-type-${device.type || 'wireless'}">${device.type || 'wireless'}</td>
+      <td class="usb-type-${usbType}">${usbType}</td>
       <td>${activeVmHtml}</td>
       <td>${missingHtml}</td>
       <td>${available > 0 ? `<span class="badge badge-green">${available}</span>` : '<span class="muted">—</span>'}</td>
@@ -5970,9 +5973,9 @@ function renderHwPanel() {
     row.setAttribute('role', 'button');
     row.innerHTML = `
       <span class="check-dot ${item.dotCls}"></span>
-      <span class="check-label">${item.label}</span>
-      <span class="check-badge ${item.badgeCls}">${item.badge}</span>
-      <span class="check-detail">${item.detail}</span>
+      <span class="check-label">${escHtml(item.label || '')}</span>
+      <span class="check-badge ${item.badgeCls}">${escHtml(item.badge || '')}</span>
+      <span class="check-detail">${escHtml(item.detail || '')}</span>
       <span class="check-ts">${item.ts ? new Date(item.ts * 1000).toLocaleTimeString() : ''}</span>
     `;
     row.addEventListener('click', item.onClick);
@@ -6001,9 +6004,9 @@ function renderCcPanel() {
     row.setAttribute('role', 'button');
     row.innerHTML = `
       <span class="check-dot ${item.dotCls}"></span>
-      <span class="check-label">${item.label}</span>
-      <span class="check-badge ${item.badgeCls}">${item.badge}</span>
-      <span class="check-detail">${item.detail}</span>
+      <span class="check-label">${escHtml(item.label || '')}</span>
+      <span class="check-badge ${item.badgeCls}">${escHtml(item.badge || '')}</span>
+      <span class="check-detail">${escHtml(item.detail || '')}</span>
       <span class="check-ts">${item.ts ? new Date(item.ts * 1000).toLocaleTimeString() : ''}</span>
     `;
     row.addEventListener('click', item.onClick);
@@ -7361,6 +7364,7 @@ function stopRefreshTimers() {
 }
 
 function computeRefreshPaused() {
+  if (document.hidden) return true;
   if (activeSpokeTab === 'server') {
     return !refreshActiveServerSubtabs.has(activeServerSubtab);
   }
@@ -7415,6 +7419,10 @@ if (refreshSelect) {
   applyRefreshInterval(initial);
   refreshSelect.addEventListener('change', () => applyRefreshInterval(Number(refreshSelect.value)));
 }
+
+document.addEventListener('visibilitychange', () => {
+  updateRefreshPausedState();
+});
 
 // ── Log viewer ────────────────────────────────────────────────────────────────
 let loadServiceLogs = () => {};
@@ -14089,7 +14097,7 @@ function updateAutoRefreshCountdownDisplay(text, paused = false) {
 }
 
 function computeHubRefreshPaused() {
-  if (!currentUser) return true;
+  if (document.hidden || !currentUser) return true;
   if (activeTab !== "dashboard") {
     return !autoRefreshActiveTabs.has(activeTab);
   }
@@ -14152,6 +14160,10 @@ function updateHubRefreshPausedState() {
 function startAutoRefresh() {
   updateHubRefreshPausedState();
 }
+
+document.addEventListener('visibilitychange', () => {
+  updateHubRefreshPausedState();
+});
 
 function connectHubWebSocket() {
   if (!authToken) return;

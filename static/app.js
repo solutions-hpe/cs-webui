@@ -12687,7 +12687,6 @@ function renderSpokeBody(section, spoke) {
   const clients = spoke.telemetry?.clients || [];
   body.innerHTML = `
     <div class="spoke-section-summary">
-      <span class="stat-pill">Workspace ${escHtml(tenantName(spoke.tenant_id))}</span>
       <span class="stat-pill">${clients.length} clients</span>
       <span class="stat-pill">Seen ${escHtml(relativeTime(spoke.last_seen))}</span>
     </div>
@@ -12791,7 +12790,7 @@ async function loadSpokes(force = false) {
   }
   const group = document.createElement("section");
   group.className = "workspace-group setup-card";
-  group.innerHTML = `<div class="workspace-header"><h2>${escHtml(tenantName(currentTenantId))}</h2><p>Workspace: ${escHtml(currentTenantId)}</p></div><div class="workspace-body"></div>`;
+  group.innerHTML = `<div class="workspace-header"><h2>${escHtml(tenantName(currentTenantId))}</h2><p>Tenant ID: ${escHtml(currentTenantId)}</p></div><div class="workspace-body"></div>`;
   list.innerHTML = "";
   list.appendChild(group);
   renderInBatches("spokes", $(".workspace-body", group), filtered, spoke => createSpokeSection(spoke), 30);

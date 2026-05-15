@@ -10441,6 +10441,53 @@ function hydrateTenantSetupPanel(data = {}) {
   const configured = isConfiguredSecretValue(github.github_token_configured);
   setSecretInputConfigured($("#tenant-github-token"), configured);
   $("#tenant-github-token-status") && ($("#tenant-github-token-status").textContent = configured ? "Token configured" : "Token not configured");
+
+  // Wire up Onboarding PSK buttons
+  const tenantId = data.tenantId || currentTenantId;
+  if (tenantId && canManageTenant(tenantId)) {
+    _loadTsOnboardingStatus(tenantId);
+    $("#ts-onboarding-generate-btn")?.addEventListener("click", () => _generateTsOnboardingPsk(tenantId));
+    $("#ts-onboarding-revoke-btn")?.addEventListener("click", () => _revokeTsOnboardingPsk(tenantId));
+    $("#ts-onboarding-copy-btn")?.addEventListener("click", () => {
+      const val = $("#ts-onboarding-psk-value")?.value;
+      if (val) navigator.clipboard.writeText(val).then(() => {
+        const btn = $("#ts-onboarding-copy-btn");
+        if (btn) { btn.textContent = "Copied!"; setTimeout(() => { btn.textContent = "Copy"; }, 2000); }
+      });
+    });
+  }
+}
+
+async function _loadTsOnboardingStatus(tenantId) {
+  const statusEl = $("#ts-onboarding-status");
+  const revokeBtn = $("#ts-onboarding-revoke-btn");
+  const revealEl = $("#ts-onboarding-reveal");
+  const res = await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/onboarding-psk`);
+  if (!res || !res.ok) return;
+  const d = await res.json();
+  if (statusEl) statusEl.textContent = d.has_psk ? "✅ PSK is configured." : "No PSK configured — spokes require manual approval.";
+  if (revokeBtn) revokeBtn.style.display = d.has_psk ? "" : "none";
+  if (revealEl) revealEl.classList.add("hidden");
+}
+
+async function _generateTsOnboardingPsk(tenantId) {
+  if (!confirm("Generate a new onboarding PSK?\n\nAny existing PSK will be replaced immediately.")) return;
+  const res = await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/onboarding-psk`, { method: "POST" });
+  if (!res || !res.ok) return;
+  const d = await res.json();
+  const valueEl = $("#ts-onboarding-psk-value");
+  const revealEl = $("#ts-onboarding-reveal");
+  const hintEl = $("#ts-onboarding-install-hint");
+  if (valueEl) valueEl.value = d.psk || "";
+  if (revealEl) revealEl.classList.remove("hidden");
+  if (hintEl) hintEl.textContent = `Install command: sudo bash <(curl -fsSL ${window.location.origin.replace(/:\/\/.*/, "://raw.githubusercontent.com/solutions-hpe/client-sim/main/install-lxc.sh")}) --hub-url ${window.location.origin} --hub-tenant ${tenantId} --hub-psk <PSK>`;
+  await _loadTsOnboardingStatus(tenantId);
+}
+
+async function _revokeTsOnboardingPsk(tenantId) {
+  if (!confirm("Revoke the onboarding PSK?\n\nSpokes will require manual approval until a new one is generated.")) return;
+  await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/onboarding-psk`, { method: "DELETE" });
+  await _loadTsOnboardingStatus(tenantId);
 }
 
 async function loadTenantDetailData(force = false) {
@@ -10628,15 +10675,6 @@ function renderTenantSetupPanel(data) {
         </div>
       </section>
       <section class="setup-card">
-        <div class="setup-card-header"><h2>Relay API</h2><p>Endpoints used by spokes in this tenant.</p></div>
-        <div class="setup-status-grid">
-          <div class="setup-status-item"><span class="setup-status-label">Registration</span><span class="setup-status-value">${escHtml(`${window.location.origin}/api/spokes/register`)}</span></div>
-          <div class="setup-status-item"><span class="setup-status-label">Telemetry</span><span class="setup-status-value">${escHtml(`POST ${apiBase}/telemetry`)}</span></div>
-          <div class="setup-status-item"><span class="setup-status-label">Inbox</span><span class="setup-status-value">${escHtml(`GET ${apiBase}/inbox`)}</span></div>
-          <div class="setup-status-item"><span class="setup-status-label">Ack</span><span class="setup-status-value">${escHtml(`POST ${apiBase}/ack`)}</span></div>
-        </div>
-      </section>
-      <section class="setup-card">
         <div class="setup-card-header"><h2>GitHub / Repo</h2><p>Credentials and source repo used for simulation.conf editing.</p></div>
         <div class="setup-form">
           <div class="form-group"><label class="form-label" for="tenant-sim-repo-url">Simulation Repo URL</label><input id="tenant-sim-repo-url" type="url" class="form-input" value="${escHtml(github.sim_repo_url || "")}" placeholder="https://github.com/owner/repo.git"${disabled}></div>
@@ -10711,6 +10749,26 @@ function renderTenantSetupPanel(data) {
           <div id="processing-modes-msg" class="form-msg"></div>
         </div>
       </section>
+      ${canManageTenant(tenantId) ? `
+      <section class="setup-card" id="ts-onboarding-card">
+        <div class="setup-card-header">
+          <h2>Spoke Onboarding</h2>
+          <p>Generate a Pre-Shared Key to allow spokes to self-register without manual approval.</p>
+        </div>
+        <div id="ts-onboarding-status" style="margin-bottom:16px;"></div>
+        <div class="form-actions">
+          <button id="ts-onboarding-generate-btn" class="btn btn-primary" type="button">Generate New PSK</button>
+          <button id="ts-onboarding-revoke-btn" class="btn btn-danger" type="button">Revoke PSK</button>
+        </div>
+        <div id="ts-onboarding-reveal" class="hidden" style="margin-top:20px;">
+          <div class="setup-card-header" style="margin-bottom:8px;"><h3>Your Onboarding PSK</h3></div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input id="ts-onboarding-psk-value" type="text" class="form-input" readonly style="font-family:monospace;flex:1;">
+            <button id="ts-onboarding-copy-btn" class="btn btn-secondary" type="button">Copy</button>
+          </div>
+          <p id="ts-onboarding-install-hint" style="margin-top:12px;font-size:0.85em;color:var(--color-muted,#6b7280);"></p>
+        </div>
+      </section>` : ""}
     </div>
   `;
 }

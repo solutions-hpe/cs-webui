@@ -12125,7 +12125,7 @@ function renderHubCentralClients() {
     </div>`;
 }
 
-async function populateSpokeSelect(selectEl, tenantId, preferredSpokeId = "") {
+async function populateSpokeSelect(selectEl, tenantId, preferredSpokeId = "", includeAll = false) {
   if (!selectEl || !tenantId) return "";
   const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes`);
   const spokes = (res?.ok ? await res.json() : null) || [];
@@ -12137,16 +12137,26 @@ async function populateSpokeSelect(selectEl, tenantId, preferredSpokeId = "") {
     selectEl.appendChild(opt);
     return "";
   }
+  if (includeAll) {
+    const allOpt = document.createElement("option");
+    allOpt.value = "all";
+    allOpt.textContent = "All";
+    selectEl.appendChild(allOpt);
+  }
   spokes.forEach((spoke) => {
     const opt = document.createElement("option");
     opt.value = spoke.id;
     opt.textContent = spoke.spoke_name || spoke.hostname || spoke.id;
     selectEl.appendChild(opt);
   });
-  const nextValue = spokes.some((s) => s.id === preferredSpokeId)
+  const validValues = new Set(spokes.map((s) => s.id));
+  if (includeAll) validValues.add("all");
+  const nextValue = validValues.has(preferredSpokeId)
     ? preferredSpokeId
-    : (spokes[0]?.id || "");
+    : (includeAll ? "all" : (spokes[0]?.id || ""));
   selectEl.value = nextValue;
+  // Store spoke list on element for bulk push
+  selectEl._spokeList = spokes;
   return selectEl.value;
 }
 
@@ -12208,13 +12218,25 @@ async function initTsProxmoxTab(tenantId) {
   const msg = $("#ts-proxmox-msg");
   if (!select || !saveBtn || !tenantId) return;
   saveBtn.disabled = !canManageTenant(tenantId);
-  const currentSpokeId = select.value;
-  await populateSpokeSelect(select, tenantId, currentSpokeId);
+  const currentSpokeId = select.value || "all";
+  await populateSpokeSelect(select, tenantId, currentSpokeId, true);
 
   const loadProxmox = async () => {
     const spokeId = select.value;
     if (!spokeId) {
       showInlineMessage(msg, "No spokes available for this tenant.", true);
+      return;
+    }
+    // "All" selected — clear fields to defaults (configs may differ per spoke)
+    if (spokeId === "all") {
+      $("#ts-usb-auto-provision") && ($("#ts-usb-auto-provision").checked = false);
+      $("#ts-usb-missing-timeout") && ($("#ts-usb-missing-timeout").value = 60);
+      $("#ts-usb-max-slots") && ($("#ts-usb-max-slots").value = 24);
+      $("#ts-vm-image-1-template-id") && ($("#ts-vm-image-1-template-id").value = 100);
+      $("#ts-vm-image-2-template-id") && ($("#ts-vm-image-2-template-id").value = 200);
+      $("#ts-vm-image-1-pct") && ($("#ts-vm-image-1-pct").value = 50);
+      $("#ts-reclone-concurrency") && ($("#ts-reclone-concurrency").value = 1);
+      showInlineMessage(msg, "", false, 0);
       return;
     }
     const data = await loadSpokeConfig(tenantId, spokeId);
@@ -12244,8 +12266,15 @@ async function initTsProxmoxTab(tenantId) {
       reclone_concurrency: parseInt($("#ts-reclone-concurrency")?.value || "1", 10) || 1,
     };
     try {
-      await pushSpokeConfig(tenantId, spokeId, config);
-      showInlineMessage(msg, "Pushed to spoke ✓", false);
+      if (spokeId === "all") {
+        const spokes = select._spokeList || [];
+        if (!spokes.length) { showInlineMessage(msg, "No spokes to push to.", true); return; }
+        await Promise.all(spokes.map((s) => pushSpokeConfig(tenantId, s.id, config)));
+        showInlineMessage(msg, `Pushed to ${spokes.length} spoke${spokes.length !== 1 ? "s" : ""} ✓`, false);
+      } else {
+        await pushSpokeConfig(tenantId, spokeId, config);
+        showInlineMessage(msg, "Pushed to spoke ✓", false);
+      }
     } catch (error) {
       showInlineMessage(msg, error.message || "Failed to push Proxmox settings.", true);
     }

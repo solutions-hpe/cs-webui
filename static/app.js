@@ -4862,7 +4862,7 @@ function renderBucketEditors() {
 
     // sim_phy select (if present)
     if ('sim_phy' in values) {
-      const { group } = buildConfigSelect(section, 'sim_phy', ['wireless', 'ethernet'], values.sim_phy || 'wireless');
+      const { group } = buildConfigSelect(section, 'sim_phy', HUB_SIM_SELECT_FIELDS.sim_phy, values.sim_phy || 'wireless');
       const lbl = group.querySelector('label');
       if (lbl) lbl.textContent = 'Sim Phy';
       fieldGrid.appendChild(group);
@@ -10137,7 +10137,7 @@ const HUB_SIM_BOOL_VALUES = new Set(["on", "off", "yes", "no", "true", "false"])
 const HUB_SIM_PASSWORD_KEY_RE = /pw$|password|secret/i;
 const HUB_SIM_FIXED_SECTION_ORDER = ["simulation", "server", "address", ...Array.from({ length: 10 }, (_, idx) => `s${idx}`)];
 const HUB_SIM_SLOT_KEYS = ["central_check", "wsite", "ssid", "ssidpw", "dhcp_fail", "dns_fail", "assoc_fail", "port_flap", "ping_test", "download", "www_traffic", "iperf", "sim_phy", "l1"];
-const HUB_SIM_SELECT_FIELDS = { sim_phy: ["wireless", "ethernet"] };
+const HUB_SIM_SELECT_FIELDS = { sim_phy: ["wireless", "ethernet", "any"] };
 
 function resetHubSimulationConfState(tenantId = currentTenantId) {
   hubSimulationConfState = { tenantId, loaded: false, loading: false, rawContent: "", sha: "", fetchedAt: "", sections: {}, sectionOrder: [], keyOrder: {}, error: "" };
@@ -10446,6 +10446,31 @@ function hydrateTenantSetupPanel(data = {}, root = document) {
   query("#tenant-github-token-status") && (query("#tenant-github-token-status").textContent = configured ? "Token configured" : "Token not configured");
 
   const tenantId = data.tenantId || currentTenantId;
+  const useAllDonglesToggle = query("#ts-use-all-dongles");
+  if (tenantId && canManageTenant(tenantId) && useAllDonglesToggle && !useAllDonglesToggle._bound) {
+    useAllDonglesToggle._bound = true;
+    useAllDonglesToggle.addEventListener("change", async (e) => {
+      const nextValue = !!e.target.checked;
+      e.target.disabled = true;
+      try {
+        const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/settings`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ use_all_dongles: nextValue })
+        });
+        const result = await readJson(res);
+        if (!res || !res.ok) {
+          e.target.checked = !nextValue;
+          return;
+        }
+        const appliedValue = !!(result && Object.prototype.hasOwnProperty.call(result, 'use_all_dongles') ? result.use_all_dongles : nextValue);
+        e.target.checked = appliedValue;
+        if (tenantDetailState.data[tenantId]?.settings) tenantDetailState.data[tenantId].settings.use_all_dongles = appliedValue;
+      } finally {
+        e.target.disabled = false;
+      }
+    });
+  }
   const generateBtn = query("#ts-onboarding-generate-btn");
   const revokeBtn = query("#ts-onboarding-revoke-btn");
   const copyBtn = query("#ts-onboarding-copy-btn");
@@ -10690,10 +10715,11 @@ function renderTenantCommandsPanel(data) {
 
 function renderTenantSetupPanel(data) {
   const tenantId = data.tenantId;
-  const tenant = data.settings?.tenant || getTenantMeta(tenantId);
-  const aruba = data.settings?.aruba || {};
-  const notifications = data.settings?.notifications || {};
-  const github = data.settings?.github || {};
+  const settings = data.settings || {};
+  const tenant = settings.tenant || getTenantMeta(tenantId);
+  const aruba = settings.aruba || {};
+  const notifications = settings.notifications || {};
+  const github = settings.github || {};
   const processingModes = {
     central_api: data.settings?.processing_modes?.central_api || 'centralized',
     teams: data.settings?.processing_modes?.teams || 'centralized',
@@ -10726,6 +10752,15 @@ function renderTenantSetupPanel(data) {
             <span id="tenant-github-msg" class="form-msg"></span>
           </div>
         </div>
+      </section>
+      <section class="setup-card" id="ts-dongle-card">
+        <div class="setup-card-header"><h2>Dongle Allocation</h2><p>Configure how certified dongles are allocated when preferred hardware runs out.</p></div>
+        <p class="setup-card-desc">When enabled, if the preferred dongle type (wireless or ethernet) runs out, remaining certified dongles of the other type will be provisioned automatically using their own sim profile.</p>
+        <label class="toggle-label">
+          <input type="checkbox" id="ts-use-all-dongles"${settings.use_all_dongles ? ' checked' : ''}${disabled}>
+          Use All Available Dongles
+        </label>
+        <p class="setup-hint">Also adds <code>any</code> as a valid sim_phy option — provisions any certified dongle and sets sim_phy to match its actual type.</p>
       </section>
       <section class="setup-card">
         <div class="setup-card-header"><h2>Aruba Central</h2></div>

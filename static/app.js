@@ -13943,17 +13943,6 @@ function showUpdateProgressModal(tenantId, jobId, spokeCount) {
     </div>`;
   document.body.appendChild(overlay);
 
-  function cleanup() {
-    clearTimeout(pollTimer);
-    const hubWs = window._hubWs || (typeof ws !== "undefined" ? ws : null);
-    if (hubWs) hubWs.removeEventListener("message", wsHandler);
-  }
-
-  document.getElementById("update-progress-close")?.addEventListener("click", () => {
-    cleanup();
-    overlay.remove();
-  });
-
   const statusIcon = s => s === "updated" ? "✅" : s === "timeout" ? "❌" : s === "pending" ? "⏳" : "—";
 
   function renderJob(job) {
@@ -14000,16 +13989,28 @@ function showUpdateProgressModal(tenantId, jobId, spokeCount) {
   async function poll() {
     try {
       const res = await apiFetch(`/api/${tenantId}/update-status/${jobId}`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        // 404 = hub restarted and lost in-memory job — show a clear message
+        if (res.status === 404) {
+          const footer = document.getElementById("update-progress-footer");
+          if (footer) footer.textContent = "⚠ Hub was restarted — job status unavailable. You can close this.";
+        } else {
+          pollTimer = setTimeout(poll, 15000);
+        }
+        return;
+      }
       const job = await res.json();
       renderJob(job);
       if (!job.completed) {
         pollTimer = setTimeout(poll, 15000);
       }
-    } catch (_) { /* ignore transient errors */ }
+    } catch (_) {
+      // transient error — retry
+      pollTimer = setTimeout(poll, 15000);
+    }
   }
 
-  // Also listen for WebSocket push updates
+  // WS push: use a document-level listener so we always get messages even after WS reconnects
   const wsHandler = evt => {
     try {
       const msg = typeof evt.data === "string" ? JSON.parse(evt.data) : evt.data;
@@ -14019,8 +14020,29 @@ function showUpdateProgressModal(tenantId, jobId, spokeCount) {
       }
     } catch (_) {}
   };
-  const hubWs = window._hubWs || (typeof ws !== "undefined" ? ws : null);
-  if (hubWs) hubWs.addEventListener("message", wsHandler);
+  // Attach to the live ws; re-attach on reconnect via a delegated document event
+  const attachWsHandler = () => {
+    if (ws) ws.addEventListener("message", wsHandler);
+  };
+  attachWsHandler();
+  // Track ws reconnects: re-attach if ws changes (checked on each poll cycle via MutationObserver hack-free approach)
+  const wsReattachTimer = setInterval(() => {
+    if (ws && !ws._updateProgressHandlerAttached) {
+      ws._updateProgressHandlerAttached = true;
+      ws.addEventListener("message", wsHandler);
+    }
+  }, 5000);
+
+  function cleanup() {
+    clearTimeout(pollTimer);
+    clearInterval(wsReattachTimer);
+    if (ws) ws.removeEventListener("message", wsHandler);
+  }
+
+  document.getElementById("update-progress-close")?.addEventListener("click", () => {
+    cleanup();
+    overlay.remove();
+  });
 
   poll();
 }

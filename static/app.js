@@ -11307,7 +11307,7 @@ function renderHubVmServer() {
                 <span class="stat-pill">${escHtml(String(host.vm_count || 0))} VMs</span>
                 <span class="stat-pill">${escHtml(String(host.usb_count || 0))} USB</span>
                 ${recloneStatus !== "idle" ? `<span class="stat-pill badge-${recloneStatus === "running" ? "blue" : "grey"}">${escHtml(recloneStatus)}</span>` : ""}
-                <span class="stat-pill" style="margin-left:auto;">Click to open →</span>
+                <span style="margin-left:auto;color:var(--color-muted);font-size:1rem;line-height:1;">›</span>
               </div>
               <div class="spoke-meta-line">
                 Agent ${escHtml(host.proxmox?.agent_version || "—")} &nbsp;·&nbsp;
@@ -11343,22 +11343,14 @@ function renderHubVmServer() {
     }
   });
   container.querySelectorAll(".hub-vmserver-spoke-card").forEach(card => {
-    const openCard = async () => {
+    const drillIn = () => {
       const spokeId = card.dataset.spokeId;
-      const spoke = getSpokeFromCache(tenantId, spokeId) || (await ensureTenantSpokesFor(tenantId)).find(item => item.id === spokeId);
-      const host = hosts.find(item => item.spoke_id === spokeId) || null;
-      if (!spoke) {
-        showToast("Unable to load spoke details.", "error");
-        return;
-      }
-      await openSpokeConfigModal(spoke, tenantId, { vmHost: host });
+      hubVmServerSelectedSpoke = spokeId;
+      renderHubVmServer();
     };
-    card.addEventListener("click", () => { openCard().catch(err => showToast(err?.message || "Unable to load spoke details.", "error")); });
+    card.addEventListener("click", drillIn);
     card.addEventListener("keydown", e => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        openCard().catch(err => showToast(err?.message || "Unable to load spoke details.", "error"));
-      }
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); drillIn(); }
     });
   });
   scheduleHubVmServerFleetPoll();

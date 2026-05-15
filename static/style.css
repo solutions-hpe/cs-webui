@@ -1500,6 +1500,11 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 }
 .hub-vmserver-spoke-card {
   padding: 10px 16px !important;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.hub-vmserver-spoke-card:hover {
+  border-color: var(--color-accent, #0969da) !important;
+  box-shadow: 0 0 0 1px var(--color-accent, #0969da) !important;
 }
 .hub-vmserver-spoke-card .panel-header {
   margin-bottom: 2px;

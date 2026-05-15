@@ -11315,7 +11315,10 @@ function renderHubVmServer() {
         </div>
         <div class="muted" style="font-size:0.82rem;margin-bottom:10px;">Agents update immediately via the live connection. Each spoke restarts as soon as its agent confirms the new version.</div>
         ${readonlyNote}
-        <button id="hub-update-all-btn" class="btn btn-primary" type="button"${canManageTenant(tenantId) ? "" : " disabled"}>⬆️ Update All</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button id="hub-update-all-btn" class="btn btn-primary" type="button"${canManageTenant(tenantId) ? "" : " disabled"}>⬆️ Update All</button>
+          <button id="hub-update-spokes-btn" class="btn btn-secondary" type="button"${canManageTenant(tenantId) ? "" : " disabled"}>↻ Update Spokes</button>
+        </div>
       </section>
     </div>
     ${hosts.length ? `
@@ -11375,6 +11378,19 @@ function renderHubVmServer() {
       }
     });
   }
+  $("#hub-update-spokes-btn", container)?.addEventListener("click", async () => {
+    const btn = $("#hub-update-spokes-btn", container);
+    if (btn) { btn.disabled = true; btn.textContent = "Queuing…"; }
+    try {
+      const res = await apiFetch(`/api/${tenantId}/update-spoke-servers`, { method: "POST" });
+      if (!res.ok) throw new Error(await res.text());
+      showToast("Spoke server updates queued — spokes will restart momentarily.", "ok");
+    } catch (err) {
+      showToast(err?.message || "Failed to queue spoke updates.", "error");
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "↻ Update Spokes"; }
+    }
+  });
   $("#hub-update-all-btn", container)?.addEventListener("click", async () => {
     const btn = $("#hub-update-all-btn", container);
     if (btn) { btn.disabled = true; btn.textContent = "Starting…"; }

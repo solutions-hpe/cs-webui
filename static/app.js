@@ -7636,6 +7636,8 @@ let hubCentralActiveSubtab = "hcs-sites";
 let hubTenantSetupActiveSubtab = "ts-setup";
 let hubCentralSiteOpen = null;
 let hubConfigDraft = "";
+let hubCentralSitesConfigDraft = null;
+let hubCentralSitesConfigSavedKey = "";
 let hubConfigActiveSubtab = "api";
 let hubSimulationConfState = { tenantId: null, loaded: false, loading: false, rawContent: "", sha: "", fetchedAt: "", sections: {}, sectionOrder: [], keyOrder: {}, error: "" };
 let hubSimActiveTab = "hub-simtop-checks";
@@ -9863,6 +9865,8 @@ function applyAuthUI() {
     aggregateApiServerRows = [];
     aggregateCentralData = null;
     hubConfigDraft = "";
+    hubCentralSitesConfigDraft = null;
+    hubCentralSitesConfigSavedKey = "";
     resetHubSimulationConfState(null);
     hubClientUiState.expandedByTenant = {};
     hubClientUiState.seenSitesByTenant = {};
@@ -9992,6 +9996,8 @@ function logout(showMessage = true) {
   aggregateApiServerRows = [];
   aggregateCentralData = null;
   hubConfigDraft = "";
+  hubCentralSitesConfigDraft = null;
+  hubCentralSitesConfigSavedKey = "";
   resetHubSimulationConfState(currentTenantId);
   hubClientUiState.expandedByTenant = {};
   hubClientUiState.seenSitesByTenant = {};
@@ -10021,6 +10027,8 @@ async function setCurrentTenant(tenantId, reload = true) {
   aggregateApiServerRows = [];
   aggregateCentralData = null;
   hubConfigDraft = "";
+  hubCentralSitesConfigDraft = null;
+  hubCentralSitesConfigSavedKey = "";
   resetHubSimulationConfState(tenantId);
   delete hubClientUiState.expandedByTenant[tenantId];
   delete hubClientUiState.seenSitesByTenant[tenantId];
@@ -11696,6 +11704,65 @@ function hubNormalizeCentralSitesConfig(config = {}) {
   };
 }
 
+function hubCloneCentralSitesConfig(config = {}) {
+  return hubNormalizeCentralSitesConfig(JSON.parse(JSON.stringify(config || {})));
+}
+
+function hubSerializeCentralSitesConfig(config = {}) {
+  const normalized = hubNormalizeCentralSitesConfig(config);
+  const sortedMappings = Object.fromEntries(
+    Object.entries(normalized.site_mappings || {}).sort(([left], [right]) => left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" }))
+  );
+  const sortChecks = (checks = [], keys = []) => [...checks].map(check => {
+    const normalizedCheck = {};
+    keys.forEach(key => {
+      if (check?.[key] !== undefined && check[key] !== "") normalizedCheck[key] = check[key];
+    });
+    return normalizedCheck;
+  }).sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right), undefined, { numeric: true, sensitivity: "base" }));
+  return JSON.stringify({
+    site_mappings: sortedMappings,
+    monitored_checks: sortChecks(normalized.monitored_checks, ["type", "id", "name"]),
+    hardware_checks: sortChecks(normalized.hardware_checks, ["id", "name", "device_type"]),
+  });
+}
+
+function hubPrimeCentralSitesConfigDraft(config = {}) {
+  const normalized = hubNormalizeCentralSitesConfig(config);
+  const savedKey = hubSerializeCentralSitesConfig(normalized);
+  if (!hubCentralSitesConfigDraft || hubCentralSitesConfigSavedKey !== savedKey) {
+    hubCentralSitesConfigDraft = hubCloneCentralSitesConfig(normalized);
+    hubCentralSitesConfigSavedKey = savedKey;
+  }
+  return {
+    draft: hubCloneCentralSitesConfig(hubCentralSitesConfigDraft),
+    dirty: hubSerializeCentralSitesConfig(hubCentralSitesConfigDraft) !== savedKey,
+  };
+}
+
+function hubCentralStatusSpokes(statusData = hubCentralData) {
+  const source = statusData?.hub_central_data && typeof statusData.hub_central_data === "object"
+    ? statusData.hub_central_data
+    : statusData;
+  const spokes = source?.spokes;
+  if (Array.isArray(spokes)) return spokes;
+  if (spokes && typeof spokes === "object") {
+    return Object.entries(spokes).map(([spokeId, spokeData]) => ({ spoke_id: spokeId, ...(spokeData || {}) }));
+  }
+  return [];
+}
+
+function hubCentralClientStatusSummary(info = {}) {
+  const current = info?.current ?? "—";
+  const hourlyAvg = typeof info?.hourly_avg === "number" ? Math.round(info.hourly_avg) : (info?.hourly_avg ?? "—");
+  const drop = typeof info?.drop_pct === "number" ? formatClientCountDelta(info.drop_pct) : "—";
+  return `Current ${current} • Avg ${hourlyAvg} • Drop ${drop}`;
+}
+
+function hubCentralClientStatusDetailHtml(info = {}) {
+  return `${hubCentralStatusPill(info.status || "NO_DATA")}<div class="form-hint">${escHtml(hubCentralClientStatusSummary(info))}</div>`;
+}
+
 function hubCentralSiteMappingRowHtml(wsite = "", centralSite = "", disabled = !canManageTenant()) {
   const attr = disabled ? " disabled" : "";
   return `<tr>
@@ -11780,12 +11847,33 @@ function hubRenderCentralAvailableHardware(container, selectedChecks = []) {
 }
 
 function hubSyncCentralLiveState(statusData = hubCentralData) {
-  const status = {};
-  const wireless = {};
-  let hardwareAlerts = [];
-  for (const spoke of (statusData?.spokes || [])) {
+  const source = statusData?.hub_central_data && typeof statusData.hub_central_data === "object"
+    ? { ...statusData.hub_central_data, ...statusData }
+    : statusData;
+  const status = source?.status && typeof source.status === "object" ? { ...source.status } : {};
+  const wireless = source?.wireless_clients && typeof source.wireless_clients === "object" ? { ...source.wireless_clients } : {};
+  let hardwareAlerts = Array.isArray(source?.hardware_alerts) ? [...source.hardware_alerts] : [];
+  const clientCountStatus = source?.client_count_status && typeof source.client_count_status === "object"
+    ? { ...source.client_count_status }
+    : {};
+  for (const spoke of hubCentralStatusSpokes(statusData)) {
     if (!hardwareAlerts.length && Array.isArray(spoke?.hardware_alerts) && spoke.hardware_alerts.length) {
-      hardwareAlerts = spoke.hardware_alerts;
+      hardwareAlerts = [...spoke.hardware_alerts];
+    }
+    if (spoke?.status && typeof spoke.status === "object") {
+      Object.entries(spoke.status).forEach(([wsite, siteStatus]) => {
+        if (wsite && !(wsite in status) && siteStatus && typeof siteStatus === "object") status[wsite] = siteStatus;
+      });
+    }
+    if (spoke?.wireless_clients && typeof spoke.wireless_clients === "object") {
+      Object.entries(spoke.wireless_clients).forEach(([wsite, count]) => {
+        if (wsite && !(wsite in wireless)) wireless[wsite] = count;
+      });
+    }
+    if (spoke?.client_count_status && typeof spoke.client_count_status === "object") {
+      Object.entries(spoke.client_count_status).forEach(([wsite, info]) => {
+        if (wsite && !(wsite in clientCountStatus) && info && typeof info === "object") clientCountStatus[wsite] = info;
+      });
     }
     for (const site of (spoke?.sites || [])) {
       if (!site?.wsite) continue;
@@ -11796,10 +11884,8 @@ function hubSyncCentralLiveState(statusData = hubCentralData) {
   hubCentralSiteStatus = status;
   hubCentralWirelessClients = wireless;
   hubCentralHardwareAlerts = hardwareAlerts;
-  hubClientCountStatus = statusData?.client_count_status && typeof statusData.client_count_status === "object"
-    ? statusData.client_count_status
-    : {};
-  return { status, wireless, hardwareAlerts, clientCountStatus: hubClientCountStatus };
+  hubClientCountStatus = clientCountStatus;
+  return { status, wireless, hardwareAlerts, clientCountStatus };
 }
 
 function hubCentralCollectSiteMappings() {
@@ -11847,6 +11933,23 @@ function hubCentralCollectHardwareChecks() {
   return [...checks.values()];
 }
 
+function hubBuildCentralSitesConfigDraftFromDom() {
+  return hubNormalizeCentralSitesConfig({
+    site_mappings: hubCentralCollectSiteMappings(),
+    monitored_checks: hubCentralCollectMonitoredChecks(),
+    hardware_checks: hubCentralCollectHardwareChecks(),
+  });
+}
+
+function hubRefreshCentralSitesDraftState() {
+  if (!document.getElementById("save-hub-central-sites-btn")) return false;
+  hubCentralSitesConfigDraft = hubBuildCentralSitesConfigDraftFromDom();
+  const dirty = hubSerializeCentralSitesConfig(hubCentralSitesConfigDraft) !== hubCentralSitesConfigSavedKey;
+  const dirtyPill = document.getElementById("hub-central-sites-dirty");
+  if (dirtyPill) dirtyPill.classList.toggle("hidden", !dirty);
+  return dirty;
+}
+
 async function loadHubCentralAvailableChecksCatalog() {
   const msgId = "hub-central-sites-msg";
   try {
@@ -11870,58 +11973,84 @@ async function saveHubCentralSitesConfig() {
     setFormMessage("hub-central-sites-msg", "Tenant Viewer access is read-only.", false);
     return;
   }
-  const tenantId = getActiveTenantId();
+  const tenantId = aggregateCentralData?.tenant_id || getActiveTenantId();
   if (!tenantId) return;
-  const payload = {
-    site_mappings: hubCentralCollectSiteMappings(),
-    monitored_checks: hubCentralCollectMonitoredChecks(),
-    hardware_checks: hubCentralCollectHardwareChecks(),
-  };
-  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/central-sites-config`, { method: "POST", body: payload });
-  if (!res || !res.ok) {
-    const err = await readJson(res);
-    setFormMessage("hub-central-sites-msg", err?.detail || "Unable to save Central site config.", false);
-    return;
+  const payload = hubBuildCentralSitesConfigDraftFromDom();
+  try {
+    const savedConfig = hubNormalizeCentralSitesConfig(await requestJson(`/api/${encodeURIComponent(tenantId)}/aggregate/central-sites-config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }));
+    aggregateCentralData = {
+      ...(aggregateCentralData || {}),
+      tenant_id: tenantId,
+      central_sites_config: savedConfig,
+    };
+    hubCentralSitesConfigDraft = hubCloneCentralSitesConfig(savedConfig);
+    hubCentralSitesConfigSavedKey = hubSerializeCentralSitesConfig(savedConfig);
+    await loadCentral(true);
+    setFormMessage("hub-central-sites-msg", "Central site config saved.", true);
+    hubRefreshCentralSitesDraftState();
+    if (activeTab === "central") await loadHubCentralData(true);
+  } catch (error) {
+    setFormMessage("hub-central-sites-msg", error.message || "Unable to save Central site config.", false);
   }
-  aggregateCentralData = {
-    ...(aggregateCentralData || {}),
-    central_sites_config: await res.json(),
-  };
-  await loadCentral(true);
-  setFormMessage("hub-central-sites-msg", "Central site config saved.", true);
-  if (activeTab === "central") await loadHubCentralData(true);
 }
 
 function hydrateHubCentralConfigForm(config) {
   const mappingBody = document.getElementById("hub-central-sites-tbody");
   const monitoredBody = document.getElementById("hub-central-monitored-tbody");
   const hardwareBody = document.getElementById("hub-central-hardware-tbody");
+  const availableChecksContainer = document.getElementById("hub-central-available-checks");
+  const availableHardwareContainer = document.getElementById("hub-central-available-hardware");
   const addMappingBtn = document.getElementById("hub-central-add-mapping-btn");
   const addCheckBtn = document.getElementById("hub-central-add-check-btn");
   const addHwBtn = document.getElementById("hub-central-add-hw-btn");
   const loadBtn = document.getElementById("hub-central-load-available-btn");
   const saveBtn = document.getElementById("save-hub-central-sites-btn");
+  const syncDraft = () => {
+    setFormMessage("hub-central-sites-msg", "", true);
+    hubRefreshCentralSitesDraftState();
+  };
 
-  hubRenderCentralAvailableCheckGroups(document.getElementById("hub-central-available-checks"), config.monitored_checks || []);
-  hubRenderCentralAvailableHardware(document.getElementById("hub-central-available-hardware"), config.hardware_checks || []);
+  hubRenderCentralAvailableCheckGroups(availableChecksContainer, config.monitored_checks || []);
+  hubRenderCentralAvailableHardware(availableHardwareContainer, config.hardware_checks || []);
 
   [mappingBody, monitoredBody, hardwareBody].forEach(body => {
     if (!body) return;
     body.addEventListener("click", (event) => {
       const btn = event.target.closest("[data-hub-remove-row]");
-      if (btn) btn.closest("tr")?.remove();
+      if (btn) {
+        btn.closest("tr")?.remove();
+        syncDraft();
+      }
     });
+    body.addEventListener("input", syncDraft);
+    body.addEventListener("change", syncDraft);
   });
-  if (addMappingBtn) addMappingBtn.onclick = () => mappingBody?.insertAdjacentHTML("beforeend", hubCentralSiteMappingRowHtml());
-  if (addCheckBtn) addCheckBtn.onclick = () => monitoredBody?.insertAdjacentHTML("beforeend", hubCentralMonitoredCheckRowHtml());
-  if (addHwBtn) addHwBtn.onclick = () => hardwareBody?.insertAdjacentHTML("beforeend", hubCentralHardwareCheckRowHtml());
+  availableChecksContainer?.addEventListener("change", syncDraft);
+  availableHardwareContainer?.addEventListener("change", syncDraft);
+  if (addMappingBtn) addMappingBtn.onclick = () => {
+    mappingBody?.insertAdjacentHTML("beforeend", hubCentralSiteMappingRowHtml());
+    syncDraft();
+  };
+  if (addCheckBtn) addCheckBtn.onclick = () => {
+    monitoredBody?.insertAdjacentHTML("beforeend", hubCentralMonitoredCheckRowHtml());
+    syncDraft();
+  };
+  if (addHwBtn) addHwBtn.onclick = () => {
+    hardwareBody?.insertAdjacentHTML("beforeend", hubCentralHardwareCheckRowHtml());
+    syncDraft();
+  };
   if (loadBtn) loadBtn.onclick = () => { loadHubCentralAvailableChecksCatalog().catch(() => {}); };
   if (saveBtn) saveBtn.onclick = () => { saveHubCentralSitesConfig().catch(() => {}); };
+  hubRefreshCentralSitesDraftState();
 }
 
 function hubCentralStatusPill(status) {
   const label = String(status || "UNKNOWN").toUpperCase();
-  const pillClass = label === "OK" ? "online" : label === "DEGRADED" ? "offline" : "pending";
+  const pillClass = label === "OK" ? "online" : label === "DEGRADED" ? "pending" : "offline";
   return `<span class="site-status-pill ${pillClass}">${escHtml(label)}</span>`;
 }
 
@@ -11932,9 +12061,10 @@ function renderHubCentral() {
   const spokes = data.spokes || [];
   const config = data.hub_central_config || {};
   const sitesConfig = hubNormalizeCentralSitesConfig(data.central_sites_config || {});
-  if (hubCentralData) hubSyncCentralLiveState(hubCentralData);
+  const liveStatusData = data.hub_central_data && typeof data.hub_central_data === "object" ? data.hub_central_data : hubCentralData;
+  if (liveStatusData) hubSyncCentralLiveState(liveStatusData);
   const connectedCount = data.mode === "centralized"
-    ? (hubCentralData?.token_valid ? 1 : 0)
+    ? ((liveStatusData?.token_valid || data.hub_central_data?.token_valid) ? 1 : 0)
     : spokes.filter(item => item.central_status?.token_valid).length;
   $("#hub-central-mode-pill") && ($("#hub-central-mode-pill").textContent = `${data.mode || "distributed"} mode`);
   $("#hub-central-spokes-pill") && ($("#hub-central-spokes-pill").textContent = `${spokes.length} spokes`);
@@ -12004,25 +12134,30 @@ function renderHubCentral() {
     return;
   }
 
+  const { draft: sitesConfigDraft, dirty: sitesConfigDirty } = hubPrimeCentralSitesConfigDraft(sitesConfig);
   const siteMappings = sitesConfig.site_mappings || {};
   const monitoredChecks = sitesConfig.monitored_checks || [];
+  const draftEntries = Object.entries(sitesConfigDraft.site_mappings || {});
   const entries = Object.entries(siteMappings);
+  const hasLiveCentralStatus = Boolean(
+    Object.keys(hubCentralSiteStatus).length ||
+    Object.keys(hubCentralWirelessClients).length ||
+    Object.keys(hubClientCountStatus).length ||
+    hubCentralStatusSpokes(liveStatusData).length
+  );
   const overviewRows = entries.map(([wsite, centralSite]) => {
     const siteChecks = hubCentralSiteStatus[wsite] || {};
     const okCount = monitoredChecks.filter(check => siteChecks[check.id]?.status === "OK").length;
     const errorCount = monitoredChecks.filter(check => siteChecks[check.id]?.status === "ERROR").length;
-    const unknownCount = Math.max(monitoredChecks.length - okCount - errorCount, 0);
     const wirelessCount = hubCentralWirelessClients[wsite] ?? hubClientCountStatus[wsite]?.current ?? "—";
-    const ccStatus = hubClientCountStatus[wsite]?.status || "NO_DATA";
     return `
       <tr>
         <td><strong>${escHtml(wsite)}</strong></td>
         <td>${escHtml(centralSite || "—")}</td>
         <td style="color:var(--hpe-green-dark);">${monitoredChecks.length ? okCount : "—"}</td>
         <td style="color:${errorCount ? '#c0392b' : 'inherit'};">${monitoredChecks.length ? errorCount : "—"}</td>
-        <td style="color:var(--muted);">${monitoredChecks.length ? unknownCount : "—"}</td>
-        <td>${wirelessCount}</td>
-        <td>${hubCentralStatusPill(ccStatus)}</td>
+        <td>${escHtml(String(wirelessCount))}</td>
+        <td>${hubCentralClientStatusDetailHtml(hubClientCountStatus[wsite] || {})}</td>
       </tr>`;
   }).join("");
 
@@ -12044,20 +12179,30 @@ function renderHubCentral() {
     <div class="tenant-detail-grid">
       ${centralControlCard}
       <section class="setup-card">
-        <div class="setup-card-header"><h2>Central Sites Config</h2><p>Tenant-level site mappings and check selection used when Aruba polling runs centrally on the hub.</p></div>
+        <div class="setup-card-header"><h2>Site Mappings Config</h2><p>Map workspace site names to Aruba Central site names for hub-side polling.</p></div>
         <div class="setup-form">
           <div class="form-group">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
               <label class="form-label">Site Mappings</label>
-              <button id="hub-central-add-mapping-btn" class="btn btn-secondary btn-small" type="button"${disabled}>Add Mapping</button>
+              <button id="hub-central-add-mapping-btn" class="btn btn-secondary btn-small" type="button"${disabled}>Add Row</button>
             </div>
             <div class="table-scroll">
               <table class="data-table">
                 <thead><tr><th>Workspace Site</th><th>Central Site</th><th></th></tr></thead>
-                <tbody id="hub-central-sites-tbody">${entries.length ? entries.map(([wsite, centralSite]) => hubCentralSiteMappingRowHtml(wsite, centralSite)).join("") : hubCentralSiteMappingRowHtml()}</tbody>
+                <tbody id="hub-central-sites-tbody">${draftEntries.length ? draftEntries.map(([wsite, centralSite]) => hubCentralSiteMappingRowHtml(wsite, centralSite)).join("") : hubCentralSiteMappingRowHtml()}</tbody>
               </table>
             </div>
           </div>
+          <div class="form-actions">
+            <button id="save-hub-central-sites-btn" class="btn btn-primary" type="button"${disabled}>Save Site Config</button>
+            <span id="hub-central-sites-dirty" class="site-status-pill pending${sitesConfigDirty ? '' : ' hidden'}">Unsaved</span>
+            <span id="hub-central-sites-msg" class="form-msg"></span>
+          </div>
+        </div>
+      </section>
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>Monitored Checks Config</h2><p>Configure Aruba alerts and insights the hub should track for mapped sites.</p></div>
+        <div class="setup-form">
           <div class="form-group">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
               <label class="form-label">Monitored Checks</label>
@@ -12066,7 +12211,7 @@ function renderHubCentral() {
             <div class="table-scroll">
               <table class="data-table">
                 <thead><tr><th>Type</th><th>ID</th><th>Name</th><th></th></tr></thead>
-                <tbody id="hub-central-monitored-tbody">${(sitesConfig.monitored_checks || []).length ? sitesConfig.monitored_checks.map(check => hubCentralMonitoredCheckRowHtml(check)).join("") : ""}</tbody>
+                <tbody id="hub-central-monitored-tbody">${(sitesConfigDraft.monitored_checks || []).length ? sitesConfigDraft.monitored_checks.map(check => hubCentralMonitoredCheckRowHtml(check)).join("") : ""}</tbody>
               </table>
             </div>
             <div class="form-actions" style="justify-content:flex-start;">
@@ -12074,6 +12219,11 @@ function renderHubCentral() {
             </div>
             <div id="hub-central-available-checks"></div>
           </div>
+        </div>
+      </section>
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>Hardware Checks Config</h2><p>Optional hardware alert types saved with the tenant Central site configuration.</p></div>
+        <div class="setup-form">
           <div class="form-group">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
               <label class="form-label">Hardware Checks</label>
@@ -12082,39 +12232,35 @@ function renderHubCentral() {
             <div class="table-scroll">
               <table class="data-table">
                 <thead><tr><th>ID</th><th>Name</th><th>Device Type</th><th></th></tr></thead>
-                <tbody id="hub-central-hardware-tbody">${(sitesConfig.hardware_checks || []).length ? sitesConfig.hardware_checks.map(check => hubCentralHardwareCheckRowHtml(check)).join("") : ""}</tbody>
+                <tbody id="hub-central-hardware-tbody">${(sitesConfigDraft.hardware_checks || []).length ? sitesConfigDraft.hardware_checks.map(check => hubCentralHardwareCheckRowHtml(check)).join("") : ""}</tbody>
               </table>
             </div>
             <div id="hub-central-available-hardware"></div>
-          </div>
-          <div class="form-actions">
-            <button id="save-hub-central-sites-btn" class="btn btn-primary" type="button"${disabled}>Save Sites Config</button>
-            <span id="hub-central-sites-msg" class="form-msg"></span>
           </div>
         </div>
       </section>
     </div>
     <div class="tenant-detail-grid setup-section-gap">
       <section class="setup-card">
-        <div class="setup-card-header"><h2>Sites Overview</h2><p>Hub-polled Aruba Central health for each mapped site.</p></div>
+        <div class="setup-card-header"><h2>Sites Overview</h2><p>Read-only Central health for each saved site mapping in centralized mode.</p></div>
         <div class="table-scroll">
           <table class="data-table">
-            <thead><tr><th>Site</th><th>Central Site</th><th>OK</th><th>Error</th><th>Unknown</th><th>Wireless Clients</th><th>Status</th></tr></thead>
-            <tbody>${overviewRows || '<tr><td colspan="7" class="empty-state">No Central site mappings configured yet.</td></tr>'}</tbody>
+            <thead><tr><th>Site</th><th>Central Site</th><th>OK Checks</th><th>Error Checks</th><th>Wireless Clients</th><th>Client Status</th></tr></thead>
+            <tbody>${entries.length ? (hasLiveCentralStatus ? overviewRows : '<tr><td colspan="6" class="empty-state">Waiting for centralized Aruba Central status data.</td></tr>') : '<tr><td colspan="6" class="empty-state">No Central site mappings configured yet.</td></tr>'}</tbody>
           </table>
         </div>
       </section>
       <section class="setup-card">
-        <div class="setup-card-header"><h2>Client Count Status</h2><p>Rolling 60-minute baseline with a DEGRADED alarm on a 25% client drop.</p></div>
+        <div class="setup-card-header"><h2>Client Count Status</h2><p>Per-site client baseline status from the hub Central poller.</p></div>
         <div class="table-scroll">
           <table class="data-table">
-            <thead><tr><th>Site</th><th>Central Site</th><th>Current Count</th><th>Hourly Avg</th><th>Drop %</th><th>Status</th></tr></thead>
-            <tbody>${clientRows || '<tr><td colspan="6" class="empty-state">No client count samples collected yet.</td></tr>'}</tbody>
+            <thead><tr><th>Site</th><th>Central Site</th><th>Current</th><th>Hourly Avg</th><th>Drop %</th><th>Status</th></tr></thead>
+            <tbody>${entries.length ? (clientRows || '<tr><td colspan="6" class="empty-state">No client count samples collected yet.</td></tr>') : '<tr><td colspan="6" class="empty-state">No Central site mappings configured yet.</td></tr>'}</tbody>
           </table>
         </div>
       </section>
     </div>`;
-  hydrateHubCentralConfigForm(sitesConfig);
+  hydrateHubCentralConfigForm(sitesConfigDraft);
 }
 
 function renderHubConfigPage(data) {
@@ -12246,6 +12392,8 @@ async function loadCentral(force = false) {
     hubCentralWirelessClients = {};
     hubCentralHardwareAlerts = [];
     hubClientCountStatus = {};
+    hubCentralSitesConfigDraft = null;
+    hubCentralSitesConfigSavedKey = "";
     renderHubCentral();
     return;
   }
@@ -15269,8 +15417,12 @@ function connectHubWebSocket() {
             hubCentralData.token_valid = data.token_state.state === "connected";
           }
         }
+        const centralizedModeActive = aggregateCentralData?.mode === "centralized" || hubCentralData?.mode === "centralized";
         if (activeTab === "central") scheduleReload("ws-hub-central-aruba", () => loadHubCentralData(true));
-        if (activeTab === "tenant-setup" && hubTenantSetupActiveSubtab === "ts-central-api") renderHubCentral();
+        if (activeTab === "tenant-setup" && hubTenantSetupActiveSubtab === "ts-central-api") {
+          if (centralizedModeActive) scheduleReload("ws-hub-central-setup-aruba", () => loadCentral(true));
+          else renderHubCentral();
+        }
       }
     } else if (data.type === "heartbeat_update") {
       updateOnlineBadges(data.island_online);

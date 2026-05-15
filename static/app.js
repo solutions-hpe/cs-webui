@@ -10436,68 +10436,95 @@ async function saveTenantGithubSettings() {
   resetHubSimulationConfState(tenantId);
 }
 
-function hydrateTenantSetupPanel(data = {}) {
+function hydrateTenantSetupPanel(data = {}, root = document) {
+  const scope = root && typeof root.querySelector === "function" ? root : document;
+  const query = (selector) => scope.querySelector(selector);
   const github = data?.settings?.github || {};
   const configured = isConfiguredSecretValue(github.github_token_configured);
-  setSecretInputConfigured($("#tenant-github-token"), configured);
-  $("#tenant-github-token-status") && ($("#tenant-github-token-status").textContent = configured ? "Token configured" : "Token not configured");
+  setSecretInputConfigured(query("#tenant-github-token"), configured);
+  query("#tenant-github-token-status") && (query("#tenant-github-token-status").textContent = configured ? "Token configured" : "Token not configured");
 
-  // Wire up Onboarding PSK buttons
   const tenantId = data.tenantId || currentTenantId;
-  if (tenantId && canManageTenant(tenantId)) {
-    _loadTsOnboardingStatus(tenantId);
-    $("#ts-onboarding-generate-btn")?.addEventListener("click", () => _generateTsOnboardingPsk(tenantId));
-    $("#ts-onboarding-revoke-btn")?.addEventListener("click", () => _revokeTsOnboardingPsk(tenantId));
-    $("#ts-onboarding-copy-btn")?.addEventListener("click", () => {
-      const val = $("#ts-onboarding-psk-value")?.value;
-      if (val) navigator.clipboard.writeText(val).then(() => {
-        const btn = $("#ts-onboarding-copy-btn");
-        if (btn) { btn.textContent = "Copied!"; setTimeout(() => { btn.textContent = "Copy"; }, 2000); }
+  const generateBtn = query("#ts-onboarding-generate-btn");
+  const revokeBtn = query("#ts-onboarding-revoke-btn");
+  const copyBtn = query("#ts-onboarding-copy-btn");
+  if (tenantId && canManageTenant(tenantId) && (generateBtn || revokeBtn || copyBtn)) {
+    void _loadTsOnboardingStatus(tenantId, scope);
+    if (generateBtn && !generateBtn._bound) {
+      generateBtn._bound = true;
+      generateBtn.addEventListener("click", () => _generateTsOnboardingPsk(tenantId, scope));
+    }
+    if (revokeBtn && !revokeBtn._bound) {
+      revokeBtn._bound = true;
+      revokeBtn.addEventListener("click", () => _revokeTsOnboardingPsk(tenantId, scope));
+    }
+    if (copyBtn && !copyBtn._bound) {
+      copyBtn._bound = true;
+      copyBtn.addEventListener("click", () => {
+        const val = query("#ts-onboarding-psk-value")?.value;
+        if (val) navigator.clipboard.writeText(val).then(() => {
+          if (copyBtn) { copyBtn.textContent = "Copied!"; setTimeout(() => { copyBtn.textContent = "Copy"; }, 2000); }
+        });
       });
-    });
+    }
   }
 }
 
-async function _loadTsOnboardingStatus(tenantId) {
-  const statusEl = $("#ts-onboarding-status");
-  const revokeBtn = $("#ts-onboarding-revoke-btn");
-  const revealEl = $("#ts-onboarding-reveal");
+async function _loadTsOnboardingStatus(tenantId, root = document) {
+  const query = (selector) => (root && typeof root.querySelector === "function" ? root : document).querySelector(selector);
+  const statusEl = query("#ts-onboarding-status");
+  const revokeBtn = query("#ts-onboarding-revoke-btn");
+  const revealEl = query("#ts-onboarding-reveal");
   const res = await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/onboarding-psk`);
-  if (!res || !res.ok) return;
+  if (!res || !res.ok) {
+    const detail = await readJson(res);
+    if (statusEl) statusEl.textContent = detail?.detail || (res?.status === 401 ? "Session expired. Please sign in again." : "Unable to load onboarding PSK status.");
+    return;
+  }
   const d = await res.json();
   if (statusEl) statusEl.textContent = d.has_psk ? "✅ PSK is configured." : "No PSK configured — spokes require manual approval.";
   if (revokeBtn) revokeBtn.style.display = d.has_psk ? "" : "none";
   if (revealEl) revealEl.classList.add("hidden");
 }
 
-async function _generateTsOnboardingPsk(tenantId) {
-  const btn = $("#ts-onboarding-generate-btn");
+async function _generateTsOnboardingPsk(tenantId, root = document) {
+  const query = (selector) => (root && typeof root.querySelector === "function" ? root : document).querySelector(selector);
+  const btn = query("#ts-onboarding-generate-btn");
+  const statusEl = query("#ts-onboarding-status");
   if (btn) { btn.disabled = true; btn.textContent = "Generating…"; }
   try {
     const res = await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/onboarding-psk`, { method: "POST" });
     if (!res || !res.ok) {
-      if (btn) { btn.disabled = false; btn.textContent = "Generate New PSK"; }
+      const detail = await readJson(res);
+      if (statusEl) statusEl.textContent = detail?.detail || (res?.status === 401 ? "Session expired. Please sign in again." : "Unable to generate onboarding PSK.");
       return;
     }
     const d = await res.json();
-    const valueEl = $("#ts-onboarding-psk-value");
-    const revealEl = $("#ts-onboarding-reveal");
-    const hintEl = $("#ts-onboarding-install-hint");
+    const valueEl = query("#ts-onboarding-psk-value");
+    const revealEl = query("#ts-onboarding-reveal");
+    const hintEl = query("#ts-onboarding-install-hint");
     if (valueEl) valueEl.value = d.psk || "";
     if (revealEl) revealEl.classList.remove("hidden");
     if (hintEl) hintEl.textContent = `sudo bash <(curl -fsSL https://raw.githubusercontent.com/solutions-hpe/client-sim/main/install-lxc.sh) --hub-url ${window.location.origin} --hub-tenant ${tenantId} --hub-psk ${d.psk || "<PSK>"}`;
-    await _loadTsOnboardingStatus(tenantId);
+    await _loadTsOnboardingStatus(tenantId, root);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "Generate New PSK"; }
   }
 }
 
-async function _revokeTsOnboardingPsk(tenantId) {
-  const btn = $("#ts-onboarding-revoke-btn");
+async function _revokeTsOnboardingPsk(tenantId, root = document) {
+  const query = (selector) => (root && typeof root.querySelector === "function" ? root : document).querySelector(selector);
+  const btn = query("#ts-onboarding-revoke-btn");
+  const statusEl = query("#ts-onboarding-status");
   if (btn) { btn.disabled = true; btn.textContent = "Revoking…"; }
   try {
-    await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/onboarding-psk`, { method: "DELETE" });
-    await _loadTsOnboardingStatus(tenantId);
+    const res = await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/onboarding-psk`, { method: "DELETE" });
+    if (!res || !res.ok) {
+      const detail = await readJson(res);
+      if (statusEl) statusEl.textContent = detail?.detail || (res?.status === 401 ? "Session expired. Please sign in again." : "Unable to revoke onboarding PSK.");
+      return;
+    }
+    await _loadTsOnboardingStatus(tenantId, root);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "Revoke PSK"; }
   }
@@ -10849,7 +10876,7 @@ function renderTenantDetail(data = tenantDetailState.data[tenantDetailState.tena
   $("#tenant-detail-commands-panel") && ($("#tenant-detail-commands-panel").innerHTML = renderTenantCommandsPanel(data));
   $("#tenant-detail-setup-panel") && ($("#tenant-detail-setup-panel").innerHTML = renderTenantSetupPanel(data));
   $("#tenant-detail-config-panel") && ($("#tenant-detail-config-panel").innerHTML = renderTenantConfigPanel(data));
-  hydrateTenantSetupPanel(data);
+  hydrateTenantSetupPanel(data, $("#tenant-detail-setup-panel"));
 
   ["dashboard", "spokes", "commands", "setup", "config"].forEach(tabId => {
     $(`.tenant-detail-tab[data-tenant-detail-tab="${tabId}"]`)?.classList.toggle("active", tenantDetailState.activeTab === tabId);
@@ -12431,7 +12458,7 @@ async function loadTenantSetup(force = false) {
   container.innerHTML = '<div class="empty-state">Loading…</div>';
   const data = await loadTenantDetailData(force);
   container.innerHTML = data ? renderTenantSetupPanel(data) : '<div class="empty-state">Unable to load tenant setup.</div>';
-  if (data) hydrateTenantSetupPanel(data);
+  if (data) hydrateTenantSetupPanel(data, container);
   await activateHubTenantSetupSubtab(hubTenantSetupActiveSubtab, force);
 }
 

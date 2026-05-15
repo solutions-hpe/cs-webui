@@ -11434,14 +11434,14 @@ function renderHubVmServerDetail(container, host) {
     btn.addEventListener("click", () => {
       hubVmServerActiveSubtab = btn.dataset.hvmsubtab;
       document.querySelectorAll(".hub-vmserver-subtab").forEach(b => b.classList.toggle("active", b === btn));
-      renderHubVmServerSubpanel(spokeId, hubVmServerActiveSubtab, { simVms, otherVms, containerVms, templateVms, usb, reclone, px });
+      renderHubVmServerSubpanel(spokeId, hubVmServerActiveSubtab, { simVms, otherVms, containerVms, templateVms, usb, reclone, px, host });
     });
   });
 
-  renderHubVmServerSubpanel(spokeId, hubVmServerActiveSubtab, { simVms, otherVms, containerVms, templateVms, usb, reclone, px });
+  renderHubVmServerSubpanel(spokeId, hubVmServerActiveSubtab, { simVms, otherVms, containerVms, templateVms, usb, reclone, px, host });
 }
 
-function renderHubVmServerSubpanel(spokeId, subtab, { simVms, otherVms, containerVms, templateVms, usb, reclone, px }) {
+function renderHubVmServerSubpanel(spokeId, subtab, { simVms, otherVms, containerVms, templateVms, usb, reclone, px, host = {} }) {
   const panel = document.getElementById("hub-vmserver-subpanel");
   if (!panel) return;
 
@@ -11454,7 +11454,8 @@ function renderHubVmServerSubpanel(spokeId, subtab, { simVms, otherVms, containe
     panel.innerHTML = renderHubVmServerReclonePanel(spokeId, reclone, [...simVms, ...otherVms]);
     wireHubRecloneActions(panel, spokeId, [...simVms, ...otherVms]);
   } else if (subtab === "config") {
-    panel.innerHTML = renderHubVmServerConfigPanel(px);
+    panel.innerHTML = renderHubVmServerConfigPanel(host);
+    wireHubVmServerConfigPanel(panel, spokeId, host);
   }
 }
 
@@ -11596,11 +11597,17 @@ function renderHubVmServerReclonePanel(spokeId, reclone, actionVms) {
     </div>`;
 }
 
-function renderHubVmServerConfigPanel(px) {
-  const node = px.node || {};
+function renderHubVmServerConfigPanel(host) {
+  const node = (host.proxmox || {}).node || {};
+  const px = host.proxmox || {};
+  const cfg = host.spoke_config || {};
+  const maxSlots = parseInt(cfg.usb_max_slots || "24", 10);
+  const vmidStart = parseInt(cfg.vmid_start || "0", 10);
+  const needsManual = maxSlots > 25;
+  const autoStart = 90000 + ((host._host_id_num || 0) - 1) * 50 + 1;
   return `
     <div class="setup-card setup-section-gap">
-      <table class="data-table">
+      <table class="data-table" style="margin-bottom:16px;">
         <tbody>
           <tr><th>Proxmox Connected</th><td>${px.connected ? "🟢 Yes" : "⚫ No"}</td></tr>
           <tr><th>Agent Version</th><td>${escHtml(px.agent_version || "—")}</td></tr>
@@ -11612,6 +11619,30 @@ function renderHubVmServerConfigPanel(px) {
           <tr><th>Last Agent Check-in</th><td>${escHtml(px.last_seen ? new Date(typeof px.last_seen === "number" ? px.last_seen * 1000 : px.last_seen).toLocaleString() : "—")}</td></tr>
         </tbody>
       </table>
+      <div class="setup-card-header"><h3 style="margin:0 0 10px;">VM Slot Config</h3></div>
+      <div class="setup-form">
+        <div class="form-group">
+          <label class="form-label" for="hub-spoke-max-slots">Max USB Slots</label>
+          <input id="hub-spoke-max-slots" class="form-input" type="number" min="1" max="256" value="${maxSlots}" style="max-width:100px;">
+          <div class="muted" style="font-size:0.8rem;margin-top:4px;">Standard range: 1–25 (auto VMID). Above 25 requires a manual VMID start.</div>
+        </div>
+        <div class="form-group" id="hub-spoke-vmid-start-group" style="${needsManual ? "" : "opacity:0.4;pointer-events:none;"}">
+          <label class="form-label" for="hub-spoke-vmid-start">
+            Manual VMID Start
+            ${needsManual ? '<span style="color:var(--danger-color,#e74c3c);margin-left:4px;">⚠ Required</span>' : ""}
+          </label>
+          <input id="hub-spoke-vmid-start" class="form-input" type="number" min="0" value="${vmidStart}" style="max-width:120px;" ${needsManual ? "" : "disabled"}>
+          <div class="muted" style="font-size:0.8rem;margin-top:4px;">
+            ${needsManual
+              ? `Set the first VMID for this host's slot range (e.g. <strong>${autoStart}</strong> for auto).`
+              : "Auto-calculated from hostname (≤25 slots). Set slots &gt;25 to enable."}
+          </div>
+        </div>
+        <div class="form-actions">
+          <button id="hub-spoke-config-save-btn" class="btn btn-primary" type="button">Save</button>
+          <span id="hub-spoke-config-msg" class="form-msg"></span>
+        </div>
+      </div>
     </div>`;
 }
 
@@ -11660,6 +11691,50 @@ function wireHubRecloneActions(panel, spokeId, actionVms) {
       const vmid = parseInt(btn.dataset.vmid, 10);
       sendHubProxmoxCommand(currentTenantId, spokeId, "reclone_vm", { vmid });
     });
+  });
+}
+
+function wireHubVmServerConfigPanel(panel, spokeId, host) {
+  const maxSlotsInput = panel.querySelector("#hub-spoke-max-slots");
+  const vmidStartInput = panel.querySelector("#hub-spoke-vmid-start");
+  const vmidStartGroup = panel.querySelector("#hub-spoke-vmid-start-group");
+  const saveBtn = panel.querySelector("#hub-spoke-config-save-btn");
+  const msg = panel.querySelector("#hub-spoke-config-msg");
+
+  const updateVmidVisibility = () => {
+    const slots = parseInt(maxSlotsInput?.value || "24", 10);
+    const needsManual = slots > 25;
+    if (vmidStartGroup) {
+      vmidStartGroup.style.opacity = needsManual ? "1" : "0.4";
+      vmidStartGroup.style.pointerEvents = needsManual ? "" : "none";
+    }
+    if (vmidStartInput) vmidStartInput.disabled = !needsManual;
+  };
+
+  maxSlotsInput?.addEventListener("input", updateVmidVisibility);
+
+  saveBtn?.addEventListener("click", async () => {
+    const slots = parseInt(maxSlotsInput?.value || "24", 10);
+    const vmidStart = parseInt(vmidStartInput?.value || "0", 10);
+    if (slots > 25 && (!vmidStart || vmidStart < 1)) {
+      if (msg) { msg.textContent = "⚠ A Manual VMID Start is required when slots > 25."; msg.style.color = "var(--danger-color,#e74c3c)"; }
+      return;
+    }
+    saveBtn.disabled = true;
+    try {
+      const res = await apiFetch(`/api/${encodeURIComponent(currentTenantId)}/spokes/${encodeURIComponent(spokeId)}/config`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ usb_max_slots: String(slots), vmid_start: vmidStart }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      if (msg) { msg.textContent = "✓ Saved"; msg.style.color = ""; setTimeout(() => { if (msg) msg.textContent = ""; }, 3000); }
+      loadVmServer(true);
+    } catch (err) {
+      if (msg) { msg.textContent = err.message || "Save failed."; msg.style.color = "var(--danger-color,#e74c3c)"; }
+    } finally {
+      saveBtn.disabled = false;
+    }
   });
 }
 

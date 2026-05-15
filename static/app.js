@@ -12943,34 +12943,12 @@ function setTroubleshootField(id, value) {
 }
 
 async function initTsProxmoxTab(tenantId) {
-  const select = $("#ts-proxmox-spoke-select");
   const saveBtn = $("#ts-proxmox-save-btn");
   const msg = $("#ts-proxmox-msg");
-  if (!select || !saveBtn || !tenantId) return;
+  if (!saveBtn || !tenantId) return;
   saveBtn.disabled = !canManageTenant(tenantId);
-  const currentSpokeId = select.value || "all";
-  await populateSpokeSelect(select, tenantId, currentSpokeId, true);
 
-  const loadProxmox = async () => {
-    const spokeId = select.value;
-    if (!spokeId) {
-      showInlineMessage(msg, "No spokes available for this tenant.", true);
-      return;
-    }
-    // "All" selected — clear fields to defaults (configs may differ per spoke)
-    if (spokeId === "all") {
-      $("#ts-usb-auto-provision") && ($("#ts-usb-auto-provision").checked = false);
-      $("#ts-usb-missing-timeout") && ($("#ts-usb-missing-timeout").value = 60);
-      $("#ts-usb-max-slots") && ($("#ts-usb-max-slots").value = 24);
-      $("#ts-vm-image-1-template-id") && ($("#ts-vm-image-1-template-id").value = 100);
-      $("#ts-vm-image-2-template-id") && ($("#ts-vm-image-2-template-id").value = 200);
-      $("#ts-vm-image-1-pct") && ($("#ts-vm-image-1-pct").value = 50);
-      $("#ts-reclone-concurrency") && ($("#ts-reclone-concurrency").value = 1);
-      showInlineMessage(msg, "", false, 0);
-      return;
-    }
-    const data = await loadSpokeConfig(tenantId, spokeId);
-    const cfg = data.config || {};
+  const setFields = (cfg) => {
     const autoProvision = cfg.usb_auto_provision === true || String(cfg.usb_auto_provision || "").toLowerCase() === "on";
     $("#ts-usb-auto-provision") && ($("#ts-usb-auto-provision").checked = autoProvision);
     $("#ts-usb-missing-timeout") && ($("#ts-usb-missing-timeout").value = cfg.usb_missing_timeout ?? 60);
@@ -12979,13 +12957,18 @@ async function initTsProxmoxTab(tenantId) {
     $("#ts-vm-image-2-template-id") && ($("#ts-vm-image-2-template-id").value = cfg.vm_image_2_template_id ?? 200);
     $("#ts-vm-image-1-pct") && ($("#ts-vm-image-1-pct").value = cfg.vm_image_1_pct ?? 50);
     $("#ts-reclone-concurrency") && ($("#ts-reclone-concurrency").value = cfg.reclone_concurrency ?? 1);
-    showInlineMessage(msg, "", false, 0);
   };
 
-  select.onchange = () => { void loadProxmox().catch((error) => showInlineMessage(msg, error.message || "Failed to load Proxmox settings.", true)); };
+  // Load from hub_config (global settings persisted on the hub)
+  try {
+    const res = await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/hub-config`);
+    if (res.ok) {
+      const data = await res.json();
+      setFields(data.hub_config || {});
+    }
+  } catch (_) { /* silent — fields stay at HTML defaults */ }
+
   saveBtn.onclick = async () => {
-    const spokeId = select.value;
-    if (!spokeId) return;
     const config = {
       usb_auto_provision: $("#ts-usb-auto-provision")?.checked ? "on" : "off",
       usb_missing_timeout: parseInt($("#ts-usb-missing-timeout")?.value || "60", 10) || 60,
@@ -12995,22 +12978,29 @@ async function initTsProxmoxTab(tenantId) {
       vm_image_1_pct: parseInt($("#ts-vm-image-1-pct")?.value || "50", 10) || 50,
       reclone_concurrency: parseInt($("#ts-reclone-concurrency")?.value || "1", 10) || 1,
     };
+    saveBtn.disabled = true;
     try {
-      if (spokeId === "all") {
-        const spokes = select._spokeList || [];
-        if (!spokes.length) { showInlineMessage(msg, "No spokes to push to.", true); return; }
-        await Promise.all(spokes.map((s) => pushSpokeConfig(tenantId, s.id, config)));
-        showInlineMessage(msg, `Pushed to ${spokes.length} spoke${spokes.length !== 1 ? "s" : ""} ✓`, false);
+      // Merge into existing hub_config so other fields (repo_branch, etc.) are preserved
+      const existing = await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/hub-config`);
+      const existingData = existing.ok ? await existing.json() : {};
+      const merged = { ...(existingData.hub_config || {}), ...config };
+      const res = await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/hub-config`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hub_config_enabled: true, hub_config: merged }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showInlineMessage(msg, `✓ Saved globally. Pushed to ${data.pushed_to_spokes ?? 0} spoke(s).`, false);
       } else {
-        await pushSpokeConfig(tenantId, spokeId, config);
-        showInlineMessage(msg, "Pushed to spoke ✓", false);
+        showInlineMessage(msg, data.detail || "Save failed.", true);
       }
     } catch (error) {
-      showInlineMessage(msg, error.message || "Failed to push Proxmox settings.", true);
+      showInlineMessage(msg, error.message || "Failed to save Proxmox settings.", true);
+    } finally {
+      saveBtn.disabled = false;
     }
   };
-
-  await loadProxmox();
 }
 
 async function initTsGithubTab(tenantId) {

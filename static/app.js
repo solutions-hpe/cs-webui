@@ -10446,10 +10446,12 @@ async function saveTenantGithubSettings() {
 function hydrateTenantSetupPanel(data = {}, root = document) {
   const scope = root && typeof root.querySelector === "function" ? root : document;
   const query = (selector) => scope.querySelector(selector);
-  const github = data?.settings?.github || {};
-  const configured = isConfiguredSecretValue(github.github_token_configured);
-  setSecretInputConfigured(query("#tenant-github-token"), configured);
-  query("#tenant-github-token-status") && (query("#tenant-github-token-status").textContent = configured ? "Token configured" : "Token not configured");
+  try {
+    const github = data?.settings?.github || {};
+    const configured = isConfiguredSecretValue(github.github_token_configured);
+    setSecretInputConfigured(query("#tenant-github-token"), configured);
+    query("#tenant-github-token-status") && (query("#tenant-github-token-status").textContent = configured ? "Token configured" : "Token not configured");
+  } catch (_) { /* non-critical — PSK wiring continues below */ }
 
   const tenantId = data.tenantId || currentTenantId;
   const useAllDonglesToggle = query("#ts-use-all-dongles");

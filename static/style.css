@@ -1493,6 +1493,22 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   flex-direction: column;
   gap: 10px;
 }
+.hub-vmserver-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.hub-vmserver-spoke-card {
+  padding: 10px 16px !important;
+}
+.hub-vmserver-spoke-card .panel-header {
+  margin-bottom: 2px;
+}
+.hub-vmserver-spoke-card .spoke-meta-line {
+  padding: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
 .hub-client-site-header {
   width: 100%;
   display: flex;

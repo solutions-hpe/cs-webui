@@ -11252,7 +11252,7 @@ function renderHubVmServer() {
                 ${recloneStatus !== "idle" ? `<span class="stat-pill badge-${recloneStatus === "running" ? "blue" : "grey"}">${escHtml(recloneStatus)}</span>` : ""}
                 <span class="stat-pill" style="margin-left:auto;">Click to open →</span>
               </div>
-              <div style="padding:8px 16px;font-size:0.82rem;color:var(--muted);">
+              <div class="spoke-meta-line">
                 Agent ${escHtml(host.proxmox?.agent_version || "—")} &nbsp;·&nbsp;
                 PVE ${escHtml(host.proxmox?.pve_version || "—")} &nbsp;·&nbsp;
                 ${host.proxmox?.connected
@@ -12290,12 +12290,15 @@ async function initTsGithubTab(tenantId) {
   const tokenInput = $("#ts-github-token-input");
   if (!select || !saveBtn || !tenantId) return;
   saveBtn.disabled = !canManageTenant(tenantId);
-  await populateSpokeSelect(select, tenantId, select.value);
+  await populateSpokeSelect(select, tenantId, select.value || "all", true);
 
   const loadGithub = async () => {
     const spokeId = select.value;
-    if (!spokeId) {
-      showInlineMessage(msg, "No spokes available for this tenant.", true);
+    if (!spokeId) { showInlineMessage(msg, "No spokes available for this tenant.", true); return; }
+    if (spokeId === "all") {
+      $("#ts-branch-input") && ($("#ts-branch-input").value = "");
+      if (tokenInput) { tokenInput.value = ""; resetSecretInput(tokenInput); }
+      showInlineMessage(msg, "", false, 0);
       return;
     }
     const data = await loadSpokeConfig(tenantId, spokeId);
@@ -12310,15 +12313,21 @@ async function initTsGithubTab(tenantId) {
   saveBtn.onclick = async () => {
     const spokeId = select.value;
     if (!spokeId) return;
-    const payload = {
-      repo_branch: $("#ts-branch-input")?.value.trim() || "main",
-    };
+    const payload = { repo_branch: $("#ts-branch-input")?.value.trim() || "main" };
     const tokenSecret = getSecretInputPayload(tokenInput);
     if (tokenSecret.include) payload.github_token = tokenSecret.value.trim();
     try {
-      await pushSpokeConfig(tenantId, spokeId, payload);
-      resetSecretInput(tokenInput);
-      showInlineMessage(msg, "GitHub settings pushed ✓", false);
+      if (spokeId === "all") {
+        const spokes = select._spokeList || [];
+        if (!spokes.length) { showInlineMessage(msg, "No spokes to push to.", true); return; }
+        await Promise.all(spokes.map((s) => pushSpokeConfig(tenantId, s.id, payload)));
+        resetSecretInput(tokenInput);
+        showInlineMessage(msg, `GitHub settings pushed to ${spokes.length} spoke${spokes.length !== 1 ? "s" : ""} ✓`, false);
+      } else {
+        await pushSpokeConfig(tenantId, spokeId, payload);
+        resetSecretInput(tokenInput);
+        showInlineMessage(msg, "GitHub settings pushed ✓", false);
+      }
     } catch (error) {
       showInlineMessage(msg, error.message || "Failed to push GitHub settings.", true);
     }
@@ -12334,12 +12343,15 @@ async function initTsSecurityTab(tenantId) {
   const providerSelect = $("#ts-auth-provider");
   if (!select || !saveBtn || !tenantId) return;
   saveBtn.disabled = !canManageTenant(tenantId);
-  await populateSpokeSelect(select, tenantId, select.value);
+  await populateSpokeSelect(select, tenantId, select.value || "all", true);
 
   const loadSecurity = async () => {
     const spokeId = select.value;
-    if (!spokeId) {
-      showInlineMessage(msg, "No spokes available for this tenant.", true);
+    if (!spokeId) { showInlineMessage(msg, "No spokes available for this tenant.", true); return; }
+    if (spokeId === "all") {
+      $("#ts-session-timeout") && ($("#ts-session-timeout").value = 30);
+      if (providerSelect) providerSelect.value = "local";
+      showInlineMessage(msg, "", false, 0);
       return;
     }
     const data = await loadSpokeConfig(tenantId, spokeId);
@@ -12360,8 +12372,15 @@ async function initTsSecurityTab(tenantId) {
       auth_provider: providerSelect?.value || "local",
     };
     try {
-      await pushSpokeConfig(tenantId, spokeId, payload);
-      showInlineMessage(msg, "Security settings pushed ✓", false);
+      if (spokeId === "all") {
+        const spokes = select._spokeList || [];
+        if (!spokes.length) { showInlineMessage(msg, "No spokes to push to.", true); return; }
+        await Promise.all(spokes.map((s) => pushSpokeConfig(tenantId, s.id, payload)));
+        showInlineMessage(msg, `Security settings pushed to ${spokes.length} spoke${spokes.length !== 1 ? "s" : ""} ✓`, false);
+      } else {
+        await pushSpokeConfig(tenantId, spokeId, payload);
+        showInlineMessage(msg, "Security settings pushed ✓", false);
+      }
     } catch (error) {
       showInlineMessage(msg, error.message || "Failed to push security settings.", true);
     }
@@ -12378,12 +12397,22 @@ async function initTsNotificationsTab(tenantId) {
   const teamsWebhookInput = $("#ts-notif-teams-webhook");
   if (!select || !saveBtn || !tenantId) return;
   saveBtn.disabled = !canManageTenant(tenantId);
-  await populateSpokeSelect(select, tenantId, select.value);
+  await populateSpokeSelect(select, tenantId, select.value || "all", true);
 
   const loadNotifications = async () => {
     const spokeId = select.value;
-    if (!spokeId) {
-      showInlineMessage(msg, "No spokes available for this tenant.", true);
+    if (!spokeId) { showInlineMessage(msg, "No spokes available for this tenant.", true); return; }
+    if (spokeId === "all") {
+      $("#ts-notif-email-enabled") && ($("#ts-notif-email-enabled").checked = false);
+      $("#ts-notif-teams-enabled") && ($("#ts-notif-teams-enabled").checked = false);
+      $("#ts-notif-smtp-host") && ($("#ts-notif-smtp-host").value = "");
+      $("#ts-notif-smtp-port") && ($("#ts-notif-smtp-port").value = 587);
+      $("#ts-notif-smtp-user") && ($("#ts-notif-smtp-user").value = "");
+      $("#ts-notif-smtp-from") && ($("#ts-notif-smtp-from").value = "");
+      $("#ts-notif-smtp-to") && ($("#ts-notif-smtp-to").value = "");
+      if (smtpPasswordInput) { smtpPasswordInput.value = ""; resetSecretInput(smtpPasswordInput); }
+      if (teamsWebhookInput) { teamsWebhookInput.value = ""; resetSecretInput(teamsWebhookInput); }
+      showInlineMessage(msg, "", false, 0);
       return;
     }
     const data = await loadSpokeConfig(tenantId, spokeId);
@@ -12406,31 +12435,46 @@ async function initTsNotificationsTab(tenantId) {
     showInlineMessage(msg, "", false, 0);
   };
 
+  const buildNotifPayload = () => {
+    const notifications = {
+      email_enabled: $("#ts-notif-email-enabled")?.checked ?? false,
+      teams_enabled: $("#ts-notif-teams-enabled")?.checked ?? false,
+      smtp_host: $("#ts-notif-smtp-host")?.value.trim() || "",
+      smtp_port: parseInt($("#ts-notif-smtp-port")?.value || "587", 10) || 587,
+      smtp_user: $("#ts-notif-smtp-user")?.value.trim() || "",
+      smtp_from: $("#ts-notif-smtp-from")?.value.trim() || "",
+      smtp_to: ($("#ts-notif-smtp-to")?.value || "").split(",").map((item) => item.trim()).filter(Boolean),
+    };
+    const smtpSecret = getSecretInputPayload(smtpPasswordInput);
+    if (smtpSecret.include) notifications.smtp_password = smtpSecret.value;
+    const teamsSecret = getSecretInputPayload(teamsWebhookInput);
+    if (teamsSecret.include) notifications.teams_webhook_url = teamsSecret.value.trim();
+    return { notifications };
+  };
+
   select.onchange = () => { void loadNotifications().catch((error) => showInlineMessage(msg, error.message || "Failed to load notification settings.", true)); };
   saveBtn.onclick = async () => {
     const spokeId = select.value;
     if (!spokeId) return;
     try {
-      const current = await loadSpokeConfig(tenantId, spokeId);
-      const existing = current.config?.notifications || {};
-      const notifications = {
-        ...existing,
-        email_enabled: $("#ts-notif-email-enabled")?.checked ?? false,
-        teams_enabled: $("#ts-notif-teams-enabled")?.checked ?? false,
-        smtp_host: $("#ts-notif-smtp-host")?.value.trim() || "",
-        smtp_port: parseInt($("#ts-notif-smtp-port")?.value || "587", 10) || 587,
-        smtp_user: $("#ts-notif-smtp-user")?.value.trim() || "",
-        smtp_from: $("#ts-notif-smtp-from")?.value.trim() || "",
-        smtp_to: ($("#ts-notif-smtp-to")?.value || "").split(",").map((item) => item.trim()).filter(Boolean),
-      };
-      const smtpSecret = getSecretInputPayload(smtpPasswordInput);
-      if (smtpSecret.include) notifications.smtp_password = smtpSecret.value;
-      const teamsSecret = getSecretInputPayload(teamsWebhookInput);
-      if (teamsSecret.include) notifications.teams_webhook_url = teamsSecret.value.trim();
-      await pushSpokeConfig(tenantId, spokeId, { notifications });
-      resetSecretInput(smtpPasswordInput);
-      resetSecretInput(teamsWebhookInput);
-      showInlineMessage(msg, "Notification settings pushed ✓", false);
+      if (spokeId === "all") {
+        const spokes = select._spokeList || [];
+        if (!spokes.length) { showInlineMessage(msg, "No spokes to push to.", true); return; }
+        const payload = buildNotifPayload();
+        await Promise.all(spokes.map((s) => pushSpokeConfig(tenantId, s.id, payload)));
+        resetSecretInput(smtpPasswordInput);
+        resetSecretInput(teamsWebhookInput);
+        showInlineMessage(msg, `Notification settings pushed to ${spokes.length} spoke${spokes.length !== 1 ? "s" : ""} ✓`, false);
+      } else {
+        const current = await loadSpokeConfig(tenantId, spokeId);
+        const existing = current.config?.notifications || {};
+        const payload = buildNotifPayload();
+        payload.notifications = { ...existing, ...payload.notifications };
+        await pushSpokeConfig(tenantId, spokeId, payload);
+        resetSecretInput(smtpPasswordInput);
+        resetSecretInput(teamsWebhookInput);
+        showInlineMessage(msg, "Notification settings pushed ✓", false);
+      }
     } catch (error) {
       showInlineMessage(msg, error.message || "Failed to push notification settings.", true);
     }
@@ -12445,16 +12489,25 @@ async function initTsTroubleshootTab(tenantId) {
   const msg = $("#ts-troubleshoot-msg");
   if (!select || !updateBtn || !tenantId) return;
   updateBtn.disabled = !canManageTenant(tenantId);
-  await populateSpokeSelect(select, tenantId, select.value);
+  await populateSpokeSelect(select, tenantId, select.value || "all", true);
+
+  const clearTroubleshootFields = () => {
+    setTroubleshootField("ts-trbl-version", "—");
+    setTroubleshootField("ts-trbl-repo-synced", "—");
+    setTroubleshootField("ts-trbl-repo-error", "—");
+    setTroubleshootField("ts-trbl-installer-version", "—");
+  };
 
   const loadTroubleshoot = async () => {
     const spokeId = select.value;
     if (!spokeId) {
-      setTroubleshootField("ts-trbl-version", "—");
-      setTroubleshootField("ts-trbl-repo-synced", "—");
-      setTroubleshootField("ts-trbl-repo-error", "—");
-      setTroubleshootField("ts-trbl-installer-version", "—");
+      clearTroubleshootFields();
       showInlineMessage(msg, "No spokes available for this tenant.", true);
+      return;
+    }
+    if (spokeId === "all") {
+      clearTroubleshootFields();
+      showInlineMessage(msg, "", false, 0);
       return;
     }
     const data = await loadSpokeConfig(tenantId, spokeId);
@@ -12470,8 +12523,16 @@ async function initTsTroubleshootTab(tenantId) {
   updateBtn.onclick = async () => {
     const spokeId = select.value;
     if (!spokeId) return;
-    const ok = await sendCommandToSpoke(tenantId, spokeId, "update_now");
-    showInlineMessage(msg, ok ? "Update queued for spoke ✓" : "Failed to queue update.", !ok);
+    if (spokeId === "all") {
+      const spokes = select._spokeList || [];
+      if (!spokes.length) { showInlineMessage(msg, "No spokes to update.", true); return; }
+      const results = await Promise.all(spokes.map((s) => sendCommandToSpoke(tenantId, s.id, "update_now")));
+      const ok = results.every(Boolean);
+      showInlineMessage(msg, ok ? `Update queued for ${spokes.length} spoke${spokes.length !== 1 ? "s" : ""} ✓` : "Some spokes failed to queue update.", !ok);
+    } else {
+      const ok = await sendCommandToSpoke(tenantId, spokeId, "update_now");
+      showInlineMessage(msg, ok ? "Update queued for spoke ✓" : "Failed to queue update.", !ok);
+    }
   };
 
   await loadTroubleshoot();

@@ -13868,7 +13868,16 @@ function showUpdateProgressModal(tenantId, jobId, spokeCount) {
     </div>`;
   document.body.appendChild(overlay);
 
-  document.getElementById("update-progress-close")?.addEventListener("click", () => overlay.remove());
+  function cleanup() {
+    clearTimeout(pollTimer);
+    const hubWs = window._hubWs || (typeof ws !== "undefined" ? ws : null);
+    if (hubWs) hubWs.removeEventListener("message", wsHandler);
+  }
+
+  document.getElementById("update-progress-close")?.addEventListener("click", () => {
+    cleanup();
+    overlay.remove();
+  });
 
   const statusIcon = s => s === "updated" ? "✅" : s === "timeout" ? "❌" : s === "pending" ? "⏳" : "—";
 
@@ -13935,11 +13944,8 @@ function showUpdateProgressModal(tenantId, jobId, spokeCount) {
       }
     } catch (_) {}
   };
-  if (window._hubWs || ws) (window._hubWs || ws).addEventListener("message", wsHandler);
-  overlay.addEventListener("remove", () => {
-    clearTimeout(pollTimer);
-    if (window._hubWs || ws) (window._hubWs || ws).removeEventListener("message", wsHandler);
-  });
+  const hubWs = window._hubWs || (typeof ws !== "undefined" ? ws : null);
+  if (hubWs) hubWs.addEventListener("message", wsHandler);
 
   poll();
 }

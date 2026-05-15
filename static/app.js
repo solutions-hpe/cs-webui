@@ -11255,6 +11255,23 @@ function renderHubVmServer() {
   const usbPct = Number(usbProvisioning.total_slots || 0) > 0 ? Math.max(0, Math.min(100, Math.round((Number(usbProvisioning.used_slots || 0) / Number(usbProvisioning.total_slots || 0)) * 100))) : 0;
   const disabled = fleet.any_running || !canManageTenant(tenantId);
   const readonlyNote = canManageTenant(tenantId) ? "" : '<div class="tenant-detail-note">Tenant Viewer access: fleet controls are read-only.</div>';
+
+  // Compute active provisioning counts (cloning + pending check-in) per host and fleet-wide
+  function hostActiveProvCount(host) {
+    const usbDevices = host.usb_devices || [];
+    const proxmoxVms = host.proxmox_vms || [];
+    const cloningVmids = new Set(
+      usbDevices.filter(e => e && e.prov_status === "provisioning").map(e => String(e.vmid))
+    );
+    const cloning = cloningVmids.size;
+    const pendingCheckin = proxmoxVms.filter(vm => vm && vm.pending_checkin === true && !cloningVmids.has(String(vm.vmid))).length;
+    return cloning + pendingCheckin;
+  }
+  const hostProvCounts = hosts.map(h => ({ host: h, count: hostActiveProvCount(h) }));
+  const totalActiveProv = hostProvCounts.reduce((sum, x) => sum + x.count, 0);
+  const totalCapacity = Number(usbProvisioning.total_slots || usbProvisioning.total_dongles || 0);
+  const activeProvPct = totalCapacity > 0 ? Math.max(0, Math.min(100, Math.round((totalActiveProv / totalCapacity) * 100))) : 0;
+  const spokesWithActiveProv = hostProvCounts.filter(x => x.count > 0).length;
   container.innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:12px;">
       <section class="setup-card">
@@ -11284,6 +11301,15 @@ function renderHubVmServer() {
         <div class="muted" style="font-size:0.82rem;">${escHtml(String((usbProvisioning.spokes || []).filter(spoke => spoke.auto_provision).length))} spoke(s) with auto-provisioning enabled.</div>
       </section>
       <section class="setup-card">
+        <div class="setup-card-header" style="display:flex;align-items:center;gap:8px;justify-content:space-between;">
+          <div><h2>Active Provisioning</h2><p>Fleet-wide cloning and pending VM check-in activity across approved spokes.</p></div>
+          <span class="badge ${totalActiveProv > 0 ? "badge-blue" : "badge-grey"}">${totalActiveProv > 0 ? "Active" : "Idle"}</span>
+        </div>
+        <div style="font-weight:600;margin-bottom:6px;">${escHtml(String(totalActiveProv))} VM(s) actively cloning / checking in</div>
+        <div class="progress-bar-wrap" style="margin-bottom:8px;"><div class="progress-bar" style="width:${activeProvPct}%"></div></div>
+        <div class="muted" style="font-size:0.82rem;">${escHtml(String(spokesWithActiveProv))} spoke(s) with active provisioning</div>
+      </section>
+      <section class="setup-card">
         <div class="setup-card-header">
           <div><h2>Update All</h2><p>Update Proxmox agents first, then each spoke automatically once its agent confirms updated.</p></div>
         </div>
@@ -11306,6 +11332,7 @@ function renderHubVmServer() {
                 <span class="stat-pill ${online ? "online" : "offline"}">${online ? "Online" : "Offline"}</span>
                 <span class="stat-pill">${escHtml(String(host.vm_count || 0))} VMs</span>
                 <span class="stat-pill">${escHtml(String(host.usb_count || 0))} USB</span>
+                <span class="stat-pill${hostActiveProvCount(host) > 0 ? " badge-blue" : ""}">${escHtml(String(hostActiveProvCount(host)))} provisioning</span>
                 ${recloneStatus !== "idle" ? `<span class="stat-pill badge-${recloneStatus === "running" ? "blue" : "grey"}">${escHtml(recloneStatus)}</span>` : ""}
                 <span style="margin-left:auto;color:var(--color-muted);font-size:1rem;line-height:1;">›</span>
               </div>

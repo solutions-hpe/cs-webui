@@ -11277,9 +11277,9 @@ function renderHubVmServer() {
       <section class="setup-card">
         <div class="setup-card-header" style="display:flex;align-items:center;gap:8px;justify-content:space-between;">
           <div><h2>Auto-Provisioning</h2><p>USB provisioning capacity reported across approved spokes.</p></div>
-          <span class="badge ${usbProvisioning.auto_provision_on ? "badge-blue" : "badge-grey"}">${usbProvisioning.auto_provision_on ? "On" : "Off"}</span>
+          <span class="badge ${usbProvisioning.auto_provision_on ? "badge-blue" : "badge-grey"}" id="hub-autoprovisioning-toggle" style="cursor:pointer;" title="Click to toggle">${usbProvisioning.auto_provision_on ? "On" : "Off"}</span>
         </div>
-        <div style="font-weight:600;margin-bottom:6px;">${escHtml(String(usbProvisioning.used_slots || 0))} / ${escHtml(String(usbProvisioning.total_slots || 0))} slots in use</div>
+        <div style="font-weight:600;margin-bottom:6px;">${escHtml(String(usbProvisioning.used_slots || 0))} deployed VMs / ${escHtml(String(usbProvisioning.total_dongles || usbProvisioning.total_slots || 0))} USB dongles</div>
         <div class="progress-bar-wrap" style="margin-bottom:8px;"><div class="progress-bar" style="width:${usbPct}%"></div></div>
         <div class="muted" style="font-size:0.82rem;">${escHtml(String((usbProvisioning.spokes || []).filter(spoke => spoke.auto_provision).length))} spoke(s) with auto-provisioning enabled.</div>
       </section>
@@ -11328,6 +11328,26 @@ function renderHubVmServer() {
   $("#hub-fleet-reclone-btn", container)?.addEventListener("click", () => {
     startHubFleetReclone().catch(err => showToast(err?.message || "Unable to queue fleet reclone.", "error"));
   });
+  const autoProvToggle = $("#hub-autoprovisioning-toggle", container);
+  if (autoProvToggle) {
+    autoProvToggle.addEventListener("click", async () => {
+      const currentlyOn = autoProvToggle.textContent.trim() === "On";
+      const enable = !currentlyOn;
+      try {
+        const res = await apiFetch(`/api/${tenantId}/aggregate/toggle-auto-provision`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enable }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        autoProvToggle.textContent = enable ? "On" : "Off";
+        autoProvToggle.className = `badge ${enable ? "badge-blue" : "badge-grey"}`;
+        autoProvToggle.style.cursor = "pointer";
+        showToast(`Auto-provisioning turned ${enable ? "on" : "off"} for all spokes.`, "success");
+      } catch (err) {
+        showToast(err?.message || "Failed to toggle auto-provisioning.", "error");
+      }
+    });
+  }
   $("#hub-update-all-btn", container)?.addEventListener("click", async () => {
     const btn = $("#hub-update-all-btn", container);
     if (btn) { btn.disabled = true; btn.textContent = "Starting…"; }
@@ -13833,8 +13853,8 @@ function showUpdateProgressModal(tenantId, jobId, spokeCount) {
   overlay.id = "update-progress-overlay";
   overlay.className = "modal-overlay";
   overlay.innerHTML = `
-    <div class="modal-panel" style="max-width:600px;width:100%;">
-      <div class="modal-header" style="display:flex;align-items:center;justify-content:space-between;">
+    <div class="modal-box" style="max-width:600px;width:100%;padding:24px 28px;">
+      <div class="modal-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
         <h2 style="margin:0;">⬆️ Update Progress</h2>
         <button id="update-progress-close" class="btn btn-secondary" style="padding:4px 10px;">✕</button>
       </div>

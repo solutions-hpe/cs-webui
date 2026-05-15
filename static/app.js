@@ -10471,23 +10471,36 @@ async function _loadTsOnboardingStatus(tenantId) {
 }
 
 async function _generateTsOnboardingPsk(tenantId) {
-  if (!confirm("Generate a new onboarding PSK?\n\nAny existing PSK will be replaced immediately.")) return;
-  const res = await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/onboarding-psk`, { method: "POST" });
-  if (!res || !res.ok) return;
-  const d = await res.json();
-  const valueEl = $("#ts-onboarding-psk-value");
-  const revealEl = $("#ts-onboarding-reveal");
-  const hintEl = $("#ts-onboarding-install-hint");
-  if (valueEl) valueEl.value = d.psk || "";
-  if (revealEl) revealEl.classList.remove("hidden");
-  if (hintEl) hintEl.textContent = `Install command: sudo bash <(curl -fsSL ${window.location.origin.replace(/:\/\/.*/, "://raw.githubusercontent.com/solutions-hpe/client-sim/main/install-lxc.sh")}) --hub-url ${window.location.origin} --hub-tenant ${tenantId} --hub-psk <PSK>`;
-  await _loadTsOnboardingStatus(tenantId);
+  const btn = $("#ts-onboarding-generate-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "Generating…"; }
+  try {
+    const res = await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/onboarding-psk`, { method: "POST" });
+    if (!res || !res.ok) {
+      if (btn) { btn.disabled = false; btn.textContent = "Generate New PSK"; }
+      return;
+    }
+    const d = await res.json();
+    const valueEl = $("#ts-onboarding-psk-value");
+    const revealEl = $("#ts-onboarding-reveal");
+    const hintEl = $("#ts-onboarding-install-hint");
+    if (valueEl) valueEl.value = d.psk || "";
+    if (revealEl) revealEl.classList.remove("hidden");
+    if (hintEl) hintEl.textContent = `sudo bash <(curl -fsSL https://raw.githubusercontent.com/solutions-hpe/client-sim/main/install-lxc.sh) --hub-url ${window.location.origin} --hub-tenant ${tenantId} --hub-psk ${d.psk || "<PSK>"}`;
+    await _loadTsOnboardingStatus(tenantId);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Generate New PSK"; }
+  }
 }
 
 async function _revokeTsOnboardingPsk(tenantId) {
-  if (!confirm("Revoke the onboarding PSK?\n\nSpokes will require manual approval until a new one is generated.")) return;
-  await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/onboarding-psk`, { method: "DELETE" });
-  await _loadTsOnboardingStatus(tenantId);
+  const btn = $("#ts-onboarding-revoke-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "Revoking…"; }
+  try {
+    await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/onboarding-psk`, { method: "DELETE" });
+    await _loadTsOnboardingStatus(tenantId);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Revoke PSK"; }
+  }
 }
 
 async function loadTenantDetailData(force = false) {

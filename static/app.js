@@ -11272,6 +11272,14 @@ function renderHubVmServer() {
         <div class="progress-bar-wrap" style="margin-bottom:8px;"><div class="progress-bar" style="width:${usbPct}%"></div></div>
         <div class="muted" style="font-size:0.82rem;">${escHtml(String((usbProvisioning.spokes || []).filter(spoke => spoke.auto_provision).length))} spoke(s) with auto-provisioning enabled.</div>
       </section>
+      <section class="setup-card">
+        <div class="setup-card-header">
+          <div><h2>Update All</h2><p>Update Proxmox agents first, then spoke software after a 2-minute delay.</p></div>
+        </div>
+        <div class="muted" style="font-size:0.82rem;margin-bottom:10px;">Agents update immediately. Spokes restart ~2 min later to ensure agents finish first.</div>
+        ${readonlyNote}
+        <button id="hub-update-all-btn" class="btn btn-primary" type="button"${canManageTenant(tenantId) ? "" : " disabled"}>⬆️ Update All</button>
+      </section>
     </div>
     ${hosts.length ? `
       <div class="hub-vmserver-list">
@@ -11308,6 +11316,20 @@ function renderHubVmServer() {
   });
   $("#hub-fleet-reclone-btn", container)?.addEventListener("click", () => {
     startHubFleetReclone().catch(err => showToast(err?.message || "Unable to queue fleet reclone.", "error"));
+  });
+  $("#hub-update-all-btn", container)?.addEventListener("click", async () => {
+    const btn = $("#hub-update-all-btn", container);
+    if (btn) { btn.disabled = true; btn.textContent = "Starting…"; }
+    try {
+      const res = await apiFetch(`/api/${tenantId}/update-all`, { method: "POST" });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      showUpdateProgressModal(tenantId, data.job_id, data.spokes);
+    } catch (err) {
+      showToast(err?.message || "Update All failed.", "error");
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "⬆️ Update All"; }
+    }
   });
   container.querySelectorAll(".hub-vmserver-spoke-card").forEach(card => {
     const openCard = async () => {
@@ -13280,6 +13302,105 @@ async function saveSpokeConfigChanges() {
   setFormMessage("spoke-config-msg", `Changes queued (config v${data?.config_version || "?"}).`, true);
   showToast("Spoke config update queued.", "ok");
   await loadSpokes(true);
+}
+
+function showUpdateProgressModal(tenantId, jobId, spokeCount) {
+  const existingOverlay = document.getElementById("update-progress-overlay");
+  if (existingOverlay) existingOverlay.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "update-progress-overlay";
+  overlay.className = "modal-overlay";
+  overlay.innerHTML = `
+    <div class="modal-panel" style="max-width:600px;width:100%;">
+      <div class="modal-header" style="display:flex;align-items:center;justify-content:space-between;">
+        <h2 style="margin:0;">⬆️ Update Progress</h2>
+        <button id="update-progress-close" class="btn btn-secondary" style="padding:4px 10px;">✕</button>
+      </div>
+      <div class="muted" style="font-size:0.82rem;margin:6px 0 12px;">
+        Proxmox agents updating now &nbsp;·&nbsp; Spokes restart in ~2 min &nbsp;·&nbsp; Polling every 15s
+      </div>
+      <div id="update-progress-body">
+        <div class="muted">Waiting for first status check…</div>
+      </div>
+      <div id="update-progress-footer" style="margin-top:12px;font-size:0.82rem;color:var(--muted-color,#888);"></div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  document.getElementById("update-progress-close")?.addEventListener("click", () => overlay.remove());
+
+  const statusIcon = s => s === "updated" ? "✅" : s === "timeout" ? "❌" : s === "pending" ? "⏳" : "—";
+
+  function renderJob(job) {
+    const body = document.getElementById("update-progress-body");
+    const footer = document.getElementById("update-progress-footer");
+    if (!body) return;
+    const spokes = Object.entries(job.spokes || {});
+    body.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+        <thead>
+          <tr style="text-align:left;border-bottom:1px solid var(--border-color,#ddd);">
+            <th style="padding:4px 8px;">Spoke</th>
+            <th style="padding:4px 8px;">Agent</th>
+            <th style="padding:4px 8px;">Spoke</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${spokes.map(([id, sd]) => `
+            <tr style="border-bottom:1px solid var(--border-color,#eee);">
+              <td style="padding:5px 8px;">${escHtml(sd.spoke_name || id)}</td>
+              <td style="padding:5px 8px;">
+                ${statusIcon(sd.agent_status)}
+                ${sd.agent_status === "updated"
+                  ? `<span class="muted">${escHtml(sd.agent_version_before||"?")} → <strong>${escHtml(sd.agent_version_after||"?")}</strong></span>`
+                  : `<span class="muted">${escHtml(sd.agent_version_before||"unknown")}</span>`}
+              </td>
+              <td style="padding:5px 8px;">
+                ${statusIcon(sd.spoke_status)}
+                ${sd.spoke_status === "updated"
+                  ? `<span class="muted">${escHtml(sd.spoke_version_before||"?")} → <strong>${escHtml(sd.spoke_version_after||"?")}</strong></span>`
+                  : `<span class="muted">${escHtml(sd.spoke_version_before||"unknown")} — waiting…</span>`}
+              </td>
+            </tr>`).join("")}
+        </tbody>
+      </table>`;
+    if (footer) {
+      footer.textContent = job.completed
+        ? `Completed at ${job.completed_at || ""}`
+        : "Polling every 15s…";
+    }
+  }
+
+  let pollTimer = null;
+  async function poll() {
+    try {
+      const res = await apiFetch(`/api/${tenantId}/update-status/${jobId}`);
+      if (!res.ok) return;
+      const job = await res.json();
+      renderJob(job);
+      if (!job.completed) {
+        pollTimer = setTimeout(poll, 15000);
+      }
+    } catch (_) { /* ignore transient errors */ }
+  }
+
+  // Also listen for WebSocket push updates
+  const wsHandler = evt => {
+    try {
+      const msg = typeof evt.data === "string" ? JSON.parse(evt.data) : evt.data;
+      if (msg.type === "update_job_status" && msg.job_id === jobId) {
+        renderJob(msg.job);
+        if (msg.job.completed) clearTimeout(pollTimer);
+      }
+    } catch (_) {}
+  };
+  if (window._hubWs || ws) (window._hubWs || ws).addEventListener("message", wsHandler);
+  overlay.addEventListener("remove", () => {
+    clearTimeout(pollTimer);
+    if (window._hubWs || ws) (window._hubWs || ws).removeEventListener("message", wsHandler);
+  });
+
+  poll();
 }
 
 async function openSpokeConfigModal(spoke, tenantId, options = {}) {

@@ -1976,7 +1976,7 @@
         </nav>
 
         <div id="setup-github" class="setup-subpanel active">
-          <div class="setup-card setup-section-gap">
+          <div class="setup-card">
                 <div class="setup-card-header">
                   <h2>Repository Settings</h2>
                   <p>Choose which branch of <strong>solutions-hpe/client-sim</strong> the dashboard syncs from.
@@ -2005,8 +2005,7 @@
                     <span class="form-hint" id="github-token-status"></span>
                   </div>
 
-                  <div class="form-actions" style="display:flex; justify-content:flex-end; gap:8px;">
-                    <button id="github-clear-config-btn" class="btn btn-secondary" type="button">Clear Config</button>
+                  <div class="form-actions" style="display:flex;justify-content:flex-end">
                     <button id="sync-now-btn" class="btn btn-primary" type="button">⬇ Sync from GitHub Now</button>
                   </div>
 
@@ -2058,8 +2057,8 @@
 
           <div class="setup-card setup-section-gap">
                 <div class="setup-card-header">
-                  <h2>Frontend Version</h2>
-                  <p>The frontend auto-refreshes every 30 minutes. Use the button below to pull the latest version immediately.</p>
+                  <h2>WebUI Version</h2>
+                  <p>The WebUI checks for a new installer version every 24 hours and updates automatically. Use the button below to check and apply immediately.</p>
                 </div>
                 <div class="setup-status-grid">
                   <div class="setup-status-item">
@@ -2076,8 +2075,8 @@
                   </div>
                 </div>
                 <div class="setup-form">
-                  <div class="form-actions" style="display:flex; justify-content:flex-end; gap:8px;">
-                    <button id="refresh-webui-btn" class="btn btn-primary" type="button" title="Download the latest app.js/style.css/index.html from GitHub without a full reinstall">↻ Refresh UI Files</button>
+                  <div class="form-actions" style="display:flex;justify-content:flex-end">
+                    <button id="check-update-btn" class="btn btn-primary" type="button">🔄 Check &amp; Update Now</button>
                   </div>
                   <div id="update-message" class="settings-message hidden" role="alert"></div>
                   <details id="update-log-details" class="hidden" style="margin-top:10px;">

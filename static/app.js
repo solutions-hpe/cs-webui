@@ -651,8 +651,7 @@ const syncNowMsg = document.getElementById('sync-now-message');
 const settingsMsg = document.getElementById('settings-message');
 const settingsForm = document.getElementById('settings-form');
 const hubManagedBanner = document.getElementById('hub-managed-banner');
-const githubClearConfigBtn = document.getElementById('github-clear-config-btn');
-const refreshWebuiBtn = document.getElementById('refresh-webui-btn');
+const checkUpdateBtn = document.getElementById('check-update-btn');
 const updateMsg = document.getElementById('update-message');
 const versionCurrent = document.getElementById('version-current');
 const versionAvailable = document.getElementById('version-available');
@@ -2136,14 +2135,6 @@ if (spokeAuthTestBtn) {
   });
 }
 
-if (githubClearConfigBtn) {
-  githubClearConfigBtn.addEventListener('click', () => clearSettingsProvider('github', {
-    button: githubClearConfigBtn,
-    messageEl: settingsMsg,
-    successText: 'GitHub config cleared.'
-  }));
-}
-
 syncNowBtn.addEventListener('click', async () => {
   syncNowBtn.disabled = true;
   syncNowBtn.textContent = '⬇ Syncing…';
@@ -2168,13 +2159,16 @@ syncNowBtn.addEventListener('click', async () => {
 });
 
 function applyVersionStatus(data) {
-  // Show cs-webui frontend version (not client-sim installer version) in Setup tile
-  if (versionCurrent) versionCurrent.textContent = data.cswebui_current ?? data.current_version ?? '—';
-  if (versionAvailable) versionAvailable.textContent = data.cswebui_available ?? data.available_version ?? '—';
+  if (versionCurrent) versionCurrent.textContent = data.current_version ?? data.cswebui_current ?? '—';
+  if (versionAvailable) versionAvailable.textContent = data.available_version ?? data.cswebui_available ?? '—';
   if (versionLastChecked) versionLastChecked.textContent = data.last_checked ?? '—';
 
   const inProgress = !!data.update_in_progress;
   updateWasInProgress = inProgress;
+  if (checkUpdateBtn) {
+    checkUpdateBtn.disabled = inProgress;
+    checkUpdateBtn.textContent = inProgress ? '🔄 Updating…' : '🔄 Check & Update Now';
+  }
 
   if (!updateMsg) return;
 
@@ -2205,27 +2199,31 @@ function applyVersionStatus(data) {
   }
 }
 
-if (refreshWebuiBtn) {
-  refreshWebuiBtn.addEventListener('click', async () => {
-    refreshWebuiBtn.disabled = true;
-    refreshWebuiBtn.textContent = '↻ Refreshing…';
-    updateMsg.textContent = 'Downloading latest UI files from GitHub…';
+if (checkUpdateBtn) {
+  checkUpdateBtn.addEventListener('click', async () => {
+    checkUpdateBtn.disabled = true;
+    checkUpdateBtn.textContent = '🔄 Checking…';
+    updateMsg.textContent = 'Checking for updates…';
     updateMsg.className = 'settings-message success';
     updateMsg.classList.remove('hidden');
     clearTimeout(updateMsg._timer);
     try {
-      const res = await fetch('/api/refresh-webui', { method: 'POST' });
+      const res = await fetch('/api/self-update', { method: 'POST' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
       updateMsg.textContent = data.message;
-      updateMsg._timer = setTimeout(() => { updateMsg.className = 'settings-message hidden'; }, 10000);
+      updateMsg.className = data.message.includes('up to date') ? 'settings-message success' : 'settings-message success';
+      if (!data.message.includes('started')) {
+        checkUpdateBtn.disabled = false;
+        checkUpdateBtn.textContent = '🔄 Check & Update Now';
+        updateMsg._timer = setTimeout(() => { updateMsg.className = 'settings-message hidden'; }, 8000);
+      }
     } catch (err) {
       updateMsg.textContent = `Error: ${err.message}`;
       updateMsg.className = 'settings-message error';
+      checkUpdateBtn.disabled = false;
+      checkUpdateBtn.textContent = '🔄 Check & Update Now';
       updateMsg._timer = setTimeout(() => { updateMsg.className = 'settings-message hidden'; }, 10000);
-    } finally {
-      refreshWebuiBtn.disabled = false;
-      refreshWebuiBtn.textContent = '↻ Refresh UI Files';
     }
   });
 }

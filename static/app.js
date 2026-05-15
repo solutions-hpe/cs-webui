@@ -7644,6 +7644,9 @@ let hubVmServerSelectedSpoke = null;
 let hubVmServerFleetPollTimer = null;
 let hubVmServerFleetConcurrencyDraft = 3;
 let hubVmServerFleetConcurrencyTenant = null;
+let hubVmServerUsbApprovedDraft = [];
+let hubVmServerUsbApprovedTenant = null;
+const HUB_USB_DEVICE_TYPES = ["wireless", "wired", "storage", "generic"];
 let hubClientTypeFilter = "all";
 const tenantDashboardSort = { key: "name", direction: "asc" };
 
@@ -11182,6 +11185,154 @@ async function startHubFleetReclone() {
   await loadVmServer(true);
 }
 
+function normalizeHubVmServerUsbDraft(devices = []) {
+  if (!Array.isArray(devices)) return [];
+  return devices.map((device) => {
+    const type = String(device?.type || "generic").trim().toLowerCase();
+    return {
+      vidpid: String(device?.vidpid || "").trim().toLowerCase(),
+      type: HUB_USB_DEVICE_TYPES.includes(type) ? type : "generic",
+      label: String(device?.label || "").trim(),
+    };
+  });
+}
+
+function collectHubVmServerUsbDraft(root = document) {
+  const rows = [...root.querySelectorAll(".hub-usb-approved-row")];
+  if (!rows.length) return normalizeHubVmServerUsbDraft(hubVmServerUsbApprovedDraft);
+  return rows.map((row) => ({
+    vidpid: row.querySelector('[data-field="vidpid"]')?.value?.trim().toLowerCase() || "",
+    type: row.querySelector('[data-field="type"]')?.value || "generic",
+    label: row.querySelector('[data-field="label"]')?.value?.trim() || "",
+  }));
+}
+
+function normalizeHubVmServerUsbSaveDevices(devices = []) {
+  const deduped = new Map();
+  normalizeHubVmServerUsbDraft(devices).forEach((device, index) => {
+    const vidpid = String(device?.vidpid || "").trim().toLowerCase();
+    const label = String(device?.label || "").trim();
+    if (!vidpid && !label) return;
+    if (!/^[0-9a-f]{4}:[0-9a-f]{4}$/i.test(vidpid)) {
+      throw new Error(`Row ${index + 1}: enter VID:PID as ####:####`);
+    }
+    const type = HUB_USB_DEVICE_TYPES.includes(String(device?.type || "").trim().toLowerCase())
+      ? String(device.type).trim().toLowerCase()
+      : "generic";
+    deduped.set(vidpid, { vidpid, type, label });
+  });
+  return [...deduped.values()].sort((left, right) => left.vidpid.localeCompare(right.vidpid));
+}
+
+async function loadHubVmServerUsbConfig(force = false) {
+  const tenantId = getActiveTenantId();
+  if (!currentUser || !tenantId) {
+    hubVmServerUsbApprovedDraft = [];
+    hubVmServerUsbApprovedTenant = null;
+    return;
+  }
+  if (!force && hubVmServerUsbApprovedTenant === tenantId) return;
+  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/usb-config`);
+  const data = await readJson(res);
+  if (!res?.ok) {
+    hubVmServerUsbApprovedDraft = [];
+    hubVmServerUsbApprovedTenant = tenantId;
+    return;
+  }
+  hubVmServerUsbApprovedDraft = normalizeHubVmServerUsbDraft(data?.usb_vidpids || []);
+  hubVmServerUsbApprovedTenant = tenantId;
+}
+
+function renderHubVmServerUsbApprovedSection(tenantId) {
+  const canManage = canManageTenant(tenantId);
+  const disabled = canManage ? "" : " disabled";
+  const rows = hubVmServerUsbApprovedDraft;
+  return `
+    <section class="setup-card setup-section-gap" id="hub-usb-approved-section">
+      <div class="setup-card-header" style="display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap;">
+        <div>
+          <h2>USB Approved Devices</h2>
+          <p>These devices are certified across all spokes in this tenant.</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button id="hub-usb-approved-add-btn" class="btn btn-secondary btn-small" type="button"${disabled}>Add Device</button>
+          <button id="hub-usb-approved-save-btn" class="btn btn-primary btn-small" type="button"${disabled}>Save & Push to All Spokes</button>
+        </div>
+      </div>
+      ${canManage ? "" : '<div class="tenant-detail-note">Tenant Viewer access: USB approved devices are read-only.</div>'}
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr><th>VID:PID</th><th>Type</th><th>Label</th><th></th></tr></thead>
+          <tbody>
+            ${rows.length ? rows.map((device, index) => `
+              <tr class="hub-usb-approved-row" data-index="${index}">
+                <td><input class="form-input" data-field="vidpid" value="${escHtml(device.vidpid || "")}" placeholder="2357:011e"${disabled}></td>
+                <td>
+                  <select class="form-input" data-field="type"${disabled}>
+                    ${HUB_USB_DEVICE_TYPES.map((type) => `<option value="${type}"${device.type === type ? " selected" : ""}>${type}</option>`).join("")}
+                  </select>
+                </td>
+                <td><input class="form-input" data-field="label" value="${escHtml(device.label || "")}" placeholder="Device label"${disabled}></td>
+                <td style="white-space:nowrap;"><button class="btn btn-secondary btn-small hub-usb-approved-remove" data-index="${index}" type="button"${disabled}>✕</button></td>
+              </tr>`).join("") : '<tr><td colspan="4" class="empty-state">No approved USB devices configured for this tenant.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </section>`;
+}
+
+function wireHubVmServerUsbApprovedActions(container, tenantId) {
+  const section = container.querySelector("#hub-usb-approved-section");
+  if (!section) return;
+  const syncDraft = () => {
+    hubVmServerUsbApprovedDraft = collectHubVmServerUsbDraft(section);
+    hubVmServerUsbApprovedTenant = tenantId;
+  };
+  section.querySelectorAll('[data-field="vidpid"], [data-field="label"], [data-field="type"]').forEach((input) => {
+    input.addEventListener("input", syncDraft);
+    input.addEventListener("change", syncDraft);
+  });
+  section.querySelector("#hub-usb-approved-add-btn")?.addEventListener("click", () => {
+    syncDraft();
+    hubVmServerUsbApprovedDraft.push({ vidpid: "", type: "wireless", label: "" });
+    renderHubVmServer();
+  });
+  section.querySelectorAll(".hub-usb-approved-remove").forEach((button) => {
+    button.addEventListener("click", () => {
+      syncDraft();
+      hubVmServerUsbApprovedDraft.splice(Number(button.dataset.index || -1), 1);
+      renderHubVmServer();
+    });
+  });
+  section.querySelector("#hub-usb-approved-save-btn")?.addEventListener("click", async () => {
+    if (!canManageTenant(tenantId)) {
+      showToast("Tenant Viewer access is read-only.", "warn");
+      return;
+    }
+    syncDraft();
+    let usbVidpids = [];
+    try {
+      usbVidpids = normalizeHubVmServerUsbSaveDevices(hubVmServerUsbApprovedDraft);
+    } catch (error) {
+      showToast(error.message || "Unable to validate USB approved devices.", "error");
+      return;
+    }
+    const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/usb-config/push-all`, {
+      method: "POST",
+      body: { usb_vidpids: usbVidpids },
+    });
+    const data = await readJson(res);
+    if (!res?.ok) {
+      showToast(data?.detail || "Unable to save USB approved devices.", "error");
+      return;
+    }
+    hubVmServerUsbApprovedDraft = normalizeHubVmServerUsbDraft(data?.usb_vidpids || usbVidpids);
+    hubVmServerUsbApprovedTenant = tenantId;
+    showToast(`USB approved list saved and pushed to ${(data?.pushed_to || []).length} spoke(s).`, "ok");
+    renderHubVmServer();
+  });
+}
+
 function renderHubVmServer() {
   const container = $("#hub-vm-server-content");
   if (!container) return;
@@ -11235,6 +11386,7 @@ function renderHubVmServer() {
         <div class="muted" style="font-size:0.82rem;">${escHtml(String((usbProvisioning.spokes || []).filter(spoke => spoke.auto_provision).length))} spoke(s) with auto-provisioning enabled.</div>
       </section>
     </div>
+    ${renderHubVmServerUsbApprovedSection(tenantId)}
     ${hosts.length ? `
       <div class="hub-vmserver-list">
         ${hosts.map(host => {
@@ -11271,6 +11423,7 @@ function renderHubVmServer() {
   $("#hub-fleet-reclone-btn", container)?.addEventListener("click", () => {
     startHubFleetReclone().catch(err => showToast(err?.message || "Unable to queue fleet reclone.", "error"));
   });
+  wireHubVmServerUsbApprovedActions(container, tenantId);
   container.querySelectorAll(".hub-vmserver-spoke-card").forEach(card => {
     const openCard = () => {
       hubVmServerSelectedSpoke = card.dataset.spokeId;
@@ -11749,6 +11902,8 @@ async function loadVmServer(force = false) {
     aggregateProxmoxHosts = [];
     aggregateFleetRecloneStatus = defaultFleetRecloneStatus();
     aggregateUsbProvisioningStatus = defaultUsbProvisioningStatus();
+    hubVmServerUsbApprovedDraft = [];
+    hubVmServerUsbApprovedTenant = null;
     renderHubVmServer();
     return;
   }
@@ -11761,6 +11916,7 @@ async function loadVmServer(force = false) {
     const [fresh] = await Promise.all([
       loadAggregateData("proxmox"),
       loadHubVmServerAggregateStatus(),
+      loadHubVmServerUsbConfig(force),
     ]);
     const hosts = fresh?.hosts || [];
     aggregateProxmoxHosts = hosts;
@@ -11769,7 +11925,10 @@ async function loadVmServer(force = false) {
   };
 
   if (!force && aggregateProxmoxHosts.length) {
-    await loadHubVmServerAggregateStatus();
+    await Promise.all([
+      loadHubVmServerAggregateStatus(),
+      loadHubVmServerUsbConfig(false),
+    ]);
     renderHubVmServer();
     revalidate();
     return;
@@ -11778,7 +11937,10 @@ async function loadVmServer(force = false) {
   const cached = loadCache();
   if (!force && cached && cached.length) {
     aggregateProxmoxHosts = cached;
-    await loadHubVmServerAggregateStatus();
+    await Promise.all([
+      loadHubVmServerAggregateStatus(),
+      loadHubVmServerUsbConfig(false),
+    ]);
     renderHubVmServer();
     revalidate();
     return;

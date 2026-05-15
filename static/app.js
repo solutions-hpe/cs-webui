@@ -10662,7 +10662,7 @@ function renderTenantDashboardPanel(data, summary) {
     .sort((a, b) => spokePrimaryLabel(a).localeCompare(spokePrimaryLabel(b)))
     .map(spoke => `
       <tr>
-        <td><strong>${escHtml(spokePrimaryLabel(spoke))}</strong><div class="muted">${escHtml(spokeSecondaryLabel(spoke))}</div></td>
+        <td><strong>${escHtml(spokePrimaryLabel(spoke))}</strong>${(() => { const s = spokeSecondaryLabel(spoke, ""); return s ? `<div class="muted">${escHtml(s)}</div>` : ""; })()}</td>
         <td><span class="tenant-status-badge ${isOnline(spoke.last_seen) ? "online" : "offline"}">${isOnline(spoke.last_seen) ? "Online" : "Offline"}</span></td>
         <td>${getSpokeClients(spoke).length}</td>
         <td>${getSpokeVmCount(spoke)}</td>
@@ -10718,7 +10718,7 @@ function renderTenantSpokesPanel(data) {
     .sort((a, b) => spokePrimaryLabel(a).localeCompare(spokePrimaryLabel(b)))
     .map(spoke => `
       <tr>
-        <td><strong>${escHtml(spokePrimaryLabel(spoke))}</strong><div class="muted">${escHtml(spokeSecondaryLabel(spoke))}</div></td>
+        <td><strong>${escHtml(spokePrimaryLabel(spoke))}</strong>${(() => { const s = spokeSecondaryLabel(spoke, ""); return s ? `<div class="muted">${escHtml(s)}</div>` : ""; })()}</td>
         <td><span class="tenant-status-badge ${spoke.status === "approved" && isOnline(spoke.last_seen) ? "online" : "offline"}">${escHtml(spoke.status === "approved" ? (isOnline(spoke.last_seen) ? "online" : "offline") : spoke.status)}</span></td>
         <td><code>${escHtml(spoke.id)}</code></td>
         <td title="${escHtml(fmtDate(spoke.last_seen))}">${escHtml(relativeTime(spoke.last_seen))}</td>
@@ -13332,7 +13332,7 @@ function createSpokeSection(spoke) {
       <span class="spoke-toggle ${expanded ? "open" : ""}">▶</span>
       ${statusDot(online)}
       <span class="spoke-hostname">${escHtml(spokePrimaryLabel(spoke))}</span>
-      <span class="spoke-label-inline">${escHtml(spokeSecondaryLabel(spoke))}</span>
+      ${(() => { const s = spokeSecondaryLabel(spoke, ""); return s ? `<span class="spoke-label-inline">${escHtml(s)}</span>` : ""; })()}
       <span class="spoke-meta">${clients.length} clients · ${escHtml(relativeTime(spoke.last_seen))}</span>
       <button class="btn btn-danger btn-small spoke-delete-btn" data-delete-spoke="${escHtml(spoke.id)}" title="Delete this spoke" type="button">✕ Delete</button>
     </div>

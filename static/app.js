@@ -9698,8 +9698,9 @@ async function pingApi() {
     const data = await res.json().catch(() => null);
     const footerVersion = $("#footer-cswebui-version");
     if (footerVersion && data?.version) {
-      footerVersion.textContent = `CS-WebUI v${data.version}`;
-      footerVersion.title = `cs-webui version: v${data.version} | Branch: ${data.branch || "?"} | SHA: ${data.sha || "?"}`;
+      // Prefer semver (e.g. "1.00") over raw git SHA for display
+      const displayVer = data.semver || (data.version && data.version.length > 8 ? data.version : null) || data.version;
+      footerVersion.title = `cs-webui version: v${displayVer} | Branch: ${data.branch || "?"} | SHA: ${data.sha || data.version || "?"}`;
     }
   }
 }

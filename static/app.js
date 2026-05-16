@@ -9881,6 +9881,7 @@ function applyAuthUI() {
   syncRoleBadge();
   syncTenantContextChrome();
   syncHubPermissionUI();
+  syncHubSpokeConfigSetupUI();
 }
 
 async function loadUserContext() {
@@ -15226,11 +15227,12 @@ window.sendSpokeCommand = sendSpokeCommand;
 
 async function loadHubSettings() {
   if (!currentTenantId) return;
+  syncHubSpokeConfigSetupUI();
   const disabled = !canManageTenant();
   ["notif-save-btn", "acme-request-btn"].forEach(id => { const btn = document.getElementById(id); if (btn) btn.disabled = disabled; });
   // Load tenant admin pending spokes whenever settings tab opens
   if (canManageTenant() && !currentUser?.is_superadmin) loadTenantPendingSpokes();
-  if (canManageTenant()) loadHubConfig();
+  if (canManageTenant() && !currentUser?.is_superadmin) loadHubConfig();
   const res = await apiFetch(`/api/${encodeURIComponent(currentTenantId)}/settings`);
   if (!res || !res.ok) return;
   const data = await res.json();
@@ -15851,10 +15853,26 @@ const HUB_CONFIG_FIELDS = [
   "l1_vlan_start","l1_vlan_end","usb_vidpids","ignored_hostnames",
 ];
 
-async function loadHubConfig() {
-  if (!currentTenantId || !canManageTenant()) return;
+function syncHubSpokeConfigSetupUI() {
+  const shouldHide = !currentTenantId || !canManageTenant() || Boolean(currentUser?.is_superadmin);
   const tabBtn = document.getElementById("settings-spoke-config-tab-btn");
-  if (tabBtn) tabBtn.style.display = "";
+  const panel = document.getElementById("settings-spoke-config");
+  if (tabBtn) tabBtn.style.display = shouldHide ? "none" : "";
+  if (!shouldHide) return true;
+  const spokeConfigSelected = Boolean(tabBtn?.classList.contains("active") || (panel && !panel.classList.contains("hidden")));
+  tabBtn?.classList.remove("active");
+  panel?.classList.add("hidden");
+  if (spokeConfigSelected) {
+    $$(".settings-subtab").forEach(button => button.classList.toggle("active", button.dataset.subtab === "settings-account"));
+    ["settings-account", "settings-notifications", "settings-tls", "settings-pending-spokes", "settings-spoke-config"].forEach(panelId => {
+      document.getElementById(panelId)?.classList.toggle("hidden", panelId !== "settings-account");
+    });
+  }
+  return false;
+}
+
+async function loadHubConfig() {
+  if (!syncHubSpokeConfigSetupUI()) return;
   // Pre-seed toggle from cached tenant data (instant, no flicker)
   const cached = tenants.find(t => t.id === currentTenantId);
   if (cached?.raw?.hub_config_enabled !== undefined) {
@@ -15880,7 +15898,7 @@ async function loadHubConfig() {
 }
 
 async function saveHubConfig() {
-  if (!currentTenantId || !canManageTenant()) return;
+  if (!syncHubSpokeConfigSetupUI()) return;
   const toggle = document.getElementById("hub-config-enabled-toggle");
   const enabled = toggle?.checked ?? false;
   const config = {};
@@ -16604,12 +16622,16 @@ function bindEvents() {
 
     const setupButton = event.target.closest(".settings-subtab");
     if (setupButton) {
-      const subtab = setupButton.dataset.subtab;
+      const requestedSubtab = setupButton.dataset.subtab;
+      const subtab = requestedSubtab === "settings-spoke-config" && !syncHubSpokeConfigSetupUI()
+        ? "settings-account"
+        : requestedSubtab;
       $$(".settings-subtab").forEach(button => button.classList.toggle("active", button.dataset.subtab === subtab));
-      ["settings-account", "settings-notifications", "settings-tls", "settings-pending-spokes"].forEach(panelId => {
+      ["settings-account", "settings-notifications", "settings-tls", "settings-pending-spokes", "settings-spoke-config"].forEach(panelId => {
         document.getElementById(panelId)?.classList.toggle("hidden", panelId !== subtab);
       });
       if (subtab === "settings-tls") loadAcmeSettings().catch(() => {});
+      if (subtab === "settings-spoke-config") loadHubConfig().catch(() => {});
       return;
     }
 

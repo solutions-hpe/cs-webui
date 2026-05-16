@@ -7654,6 +7654,11 @@ let hubVmServerFleetConcurrencyDraft = 3;
 let hubVmServerFleetConcurrencyTenant = null;
 let hubVmConsoleState = { spokeId: null, vmid: null, vmtype: "qemu", vmname: "", sessionId: "", status: "idle", error: "", rfb: null, connectToken: 0, missingCredentials: false };
 let hubNoVNCRfbPromise = null;
+let hubSpokeShellState = { spokeId: null, socket: null, terminal: null, fitAddon: null, resizeObserver: null, status: "idle", error: "", connectToken: 0 };
+let hubSpokeShellDepsPromise = null;
+const HUB_SPOKE_SHELL_XTERM_JS = 'https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js';
+const HUB_SPOKE_SHELL_XTERM_CSS = 'https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css';
+const HUB_SPOKE_SHELL_FIT_JS = 'https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js';
 let hubProxmoxCredentialsModalState = { spokeId: null, fallbackHost: "" };
 let hubClientTypeFilter = "all";
 const tenantDashboardSort = { key: "name", direction: "asc" };
@@ -10065,6 +10070,9 @@ function showTab(rawTabId, opts = {}) {
   if (tabId !== "vm-server" && hubVmConsoleState.rfb) {
     disconnectHubVmConsole({ rerender: false, preserveSelection: true });
   }
+  if (tabId !== "vm-server" && hubSpokeShellState.socket) {
+    disconnectHubSpokeShell({ rerender: false, preserveSelection: true });
+  }
   activeTab = tabId;
   $("#hub-root")?.querySelectorAll(".tab-content").forEach(panel => panel.classList.add("hidden"));
   const panel = $("#hub-root")?.querySelector(`#tab-hub-${CSS.escape(tabId)}`);
@@ -11266,6 +11274,9 @@ function renderHubVmServer() {
     if (hubVmServerActiveSubtab === "console" && hubVmConsoleState.rfb && hubVmConsoleState.spokeId === hubVmServerSelectedSpoke && container.querySelector("#hub-vm-console-screen")) {
       return;
     }
+    if (hubVmServerActiveSubtab === "terminal" && hubSpokeShellState.socket && hubSpokeShellState.spokeId === hubVmServerSelectedSpoke && container.querySelector("#hub-spoke-shell-screen")) {
+      return;
+    }
     renderHubVmServerDetail(container, host);
     return;
   }
@@ -11473,6 +11484,11 @@ function renderHubVmServerDetail(container, host) {
   const isOnline = !!host.spoke_online;
   const statusCls = isOnline ? "online" : "offline";
   const statusLabel = isOnline ? "Online" : "Offline";
+  const canUseTerminal = canManageTenant(getActiveTenantId());
+
+  if (!canUseTerminal && hubVmServerActiveSubtab === 'terminal') {
+    hubVmServerActiveSubtab = 'vms';
+  }
 
   if (_hubNodeRefreshTimer) clearInterval(_hubNodeRefreshTimer);
   _hubNodeRefreshTimer = setInterval(() => {
@@ -11481,13 +11497,14 @@ function renderHubVmServerDetail(container, host) {
       _hubNodeRefreshTimer = null;
       return;
     }
-    if (hubVmServerActiveSubtab === "console") return;
+    if (["console", "terminal"].includes(hubVmServerActiveSubtab)) return;
     loadVmServer();
   }, 10000);
 
   const mainTabs = [
     { id: "vms",         label: "VMs",           badge: vms.length },
     { id: "console",     label: "Console",       badge: null },
+    ...(canUseTerminal ? [{ id: "terminal", label: "Terminal", badge: null }] : []),
     { id: "usb",         label: "USB (T2)",      badge: usbState.length },
     { id: "t3",          label: "IoT (T3)",      badge: null },
     { id: "virtualhere", label: "VirtualHere",   badge: null },
@@ -11543,6 +11560,7 @@ function renderHubVmServerDetail(container, host) {
       _hubNodeRefreshTimer = null;
     }
     disconnectHubVmConsole({ rerender: false, preserveSelection: false });
+    disconnectHubSpokeShell({ rerender: false, preserveSelection: false });
     hubVmServerSelectedSpoke = null;
     renderHubVmServer();
   });
@@ -11572,6 +11590,9 @@ function renderHubVmServerDetail(container, host) {
       if (hubVmServerActiveSubtab === "console" && nextSubtab !== "console" && hubVmConsoleState.rfb) {
         disconnectHubVmConsole({ rerender: false, preserveSelection: true });
       }
+      if (hubVmServerActiveSubtab === "terminal" && nextSubtab !== "terminal" && hubSpokeShellState.socket) {
+        disconnectHubSpokeShell({ rerender: false, preserveSelection: true });
+      }
       hubVmServerActiveSubtab = nextSubtab;
       document.querySelectorAll(".hub-vmserver-nodetab").forEach(b => b.classList.toggle("active", b === btn));
       renderHubVmServerSubpanel(spokeId, hubVmServerActiveSubtab, {
@@ -11597,6 +11618,9 @@ function renderHubVmServerSubpanel(spokeId, subtab, { simVms, otherVms, containe
   } else if (subtab === "console") {
     panel.innerHTML = renderHubVmServerConsolePanel(spokeId, host, node, spokeCfg);
     wireHubVmServerConsolePanel(panel, spokeId, host, node, spokeCfg);
+  } else if (subtab === "terminal") {
+    panel.innerHTML = renderHubVmServerTerminalPanel(spokeId, host);
+    wireHubVmServerTerminalPanel(panel, spokeId, host);
   } else if (subtab === "usb") {
     panel.innerHTML = renderHubVmServerUsbPanel({ usb, usbState, presentUsb, unknownUsb, certifiedUsb, vms: Array.isArray(host.proxmox_vms) ? host.proxmox_vms : [] });
     wireHubVmActions(panel, spokeId);
@@ -11639,6 +11663,42 @@ async function getNoVNCRfbClass() {
       });
   }
   return hubNoVNCRfbPromise;
+}
+
+function ensureHubAssetStylesheet(href) {
+  if (!href || document.querySelector(`link[data-hub-asset="${href}"]`)) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = href;
+  link.dataset.hubAsset = href;
+  document.head.appendChild(link);
+}
+
+function loadHubAssetScript(src, readyCheck) {
+  if (typeof readyCheck === 'function' && readyCheck()) return Promise.resolve();
+  const existing = document.querySelector(`script[data-hub-asset="${src}"]`);
+  if (existing?._hubPromise) return existing._hubPromise;
+  const script = existing || document.createElement('script');
+  const promise = new Promise((resolve, reject) => {
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error(`Failed to load ${src}`));
+  });
+  script.src = src;
+  script.async = true;
+  script.dataset.hubAsset = src;
+  script._hubPromise = promise;
+  if (!existing) document.head.appendChild(script);
+  return promise;
+}
+
+async function ensureHubSpokeShellDeps() {
+  if (window.Terminal && window.FitAddon?.FitAddon) return;
+  if (!hubSpokeShellDepsPromise) {
+    ensureHubAssetStylesheet(HUB_SPOKE_SHELL_XTERM_CSS);
+    hubSpokeShellDepsPromise = loadHubAssetScript(HUB_SPOKE_SHELL_XTERM_JS, () => window.Terminal)
+      .then(() => loadHubAssetScript(HUB_SPOKE_SHELL_FIT_JS, () => window.FitAddon?.FitAddon));
+  }
+  await hubSpokeShellDepsPromise;
 }
 
 function hubVmConsoleStatusText() {
@@ -11707,6 +11767,202 @@ function disconnectHubVmConsole({ rerender = true, preserveSelection = true } = 
       wireHubVmServerConsolePanel(panel, spokeId, host, host.node || {}, host.spoke_config || {});
     }
   }
+}
+
+function hubSpokeShellStatusText() {
+  if (!hubSpokeShellState.spokeId) return 'Opening terminal…';
+  if (hubSpokeShellState.status === 'connected') return 'Connected to spoke host shell';
+  if (hubSpokeShellState.status === 'connecting') return 'Connecting to spoke host shell…';
+  if (hubSpokeShellState.status === 'disconnected') return hubSpokeShellState.error || 'Terminal disconnected. Use Reconnect to start a new shell.';
+  if (hubSpokeShellState.status === 'error') return hubSpokeShellState.error || 'Unable to open the terminal.';
+  return 'Opening terminal…';
+}
+
+function syncHubSpokeShellPanel(panel) {
+  if (!panel) return;
+  const statusEl = panel.querySelector('#hub-spoke-shell-status');
+  const emptyEl = panel.querySelector('#hub-spoke-shell-empty');
+  const reconnectBtn = panel.querySelector('#hub-spoke-shell-reconnect-btn');
+  const disconnectBtn = panel.querySelector('#hub-spoke-shell-disconnect-btn');
+  if (statusEl) statusEl.textContent = hubSpokeShellStatusText();
+  if (disconnectBtn) disconnectBtn.disabled = !hubSpokeShellState.socket;
+  if (reconnectBtn) reconnectBtn.disabled = hubSpokeShellState.status === 'connecting' || !hubSpokeShellState.spokeId;
+  if (!emptyEl) return;
+  let message = '';
+  if (hubSpokeShellState.status === 'connecting') message = 'Connecting to the spoke host shell…';
+  else if (hubSpokeShellState.status === 'disconnected' || hubSpokeShellState.status === 'error') message = hubSpokeShellState.error || 'Terminal disconnected.';
+  emptyEl.innerHTML = message ? `<div>${escHtml(message)}</div>` : '';
+  emptyEl.classList.toggle('hidden', !message);
+}
+
+function disconnectHubSpokeShell({ rerender = true, preserveSelection = true } = {}) {
+  const spokeId = hubSpokeShellState.spokeId;
+  const socket = hubSpokeShellState.socket;
+  const resizeObserver = hubSpokeShellState.resizeObserver;
+  const terminal = hubSpokeShellState.terminal;
+  hubSpokeShellState.connectToken += 1;
+  hubSpokeShellState.socket = null;
+  hubSpokeShellState.resizeObserver = null;
+  hubSpokeShellState.terminal = null;
+  hubSpokeShellState.fitAddon = null;
+  hubSpokeShellState.error = '';
+  hubSpokeShellState.status = preserveSelection && spokeId ? 'disconnected' : 'idle';
+  if (!preserveSelection) hubSpokeShellState.spokeId = null;
+  if (resizeObserver) {
+    try { resizeObserver.disconnect(); } catch (_) {}
+  }
+  if (socket && socket.readyState <= WebSocket.OPEN) {
+    try { socket.close(1000, 'Terminal closed'); } catch (_) {}
+  }
+  if (terminal) {
+    try { terminal.dispose(); } catch (_) {}
+  }
+  if (rerender && activeTab === 'vm-server' && hubVmServerSelectedSpoke === spokeId && hubVmServerActiveSubtab === 'terminal') {
+    const host = getHubVmServerHostBySpokeId(spokeId) || { spoke_id: spokeId };
+    const panel = document.getElementById('hub-vmserver-subpanel');
+    if (panel) {
+      panel.innerHTML = renderHubVmServerTerminalPanel(spokeId, host);
+      wireHubVmServerTerminalPanel(panel, spokeId, host);
+    }
+  }
+}
+
+function renderHubVmServerTerminalPanel(spokeId, host = {}) {
+  return `
+    <div class="setup-card setup-section-gap">
+      <div class="setup-card-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div>
+          <h2 style="margin:0;">Terminal</h2>
+          <p id="hub-spoke-shell-status" class="muted" style="margin:6px 0 0;">Opening terminal…</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-small" id="hub-spoke-shell-reconnect-btn" type="button">Reconnect</button>
+          <button class="btn btn-secondary btn-small" id="hub-spoke-shell-disconnect-btn" type="button">Disconnect</button>
+        </div>
+      </div>
+      <div style="position:relative;margin-top:12px;">
+        <div id="hub-spoke-shell-screen" style="min-height:560px;background:#111;border:1px solid var(--border-color,#24303f);border-radius:10px;overflow:hidden;padding:8px;"></div>
+        <div id="hub-spoke-shell-empty" class="empty-state hidden" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;background:rgba(9,14,20,0.78);border-radius:10px;"></div>
+      </div>
+      <div class="muted" style="margin-top:10px;font-size:0.82rem;">Interactive bash on the spoke host, relayed through the hub websocket.</div>
+    </div>`;
+}
+
+async function openSpokeShell(tenantId, spokeId, panel = document.getElementById('hub-vmserver-subpanel')) {
+  if (!tenantId || !spokeId || !panel) return;
+  const screen = panel.querySelector('#hub-spoke-shell-screen');
+  if (!screen) return;
+  if (hubSpokeShellState.spokeId === spokeId && hubSpokeShellState.socket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(hubSpokeShellState.socket.readyState)) {
+    syncHubSpokeShellPanel(panel);
+    return;
+  }
+
+  disconnectHubSpokeShell({ rerender: false, preserveSelection: false });
+  hubSpokeShellState.spokeId = spokeId;
+  hubSpokeShellState.status = 'connecting';
+  hubSpokeShellState.error = '';
+  const connectToken = ++hubSpokeShellState.connectToken;
+  syncHubSpokeShellPanel(panel);
+
+  try {
+    const token = sessionStorage.getItem('hub_token') || localStorage.getItem('hub_token') || authToken;
+    if (!token) throw new Error('Authentication required.');
+    await ensureHubSpokeShellDeps();
+    if (connectToken !== hubSpokeShellState.connectToken) return;
+
+    screen.innerHTML = '';
+    const term = new window.Terminal({
+      cursorBlink: true,
+      convertEol: true,
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+      fontSize: 13,
+      scrollback: 5000,
+      theme: { background: '#111111' },
+    });
+    const fitAddon = new window.FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(screen);
+    fitAddon.fit();
+
+    const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+    const socket = new WebSocket(`${scheme}://${location.host}/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/shell?token=${encodeURIComponent(token)}`);
+    hubSpokeShellState.socket = socket;
+    hubSpokeShellState.terminal = term;
+    hubSpokeShellState.fitAddon = fitAddon;
+
+    const sendResize = () => {
+      if (!hubSpokeShellState.socket || hubSpokeShellState.socket !== socket || socket.readyState !== WebSocket.OPEN) return;
+      fitAddon.fit();
+      socket.send(JSON.stringify({ type: 'shell_resize', cols: term.cols || 80, rows: term.rows || 24 }));
+    };
+
+    term.onData(data => {
+      if (hubSpokeShellState.socket !== socket || socket.readyState !== WebSocket.OPEN) return;
+      socket.send(JSON.stringify({ type: 'shell_input', data }));
+    });
+
+    if (typeof ResizeObserver === 'function') {
+      const resizeObserver = new ResizeObserver(() => sendResize());
+      resizeObserver.observe(screen);
+      hubSpokeShellState.resizeObserver = resizeObserver;
+    }
+
+    socket.addEventListener('message', event => {
+      if (hubSpokeShellState.socket !== socket) return;
+      let message = null;
+      try { message = JSON.parse(event.data); } catch (_) { return; }
+      if (message?.type === 'shell_started') {
+        hubSpokeShellState.status = 'connected';
+        hubSpokeShellState.error = '';
+        syncHubSpokeShellPanel(panel);
+        sendResize();
+      } else if (message?.type === 'shell_data') {
+        term.write(String(message.data || ''));
+      } else if (message?.type === 'shell_exit') {
+        hubSpokeShellState.status = 'disconnected';
+        hubSpokeShellState.error = message.error || (message.exit_code != null ? `Shell exited (${message.exit_code}).` : 'Shell disconnected.');
+        syncHubSpokeShellPanel(panel);
+        if (socket.readyState <= WebSocket.OPEN) socket.close();
+      }
+    });
+
+    socket.addEventListener('close', event => {
+      if (hubSpokeShellState.socket !== socket) return;
+      hubSpokeShellState.socket = null;
+      if (hubSpokeShellState.status === 'connected') {
+        hubSpokeShellState.status = 'disconnected';
+        hubSpokeShellState.error = hubSpokeShellState.error || (event.reason || 'Terminal disconnected.');
+      } else if (hubSpokeShellState.status === 'connecting') {
+        hubSpokeShellState.status = 'error';
+        hubSpokeShellState.error = event.reason || 'Unable to open the terminal.';
+      }
+      syncHubSpokeShellPanel(panel);
+    });
+
+    socket.addEventListener('error', () => {
+      if (hubSpokeShellState.socket !== socket) return;
+      hubSpokeShellState.error = hubSpokeShellState.error || 'Terminal connection failed.';
+    });
+  } catch (err) {
+    if (connectToken !== hubSpokeShellState.connectToken) return;
+    hubSpokeShellState.status = 'error';
+    hubSpokeShellState.error = err?.message || 'Unable to open the terminal.';
+    syncHubSpokeShellPanel(panel);
+  }
+}
+
+function wireHubVmServerTerminalPanel(panel, spokeId, host = {}) {
+  panel.querySelector('#hub-spoke-shell-disconnect-btn')?.addEventListener('click', () => disconnectHubSpokeShell({ rerender: true, preserveSelection: true }));
+  panel.querySelector('#hub-spoke-shell-reconnect-btn')?.addEventListener('click', () => {
+    disconnectHubSpokeShell({ rerender: false, preserveSelection: false });
+    openSpokeShell(getActiveTenantId(), spokeId, panel);
+  });
+  syncHubSpokeShellPanel(panel);
+  openSpokeShell(getActiveTenantId(), spokeId, panel).catch(err => {
+    hubSpokeShellState.status = 'error';
+    hubSpokeShellState.error = err?.message || 'Unable to open the terminal.';
+    syncHubSpokeShellPanel(panel);
+  });
 }
 
 function renderHubVmServerConsolePanel(spokeId, host = {}, node = {}, spokeCfg = {}) {

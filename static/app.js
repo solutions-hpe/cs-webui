@@ -7652,6 +7652,9 @@ let hubVmServerSelectedSpoke = null;
 let hubVmServerFleetPollTimer = null;
 let hubVmServerFleetConcurrencyDraft = 3;
 let hubVmServerFleetConcurrencyTenant = null;
+let hubVmConsoleState = { spokeId: null, vmid: null, vmtype: "qemu", vmname: "", sessionId: "", status: "idle", error: "", rfb: null, connectToken: 0, missingCredentials: false };
+let hubNoVNCRfbPromise = null;
+let hubProxmoxCredentialsModalState = { spokeId: null, fallbackHost: "" };
 let hubClientTypeFilter = "all";
 const tenantDashboardSort = { key: "name", direction: "asc" };
 
@@ -10059,6 +10062,9 @@ function showTab(rawTabId, opts = {}) {
     clearInterval(_hubNodeRefreshTimer);
     _hubNodeRefreshTimer = null;
   }
+  if (tabId !== "vm-server" && hubVmConsoleState.rfb) {
+    disconnectHubVmConsole({ rerender: false, preserveSelection: true });
+  }
   activeTab = tabId;
   $("#hub-root")?.querySelectorAll(".tab-content").forEach(panel => panel.classList.add("hidden"));
   const panel = $("#hub-root")?.querySelector(`#tab-hub-${CSS.escape(tabId)}`);
@@ -11257,6 +11263,9 @@ function renderHubVmServer() {
 
   if (hubVmServerSelectedSpoke) {
     const host = hosts.find(h => h.spoke_id === hubVmServerSelectedSpoke) || hubVmServerSelectedSpoke;
+    if (hubVmServerActiveSubtab === "console" && hubVmConsoleState.rfb && hubVmConsoleState.spokeId === hubVmServerSelectedSpoke && container.querySelector("#hub-vm-console-screen")) {
+      return;
+    }
     renderHubVmServerDetail(container, host);
     return;
   }
@@ -11472,11 +11481,13 @@ function renderHubVmServerDetail(container, host) {
       _hubNodeRefreshTimer = null;
       return;
     }
+    if (hubVmServerActiveSubtab === "console") return;
     loadVmServer();
   }, 10000);
 
   const mainTabs = [
     { id: "vms",         label: "VMs",           badge: vms.length },
+    { id: "console",     label: "Console",       badge: null },
     { id: "usb",         label: "USB (T2)",      badge: usbState.length },
     { id: "t3",          label: "IoT (T3)",      badge: null },
     { id: "virtualhere", label: "VirtualHere",   badge: null },
@@ -11531,6 +11542,7 @@ function renderHubVmServerDetail(container, host) {
       clearInterval(_hubNodeRefreshTimer);
       _hubNodeRefreshTimer = null;
     }
+    disconnectHubVmConsole({ rerender: false, preserveSelection: false });
     hubVmServerSelectedSpoke = null;
     renderHubVmServer();
   });
@@ -11556,7 +11568,11 @@ function renderHubVmServerDetail(container, host) {
 
   document.querySelectorAll(".hub-vmserver-nodetab").forEach(btn => {
     btn.addEventListener("click", () => {
-      hubVmServerActiveSubtab = btn.dataset.hvmsubtab;
+      const nextSubtab = btn.dataset.hvmsubtab;
+      if (hubVmServerActiveSubtab === "console" && nextSubtab !== "console" && hubVmConsoleState.rfb) {
+        disconnectHubVmConsole({ rerender: false, preserveSelection: true });
+      }
+      hubVmServerActiveSubtab = nextSubtab;
       document.querySelectorAll(".hub-vmserver-nodetab").forEach(b => b.classList.toggle("active", b === btn));
       renderHubVmServerSubpanel(spokeId, hubVmServerActiveSubtab, {
         simVms, otherVms, containerVms, templateVms, usb, usbState, presentUsb, unknownUsb, vhDevices,
@@ -11578,6 +11594,9 @@ function renderHubVmServerSubpanel(spokeId, subtab, { simVms, otherVms, containe
   if (subtab === "vms") {
     panel.innerHTML = renderHubVmServerVmsPanel(spokeId, { simVms, otherVms, containerVms, templateVms, usbState, reclone, px });
     wireHubVmActions(panel, spokeId);
+  } else if (subtab === "console") {
+    panel.innerHTML = renderHubVmServerConsolePanel(spokeId, host, node, spokeCfg);
+    wireHubVmServerConsolePanel(panel, spokeId, host, node, spokeCfg);
   } else if (subtab === "usb") {
     panel.innerHTML = renderHubVmServerUsbPanel({ usb, usbState, presentUsb, unknownUsb, certifiedUsb, vms: Array.isArray(host.proxmox_vms) ? host.proxmox_vms : [] });
     wireHubVmActions(panel, spokeId);
@@ -11599,6 +11618,294 @@ function renderHubVmServerSubpanel(spokeId, subtab, { simVms, otherVms, containe
   } else if (subtab === "api-server") {
     panel.innerHTML = renderHubVmServerApiServerPanel(apiServer);
   }
+}
+
+function getHubVmServerHostBySpokeId(spokeId) {
+  return (aggregateProxmoxHosts || []).find(host => host.spoke_id === spokeId) || null;
+}
+
+function getHubVmConsoleFallbackHost(host = {}, node = {}) {
+  return String(host.proxmox_host || node.hostname || host.hostname || "").trim();
+}
+
+async function getNoVNCRfbClass() {
+  if (window.__noVNCRFB) return window.__noVNCRFB;
+  if (!hubNoVNCRfbPromise) {
+    hubNoVNCRfbPromise = import('https://cdn.jsdelivr.net/gh/novnc/noVNC@v1.4.0/core/rfb.js')
+      .then(mod => mod.default || mod)
+      .then(RFB => {
+        window.__noVNCRFB = RFB;
+        return RFB;
+      });
+  }
+  return hubNoVNCRfbPromise;
+}
+
+function hubVmConsoleStatusText() {
+  const { status, error, vmid, vmname } = hubVmConsoleState;
+  const label = vmname ? `${vmname} (VM ${vmid})` : (vmid ? `VM ${vmid}` : 'No VM selected');
+  if (status === 'connected') return `${label} · Connected`;
+  if (status === 'connecting') return `${label} · Connecting…`;
+  if (status === 'disconnected') return `${label} · Disconnected`;
+  if (status === 'error') return `${label} · ${error || 'Connection failed'}`;
+  return label;
+}
+
+function syncHubVmConsolePanel(panel) {
+  if (!panel) return;
+  const statusEl = panel.querySelector('#hub-vm-console-status');
+  const emptyEl = panel.querySelector('#hub-vm-console-empty');
+  const reconnectBtn = panel.querySelector('#hub-vm-console-reconnect-btn');
+  const disconnectBtn = panel.querySelector('#hub-vm-console-disconnect-btn');
+  const screen = panel.querySelector('#hub-vm-console-screen');
+  if (statusEl) statusEl.textContent = hubVmConsoleStatusText();
+  if (disconnectBtn) disconnectBtn.disabled = !hubVmConsoleState.rfb;
+  if (reconnectBtn) reconnectBtn.disabled = hubVmConsoleState.status === 'connecting' || !hubVmConsoleState.spokeId || !hubVmConsoleState.vmid;
+  if (!emptyEl || !screen) return;
+  let message = 'Select a VM and click Console to start a session.';
+  if (hubVmConsoleState.missingCredentials) {
+    message = hubVmConsoleState.error || 'Configure Proxmox credentials first.';
+  } else if (hubVmConsoleState.status === 'connecting') {
+    message = 'Connecting to the VM console…';
+  } else if (hubVmConsoleState.status === 'connected') {
+    message = '';
+  } else if (hubVmConsoleState.status === 'disconnected') {
+    message = hubVmConsoleState.error || 'Console disconnected. Use Reconnect to start a new session.';
+  } else if (hubVmConsoleState.status === 'error') {
+    message = hubVmConsoleState.error || 'Unable to open the console.';
+  }
+  emptyEl.innerHTML = message ? `<div>${escHtml(message)}</div>` : '';
+  emptyEl.classList.toggle('hidden', !message);
+  screen.style.display = hubVmConsoleState.status === 'connected' || hubVmConsoleState.status === 'connecting' ? '' : 'none';
+}
+
+function disconnectHubVmConsole({ rerender = true, preserveSelection = true } = {}) {
+  const spokeId = hubVmConsoleState.spokeId;
+  const currentRfb = hubVmConsoleState.rfb;
+  hubVmConsoleState.rfb = null;
+  hubVmConsoleState.sessionId = '';
+  hubVmConsoleState.connectToken += 1;
+  if (!preserveSelection) {
+    hubVmConsoleState.spokeId = null;
+    hubVmConsoleState.vmid = null;
+    hubVmConsoleState.vmtype = 'qemu';
+    hubVmConsoleState.vmname = '';
+    hubVmConsoleState.missingCredentials = false;
+    hubVmConsoleState.error = '';
+    hubVmConsoleState.status = 'idle';
+  } else {
+    hubVmConsoleState.status = hubVmConsoleState.vmid ? 'disconnected' : 'idle';
+  }
+  if (currentRfb) {
+    try { currentRfb.disconnect(); } catch (_) {}
+  }
+  if (rerender && activeTab === 'vm-server' && hubVmServerSelectedSpoke === spokeId && hubVmServerActiveSubtab === 'console') {
+    const host = getHubVmServerHostBySpokeId(spokeId) || { spoke_id: spokeId };
+    const panel = document.getElementById('hub-vmserver-subpanel');
+    if (panel) {
+      panel.innerHTML = renderHubVmServerConsolePanel(spokeId, host, host.node || {}, host.spoke_config || {});
+      wireHubVmServerConsolePanel(panel, spokeId, host, host.node || {}, host.spoke_config || {});
+    }
+  }
+}
+
+function renderHubVmServerConsolePanel(spokeId, host = {}, node = {}, spokeCfg = {}) {
+  const selected = hubVmConsoleState.spokeId === spokeId && hubVmConsoleState.vmid;
+  const title = selected
+    ? `${hubVmConsoleState.vmname || 'VM'} · ${hubVmConsoleState.vmid}`
+    : 'Select a VM from the VMs tab to launch a console.';
+  return `
+    <div class="setup-card setup-section-gap">
+      <div class="setup-card-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div>
+          <h2 style="margin:0;">Console</h2>
+          <p id="hub-vm-console-status" class="muted" style="margin:6px 0 0;">${escHtml(title)}</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-small" id="hub-vm-console-configure-btn" type="button">Configure Credentials</button>
+          <button class="btn btn-primary btn-small" id="hub-vm-console-reconnect-btn" type="button">Reconnect</button>
+          <button class="btn btn-secondary btn-small" id="hub-vm-console-disconnect-btn" type="button">Disconnect</button>
+        </div>
+      </div>
+      <div style="position:relative;margin-top:12px;">
+        <div id="hub-vm-console-screen" style="min-height:560px;background:#111;border:1px solid var(--border-color,#24303f);border-radius:10px;overflow:hidden;"></div>
+        <div id="hub-vm-console-empty" class="empty-state" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;background:rgba(9,14,20,0.78);border-radius:10px;"></div>
+      </div>
+      <div class="muted" style="margin-top:10px;font-size:0.82rem;">If the relay drops, use Reconnect to request a fresh Proxmox VNC ticket.</div>
+    </div>`;
+}
+
+async function connectHubVmConsole(panel, spokeId) {
+  if (!panel || hubVmConsoleState.spokeId !== spokeId || !hubVmConsoleState.sessionId) {
+    syncHubVmConsolePanel(panel);
+    return;
+  }
+  const screen = panel.querySelector('#hub-vm-console-screen');
+  if (!screen) return;
+  screen.innerHTML = '';
+  hubVmConsoleState.status = 'connecting';
+  hubVmConsoleState.error = '';
+  const connectToken = ++hubVmConsoleState.connectToken;
+  syncHubVmConsolePanel(panel);
+  try {
+    const RFB = await getNoVNCRfbClass();
+    if (connectToken !== hubVmConsoleState.connectToken) return;
+    const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+    const url = `${scheme}://${location.host}/ws/console/${encodeURIComponent(hubVmConsoleState.sessionId)}`;
+    const rfb = new RFB(screen, url);
+    hubVmConsoleState.rfb = rfb;
+    hubVmConsoleState.sessionId = '';
+    rfb.scaleViewport = true;
+    rfb.clipViewport = true;
+    rfb.focusOnClick = true;
+    rfb.background = '#111';
+    rfb.addEventListener('connect', () => {
+      if (hubVmConsoleState.rfb !== rfb) return;
+      hubVmConsoleState.status = 'connected';
+      hubVmConsoleState.error = '';
+      hubVmConsoleState.missingCredentials = false;
+      syncHubVmConsolePanel(panel);
+    });
+    rfb.addEventListener('disconnect', event => {
+      if (hubVmConsoleState.rfb !== rfb) return;
+      hubVmConsoleState.rfb = null;
+      hubVmConsoleState.sessionId = '';
+      hubVmConsoleState.status = 'disconnected';
+      hubVmConsoleState.error = event?.detail?.clean ? '' : (event?.detail?.reason || 'Console disconnected.');
+      syncHubVmConsolePanel(panel);
+    });
+  } catch (err) {
+    if (connectToken !== hubVmConsoleState.connectToken) return;
+    hubVmConsoleState.rfb = null;
+    hubVmConsoleState.sessionId = '';
+    hubVmConsoleState.status = 'error';
+    hubVmConsoleState.error = err?.message || 'Unable to start the console.';
+    syncHubVmConsolePanel(panel);
+  }
+}
+
+function showHubConsolePanel(spokeId, vmid, vmtype, vmname, sessionId = '', error = '') {
+  hubVmConsoleState.spokeId = spokeId;
+  hubVmConsoleState.vmid = vmid;
+  hubVmConsoleState.vmtype = vmtype || 'qemu';
+  hubVmConsoleState.vmname = vmname || `VM ${vmid}`;
+  hubVmConsoleState.sessionId = sessionId || '';
+  hubVmConsoleState.status = sessionId ? 'connecting' : (error ? 'error' : 'idle');
+  hubVmConsoleState.error = error || '';
+  hubVmConsoleState.missingCredentials = /configure proxmox credentials/i.test(error || '');
+  hubVmServerActiveSubtab = 'console';
+  renderHubVmServer();
+}
+
+async function openHubVmConsole(spokeId, vmid, vmtype = 'qemu', vmname = '') {
+  disconnectHubVmConsole({ rerender: false, preserveSelection: false });
+  const tenantId = getActiveTenantId();
+  const safeVmtype = vmtype || 'qemu';
+  try {
+    const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/console/${encodeURIComponent(vmid)}?vmtype=${encodeURIComponent(safeVmtype)}`, { method: 'POST' });
+    const data = await readJson(res);
+    if (!res || !res.ok || !data?.session_id) throw new Error(data?.detail || 'Console session failed.');
+    showHubConsolePanel(spokeId, vmid, safeVmtype, vmname, data.session_id);
+  } catch (err) {
+    const message = err?.message || 'Console session failed.';
+    showHubConsolePanel(spokeId, vmid, safeVmtype, vmname, '', message);
+    showToast(message, 'error');
+  }
+}
+
+async function loadHubProxmoxCredentialSummary(panel, spokeId, fallbackHost = '') {
+  if (!panel || !spokeId) return;
+  const hostEl = panel.querySelector('#hub-proxmox-credentials-host');
+  const statusEl = panel.querySelector('#hub-proxmox-credentials-status');
+  try {
+    const res = await apiFetch(`/api/${encodeURIComponent(getActiveTenantId())}/spokes/${encodeURIComponent(spokeId)}/proxmox-credentials`);
+    const data = await readJson(res);
+    if (!res || !res.ok) throw new Error(data?.detail || 'Unable to load Proxmox credentials.');
+    if (hostEl) hostEl.textContent = data?.proxmox_host || fallbackHost || '—';
+    if (statusEl) {
+      statusEl.textContent = data?.proxmox_token_configured ? '✓ Token configured' : 'Token not configured';
+      statusEl.classList.toggle('ok', Boolean(data?.proxmox_token_configured));
+    }
+  } catch (err) {
+    if (hostEl) hostEl.textContent = fallbackHost || '—';
+    if (statusEl) statusEl.textContent = err?.message || 'Unable to load credentials';
+  }
+}
+
+async function openHubProxmoxCredentialsModal(spokeId, fallbackHost = '') {
+  const modal = $('#hub-proxmox-credentials-modal');
+  const hostInput = $('#hub-proxmox-host-input');
+  const tokenInput = $('#hub-proxmox-token-input');
+  const statusEl = $('#hub-proxmox-token-status');
+  const msgEl = $('#hub-proxmox-credentials-msg');
+  if (!modal || !hostInput || !tokenInput) return;
+  hubProxmoxCredentialsModalState = { spokeId, fallbackHost };
+  modal.classList.remove('hidden');
+  hostInput.value = fallbackHost || '';
+  setSecretInputConfigured(tokenInput, false);
+  if (statusEl) statusEl.textContent = 'Loading…';
+  if (msgEl) { msgEl.textContent = ''; msgEl.className = 'form-msg'; }
+  try {
+    const res = await apiFetch(`/api/${encodeURIComponent(getActiveTenantId())}/spokes/${encodeURIComponent(spokeId)}/proxmox-credentials`);
+    const data = await readJson(res);
+    if (!res || !res.ok) throw new Error(data?.detail || 'Unable to load Proxmox credentials.');
+    hostInput.value = data?.proxmox_host || fallbackHost || '';
+    setSecretInputConfigured(tokenInput, Boolean(data?.proxmox_token_configured));
+    if (statusEl) statusEl.textContent = data?.proxmox_token_configured ? '✓ Token configured' : 'Token not configured';
+  } catch (err) {
+    if (statusEl) statusEl.textContent = err?.message || 'Unable to load Proxmox credentials.';
+  }
+}
+
+function closeHubProxmoxCredentialsModal() {
+  $('#hub-proxmox-credentials-modal')?.classList.add('hidden');
+  hubProxmoxCredentialsModalState = { spokeId: null, fallbackHost: '' };
+}
+
+async function saveHubProxmoxCredentials() {
+  const { spokeId, fallbackHost } = hubProxmoxCredentialsModalState;
+  const hostInput = $('#hub-proxmox-host-input');
+  const tokenInput = $('#hub-proxmox-token-input');
+  const statusEl = $('#hub-proxmox-token-status');
+  const msgEl = $('#hub-proxmox-credentials-msg');
+  const saveBtn = $('#hub-proxmox-credentials-save');
+  if (!spokeId || !hostInput || !tokenInput || !saveBtn) return;
+  const payload = { proxmox_host: hostInput.value.trim() };
+  const tokenPayload = getSecretInputPayload(tokenInput);
+  if (tokenPayload.include) payload.proxmox_token = tokenPayload.value.trim();
+  saveBtn.disabled = true;
+  try {
+    const res = await apiFetch(`/api/${encodeURIComponent(getActiveTenantId())}/spokes/${encodeURIComponent(spokeId)}/proxmox-credentials`, {
+      method: 'PUT',
+      body: payload,
+    });
+    const data = await readJson(res);
+    if (!res || !res.ok) throw new Error(data?.detail || 'Unable to save Proxmox credentials.');
+    setSecretInputConfigured(tokenInput, Boolean(data?.proxmox_token_configured));
+    if (statusEl) statusEl.textContent = data?.proxmox_token_configured ? '✓ Token configured' : 'Token not configured';
+    if (msgEl) { msgEl.textContent = 'Credentials saved.'; msgEl.className = 'form-msg ok'; }
+    const panel = document.getElementById('hub-vmserver-subpanel');
+    if (panel && hubVmServerActiveSubtab === 'details' && hubVmServerSelectedSpoke === spokeId) {
+      await loadHubProxmoxCredentialSummary(panel, spokeId, data?.proxmox_host || fallbackHost || '');
+    }
+    showToast('Proxmox credentials saved.', 'ok');
+  } catch (err) {
+    if (msgEl) { msgEl.textContent = err?.message || 'Unable to save Proxmox credentials.'; msgEl.className = 'form-msg error'; }
+  } finally {
+    saveBtn.disabled = false;
+  }
+}
+
+function wireHubVmServerConsolePanel(panel, spokeId, host = {}, node = {}, spokeCfg = {}) {
+  const fallbackHost = getHubVmConsoleFallbackHost(host, node);
+  panel.querySelector('#hub-vm-console-configure-btn')?.addEventListener('click', () => openHubProxmoxCredentialsModal(spokeId, fallbackHost));
+  panel.querySelector('#hub-vm-console-disconnect-btn')?.addEventListener('click', () => disconnectHubVmConsole({ rerender: true, preserveSelection: true }));
+  panel.querySelector('#hub-vm-console-reconnect-btn')?.addEventListener('click', () => {
+    if (!hubVmConsoleState.spokeId || !hubVmConsoleState.vmid) return;
+    openHubVmConsole(hubVmConsoleState.spokeId, hubVmConsoleState.vmid, hubVmConsoleState.vmtype, hubVmConsoleState.vmname);
+  });
+  syncHubVmConsolePanel(panel);
+  if (hubVmConsoleState.spokeId === spokeId && hubVmConsoleState.sessionId) connectHubVmConsole(panel, spokeId);
 }
 
 function _hubVmStatusDot(vm = {}) {
@@ -11645,6 +11952,7 @@ function _hubFormatFaults(faults = []) {
 
 function renderHubVmServerVmsPanel(spokeId, { simVms, otherVms, containerVms, templateVms, usbState = [], reclone = {}, px = {} }) {
   const VM_ACTIONS = [
+    { action: "console", label: "🖥", title: "Console" },
     { action: "start_vm", label: "▶", title: "Start" },
     { action: "stop_vm", label: "■", title: "Stop" },
     { action: "reboot_vm", label: "↺", title: "Reboot" },
@@ -11715,7 +12023,7 @@ function renderHubVmServerVmsPanel(spokeId, { simVms, otherVms, containerVms, te
           <td>${_hubVmStatusDot(vm)} ${escHtml(statusText)}</td>
         </tr>`;
       }
-      return `<tr data-vm-type="${escHtml(vmType)}" data-reclone-source-vmid="${escHtml(sourceVmid)}">
+      return `<tr data-vm-type="${escHtml(vmType)}" data-reclone-source-vmid="${escHtml(sourceVmid)}" data-vm-name="${escHtml(vm.name || '')}">
         <td><input type="checkbox" class="hub-vm-check" data-vmid="${escHtml(String(vm.vmid))}"${vm.status === "deleting" ? " disabled" : ""}></td>
         <td>${_hubVmStatusDot(vm)} ${escHtml(statusText)}</td>
         <td>${escHtml(String(vm.vmid ?? "—"))}</td>
@@ -12130,6 +12438,7 @@ function renderHubVmServerDetailsPanel(node = {}, px = {}, host = {}, spokeCfg =
   }).join("") : "";
   const hwFaults = Array.isArray(px.hw_faults?.faults) ? px.hw_faults.faults : [];
 
+  const proxmoxHost = getHubVmConsoleFallbackHost(host, node) || hostname;
   return `
     <div class="setup-card setup-section-gap">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
@@ -12153,21 +12462,42 @@ function renderHubVmServerDetailsPanel(node = {}, px = {}, host = {}, spokeCfg =
           <tr><th>HW Faults</th><td>${_hubFormatFaults(hwFaults)}</td></tr>
         </tbody>
       </table>
+    </div>
+    <div class="setup-card setup-section-gap">
+      <div class="setup-card-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div>
+          <h2 style="margin:0;">Proxmox Console Access</h2>
+          <p style="margin:6px 0 0;">Store a Proxmox API token so the hub can mint short-lived noVNC console sessions.</p>
+        </div>
+        <button class="btn btn-primary btn-small" id="hub-proxmox-credentials-btn" type="button">Configure Credentials</button>
+      </div>
+      <table class="data-table" style="margin-top:12px;">
+        <tbody>
+          <tr><th>Proxmox Host</th><td id="hub-proxmox-credentials-host">${escHtml(proxmoxHost || "—")}</td></tr>
+          <tr><th>API Token</th><td id="hub-proxmox-credentials-status">Loading…</td></tr>
+        </tbody>
+      </table>
+      <div class="muted" style="margin-top:10px;font-size:0.82rem;">Token format: <code>root@pam!tokenid=secret</code></div>
     </div>`;
 }
 
 function wireHubVmServerDetailsPanel(panel, spokeId) {
-  const btn = panel.querySelector("#hub-node-update-agent-btn");
+  const btn = panel.querySelector('#hub-node-update-agent-btn');
+  const configureBtn = panel.querySelector('#hub-proxmox-credentials-btn');
+  const host = getHubVmServerHostBySpokeId(spokeId) || {};
+  const fallbackHost = getHubVmConsoleFallbackHost(host, host.node || {});
+  loadHubProxmoxCredentialSummary(panel, spokeId, fallbackHost);
+  configureBtn?.addEventListener('click', () => openHubProxmoxCredentialsModal(spokeId, fallbackHost));
   if (!btn) return;
-  btn.addEventListener("click", async () => {
+  btn.addEventListener('click', async () => {
     btn.disabled = true;
     const original = btn.textContent;
-    btn.textContent = "Updating…";
+    btn.textContent = 'Updating…';
     try {
-      await sendHubProxmoxCommand(getActiveTenantId(), spokeId, "update_agent", {});
-      showToast("Agent update queued for this node.", "ok");
+      await sendHubProxmoxCommand(getActiveTenantId(), spokeId, 'update_agent', {});
+      showToast('Agent update queued for this node.', 'ok');
     } catch (err) {
-      showToast(`Error: ${err.message}`, "error");
+      showToast(`Error: ${err.message}`, 'error');
     } finally {
       btn.disabled = false;
       btn.textContent = original;
@@ -12407,19 +12737,24 @@ function wireHubVmActions(panel, spokeId) {
     });
   });
 
-  panel.querySelectorAll(".hub-vm-action-btn:not([disabled])").forEach(btn => {
-    btn.addEventListener("click", async () => {
+  panel.querySelectorAll('.hub-vm-action-btn:not([disabled])').forEach(btn => {
+    btn.addEventListener('click', async () => {
       const vmid = parseInt(btn.dataset.vmid, 10);
       const action = btn.dataset.action;
-      const tr = btn.closest("tr");
-      const vmType = tr?.dataset.vmType || "qemu";
+      const tr = btn.closest('tr');
+      const vmType = tr?.dataset.vmType || 'qemu';
+      const vmName = tr?.dataset.vmName || `VM ${vmid}`;
       const srcVmid = tr?.dataset.recloneSourceVmid;
+      if (action === 'console') {
+        await openHubVmConsole(spokeId, vmid, vmType, vmName);
+        return;
+      }
       const args = { vmid, type: vmType };
       if (srcVmid) args.source_vmid = parseInt(srcVmid, 10);
       try {
         await sendHubProxmoxCommand(tenantId, spokeId, action, args);
       } catch (err) {
-        showToast(`Error: ${err.message}`, "error");
+        showToast(`Error: ${err.message}`, 'error');
       }
     });
   });
@@ -16826,9 +17161,12 @@ function bindEvents() {
     spokeUiState.search = event.target.value || "";
     scheduleReload("spoke-search", () => loadSpokes(), 120);
   });
-  $("#spoke-modal-close")?.addEventListener("click", closeSpokeModal);
-  $("#spoke-modal")?.addEventListener("click", event => { if (event.target === event.currentTarget) closeSpokeModal(); });
-  $("#mode-save-btn")?.addEventListener("click", saveSpokeProcessingMode);
+  $('#spoke-modal-close')?.addEventListener('click', closeSpokeModal);
+  $('#spoke-modal')?.addEventListener('click', event => { if (event.target === event.currentTarget) closeSpokeModal(); });
+  $('#hub-proxmox-credentials-close')?.addEventListener('click', closeHubProxmoxCredentialsModal);
+  $('#hub-proxmox-credentials-modal')?.addEventListener('click', event => { if (event.target === event.currentTarget) closeHubProxmoxCredentialsModal(); });
+  $('#hub-proxmox-credentials-save')?.addEventListener('click', saveHubProxmoxCredentials);
+  $('#mode-save-btn')?.addEventListener('click', saveSpokeProcessingMode);
   $("#pw-save-btn")?.addEventListener("click", savePassword);
   $("#notif-save-btn")?.addEventListener("click", saveNotificationSettings);
   $("#hub-config-save-btn")?.addEventListener("click", saveHubConfig);

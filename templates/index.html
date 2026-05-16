@@ -6,6 +6,10 @@
   <title>Client-Sim</title>
   <link rel="stylesheet" href="/static/style.css">
   <script>window.WEBUI_MODE='{{WEBUI_MODE}}';</script>
+  <script type="module">
+    import RFB from 'https://cdn.jsdelivr.net/gh/novnc/noVNC@v1.4.0/core/rfb.js';
+    window.__noVNCRFB = RFB;
+  </script>
   <script src="/static/app.js" defer></script>
 </head>
 <body>
@@ -2772,5 +2776,30 @@
   </footer>
 
   <div id="toast-container" style="position:fixed;top:72px;right:24px;z-index:400;display:flex;flex-direction:column;gap:8px;"></div>
+
+  <div id="hub-proxmox-credentials-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="hub-proxmox-credentials-title">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2 id="hub-proxmox-credentials-title">Proxmox Credentials</h2>
+        <button id="hub-proxmox-credentials-close" class="btn btn-secondary btn-small" type="button">✕ Close</button>
+      </div>
+      <div class="setup-form" style="margin-top:12px;">
+        <div class="form-group">
+          <label class="form-label" for="hub-proxmox-host-input">Proxmox Host</label>
+          <input id="hub-proxmox-host-input" class="form-input" type="text" placeholder="Defaults to the spoke hostname">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="hub-proxmox-token-input">Proxmox API Token</label>
+          <input id="hub-proxmox-token-input" class="form-input" type="password" placeholder="root@pam!tokenid=secret">
+          <div class="muted" style="margin-top:6px;font-size:0.82rem;">Format: <code>user@realm!tokenid=secret</code></div>
+          <div id="hub-proxmox-token-status" class="form-msg" style="margin-top:6px;"></div>
+        </div>
+        <div class="form-actions">
+          <button id="hub-proxmox-credentials-save" class="btn btn-primary" type="button">Save</button>
+          <span id="hub-proxmox-credentials-msg" class="form-msg"></span>
+        </div>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

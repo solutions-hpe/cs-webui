@@ -5943,7 +5943,7 @@ async function openSimClients(simId, wsite, testKey, alertPf, checkLabel) {
       simClientsList.appendChild(card);
     }
   } catch (err) {
-    if (simClientsList) simClientsList.innerHTML = `<div class="sim-client-card" style="color:#e74c3c">Error loading clients: ${err.message}</div>`;
+    if (simClientsList) simClientsList.innerHTML = `<div class="sim-client-card" style="color:#e74c3c">Error loading clients: ${escHtml(err.message || String(err))}</div>`;
   }
 }
 
@@ -10053,6 +10053,11 @@ function showTab(rawTabId, opts = {}) {
   } else if (opts.source === "tenant") {
     tenantContextActive = true;
   }
+  // Clear node-detail refresh timer when leaving vm-server tab
+  if (tabId !== "vm-server" && _hubNodeRefreshTimer) {
+    clearInterval(_hubNodeRefreshTimer);
+    _hubNodeRefreshTimer = null;
+  }
   activeTab = tabId;
   $("#hub-root")?.querySelectorAll(".tab-content").forEach(panel => panel.classList.add("hidden"));
   const panel = $("#hub-root")?.querySelector(`#tab-hub-${CSS.escape(tabId)}`);
@@ -13206,6 +13211,9 @@ function renderHubConfigPage(data) {
 }
 
 async function loadVmServer(force = false) {
+  if (loadVmServer._inFlight) return;
+  loadVmServer._inFlight = true;
+  try {
   const container = $("#hub-vm-server-content");
   if (!container) return;
   const tenantId = getActiveTenantId();
@@ -13250,6 +13258,9 @@ async function loadVmServer(force = false) {
 
   container.innerHTML = '<div class="empty-state">Loading…</div>';
   await revalidate();
+  } finally {
+    loadVmServer._inFlight = false;
+  }
 }
 
 async function loadApiServer(force = false) {

@@ -11542,7 +11542,7 @@ function renderHubVmServerSubpanel(spokeId, subtab, { simVms, otherVms, containe
   if (subtab === "clients") {
     panel.innerHTML = renderHubVmServerClientsPanel(clients);
   } else if (subtab === "vms") {
-    panel.innerHTML = renderHubVmServerVmsPanel(spokeId, { simVms, otherVms, containerVms, templateVms });
+    panel.innerHTML = renderHubVmServerVmsPanel(spokeId, { simVms, otherVms, containerVms, templateVms, reclone, px, usb });
     wireHubVmActions(panel, spokeId);
   } else if (subtab === "usb") {
     panel.innerHTML = renderHubVmServerUsbPanel(usb);
@@ -11595,37 +11595,114 @@ function _hubVmTable(spokeId, vms, label) {
     </table>`;
 }
 
-function renderHubVmServerVmsPanel(spokeId, { simVms, otherVms, containerVms, templateVms }) {
-  let activeVmCat = "sim";
+function renderHubVmServerVmsPanel(spokeId, { simVms, otherVms, containerVms, templateVms, reclone = {}, px = {}, usb = [] }) {
+  const recloneStatus = reclone.status || "idle";
+  const reclonePct = reclone.total > 0 ? Math.round((reclone.completed / reclone.total) * 100) : 0;
+  const provisioningUsb = usb.filter(u => u.prov_status === "provisioning");
+  const pendingCheckin = [...simVms, ...otherVms].filter(v => v.pending_checkin === true);
+  const provTotal = provisioningUsb.length + pendingCheckin.length;
+
+  const topCards = (recloneStatus !== "idle" || provTotal > 0) ? `
+    <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+      <div class="setup-card" style="flex:1;min-width:220px;padding:12px 16px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <strong style="font-size:0.9rem;">Fleet Reclone</strong>
+          <span class="badge badge-${recloneStatus === "running" ? "blue" : "grey"}">${escHtml(recloneStatus)}</span>
+          <button class="btn btn-primary btn-small" id="hub-reclone-all-btn" type="button" style="margin-left:auto;">⟳ Reclone All</button>
+        </div>
+        ${recloneStatus === "running" ? `
+          <div style="font-size:0.82rem;color:var(--muted);margin-bottom:4px;">${reclone.completed || 0} / ${reclone.total || 0} &nbsp;·&nbsp; VM ${escHtml(String(reclone.current_vm || "—"))}</div>
+          <div class="progress-bar-wrap"><div class="progress-bar" style="width:${reclonePct}%"></div></div>` : ""}
+        ${reclone.last_run ? `<div style="font-size:0.78rem;color:var(--muted);margin-top:4px;">Last run: ${escHtml(String(reclone.last_run))}</div>` : ""}
+      </div>
+      ${provTotal > 0 ? `
+      <div class="setup-card" style="flex:1;min-width:220px;padding:12px 16px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <strong style="font-size:0.9rem;">VM Auto-Provisioning</strong>
+        </div>
+        <div style="font-size:0.88rem;">${provisioningUsb.length} cloning &nbsp;·&nbsp; ${pendingCheckin.length} waiting check-in</div>
+        <div class="progress-bar-wrap" style="margin-top:6px;">
+          <div class="progress-bar" style="width:${usb.length > 0 ? Math.round(((usb.length - provisioningUsb.length) / usb.length) * 100) : 0}%"></div>
+        </div>
+      </div>` : ""}
+    </div>` : "";
+
   const cats = [
-    { id: "sim", label: "USB (T2)", vms: simVms },
-    { id: "other", label: "IoT (T3)", vms: otherVms },
-    { id: "containers", label: "Containers", vms: containerVms },
-    { id: "templates", label: "Templates", vms: templateVms },
+    { id: "sim",        label: "Simulation Clients", vms: simVms },
+    { id: "other",      label: "Other Clients",      vms: otherVms },
+    { id: "containers", label: "Containers",          vms: containerVms },
+    { id: "templates",  label: "Templates",           vms: templateVms },
   ];
+
+  const vmRow = (vm, isTemplate = false) => {
+    const isProvisioning = vm.prov_status === "provisioning" || vm.pending_checkin === true;
+    const statusDot = isProvisioning ? "🔵" : vm.status === "running" ? "🟢" : vm.status === "paused" ? "🟡" : "⚫";
+    const statusText = isProvisioning ? "provisioning" : (vm.status || "unknown");
+    const cpuVal = (vm.status === "running") && vm.cpu != null && !isNaN(Number(vm.cpu)) ? `${Number(vm.cpu).toFixed(1)}%` : "—";
+    const memUsed  = vm.mem    ? fmtSize(Number(vm.mem)    * 1024 * 1024) : "—";
+    const memTotal = vm.maxmem ? fmtSize(Number(vm.maxmem) * 1024 * 1024) : "—";
+    if (isTemplate) {
+      return `<tr>
+        <td colspan="2">${statusDot} ${escHtml(statusText)}</td>
+        <td>${escHtml(String(vm.vmid ?? "—"))}</td>
+        <td>${escHtml(vm.name || "—")}</td>
+        <td>${cpuVal}</td>
+        <td>${memUsed} / ${memTotal}</td>
+        <td>—</td>
+      </tr>`;
+    }
+    return `<tr data-vmid="${escHtml(String(vm.vmid))}">
+      <td><input type="checkbox" class="hub-vm-check" data-vmid="${escHtml(String(vm.vmid))}"></td>
+      <td>${statusDot} ${escHtml(statusText)}</td>
+      <td>${escHtml(String(vm.vmid ?? "—"))}</td>
+      <td>${escHtml(vm.name || "—")}</td>
+      <td>${cpuVal}</td>
+      <td>${memUsed} / ${memTotal}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn-icon hub-vm-action" data-action="start_vm"   data-vmid="${escHtml(String(vm.vmid))}" title="Start">▶</button>
+        <button class="btn-icon hub-vm-action" data-action="stop_vm"    data-vmid="${escHtml(String(vm.vmid))}" title="Stop">■</button>
+        <button class="btn-icon hub-vm-action" data-action="reclone_vm" data-vmid="${escHtml(String(vm.vmid))}" title="Reclone">↺</button>
+        <button class="btn-icon hub-vm-action" data-action="delete_vm"  data-vmid="${escHtml(String(vm.vmid))}" title="Delete">✕</button>
+      </td>
+    </tr>`;
+  };
+
+  const vmTable = (vms, isTemplate = false) => {
+    if (!vms.length) return `<div class="empty-state" style="padding:16px;">No VMs in this category.</div>`;
+    return `
+      ${!isTemplate ? `
+      <div style="display:flex;align-items:center;gap:8px;padding:0 0 8px;flex-wrap:wrap;">
+        <label style="display:flex;align-items:center;gap:4px;font-size:0.85rem;cursor:pointer;">
+          <input type="checkbox" class="hub-vm-select-all"> Select All
+        </label>
+        <button class="btn btn-primary btn-small hub-vm-bulk-action" data-action="start_vm" type="button">▶ Start</button>
+        <button class="btn btn-secondary btn-small hub-vm-bulk-action" data-action="stop_vm" type="button">■ Stop</button>
+        <button class="btn btn-warning btn-small hub-vm-bulk-action" data-action="reclone_vm" type="button">↺ Reclone</button>
+        <button class="btn btn-danger btn-small hub-vm-bulk-action" data-action="delete_vm" type="button">✕ Delete</button>
+      </div>` : ""}
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr>
+            ${!isTemplate ? "<th style='width:28px;'></th>" : "<th colspan='2'>"}
+            <th>STATUS</th><th>VM ID</th><th>NAME</th><th>CPU %</th><th>RAM</th><th>ACTIONS</th>
+          </tr></thead>
+          <tbody>${vms.map(vm => vmRow(vm, isTemplate)).join("")}</tbody>
+        </table>
+      </div>`;
+  };
+
   return `
-    <div class="setup-section-gap">
+    <div>
+      ${topCards}
       <nav class="vm-cat-tab-nav" id="hub-vm-cat-nav">
         ${cats.map((c, i) => `
           <button class="vm-cat-tab setup-subtab ${i === 0 ? "active" : ""}" data-hvmcat="${c.id}" type="button">
-            ${c.label} <span class="badge-count">${c.vms.length}</span>
+            ${escHtml(c.label)} <span class="badge-count">${c.vms.length}</span>
           </button>`).join("")}
       </nav>
       ${cats.map((c, i) => `
-        <div id="hub-vm-cat-panel-${c.id}" class="setup-card ${i !== 0 ? "hidden" : ""}" style="margin-top:8px;">
-          <div class="table-scroll">
-            ${c.id !== "templates"
-              ? _hubVmTable(spokeId, c.vms, c.label)
-              : `<table class="data-table">
-                  <thead><tr><th>VMID</th><th>Name</th><th>Status</th><th>Type</th></tr></thead>
-                  <tbody>${c.vms.map(vm => `<tr>
-                    <td>${escHtml(String(vm.vmid ?? "—"))}</td>
-                    <td>${escHtml(vm.name || "—")}</td>
-                    <td>${_hubVmStatusDot(vm)} ${escHtml(vm.status || "—")}</td>
-                    <td>${escHtml(vm.type || "qemu")}</td>
-                  </tr>`).join("")}</tbody>
-                </table>`}
-          </div>
+        <div id="hub-vm-cat-panel-${c.id}" class="${i !== 0 ? "hidden" : ""}" style="margin-top:8px;">
+          ${vmTable(c.vms, c.id === "templates")}
         </div>`).join("")}
     </div>`;
 }
@@ -11867,15 +11944,50 @@ function wireHubVmActions(panel, spokeId) {
       if (target) target.classList.remove("hidden");
     });
   });
+
+  // Reclone All button (shown in top cards when reclone is active)
+  panel.querySelector("#hub-reclone-all-btn")?.addEventListener("click", () => {
+    if (!confirm("Reclone all VMs on this spoke via hub?")) return;
+    sendHubProxmoxCommand(currentTenantId, spokeId, "reclone_all", {});
+  });
+
+  // Select-all checkboxes
+  panel.querySelectorAll(".hub-vm-select-all").forEach(sa => {
+    sa.addEventListener("change", () => {
+      const catPanel = sa.closest("[id^=hub-vm-cat-panel-]");
+      if (!catPanel) return;
+      catPanel.querySelectorAll(".hub-vm-check").forEach(cb => { cb.checked = sa.checked; });
+    });
+  });
+
   // Per-VM action buttons
   panel.querySelectorAll(".hub-vm-action").forEach(btn => {
     btn.addEventListener("click", () => {
       const action = btn.dataset.action;
       const vmid = parseInt(btn.dataset.vmid, 10);
+      if (action === "delete_vm" && !confirm(`Delete VM ${vmid}?`)) return;
       sendHubProxmoxCommand(currentTenantId, spokeId, action, { vmid });
     });
   });
+
+  // Bulk action buttons
+  panel.querySelectorAll(".hub-vm-bulk-action").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const action = btn.dataset.action;
+      const catPanel = btn.closest("[id^=hub-vm-cat-panel-]");
+      if (!catPanel) return;
+      const checked = [...catPanel.querySelectorAll(".hub-vm-check:checked")];
+      if (!checked.length) { showToast("Select at least one VM.", "warning"); return; }
+      if (action === "delete_vm" && !confirm(`Delete ${checked.length} VM(s)?`)) return;
+      checked.forEach(cb => {
+        const vmid = parseInt(cb.dataset.vmid, 10);
+        sendHubProxmoxCommand(currentTenantId, spokeId, action, { vmid });
+      });
+      showToast(`${action.replace("_vm","").replace("_"," ")} sent for ${checked.length} VM(s).`, "ok");
+    });
+  });
 }
+
 
 function wireHubRecloneActions(panel, spokeId, actionVms) {
   panel.querySelector("#hub-reclone-all-btn")?.addEventListener("click", () => {

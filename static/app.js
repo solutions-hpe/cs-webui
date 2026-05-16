@@ -7622,6 +7622,7 @@ let dashboardTenantRows = [];
 let aggregateDashboardData = null;
 let aggregateClientRows = [];
 let aggregateProxmoxHosts = [];
+let _hubNodeRefreshTimer = null;
 let aggregateFleetRecloneStatus = null;
 let aggregateUsbProvisioningStatus = null;
 let aggregateApiServerRows = [];
@@ -11420,11 +11421,17 @@ function renderHubVmServerDetail(container, host) {
   const spokeId = host.spoke_id;
   const spokeName = escHtml(spokeDisplayName(host, "Spoke"));
   const vms = Array.isArray(host.proxmox_vms) ? host.proxmox_vms : [];
-  const usb = Array.isArray(host.usb_devices) ? host.usb_devices : [];
-  const reclone = host.reclone_state || {};
   const px = host.proxmox || {};
+  const node = host.node || px.node || {};
+  const usb = Array.isArray(host.usb_devices) ? host.usb_devices : (Array.isArray(px.usb_state) ? px.usb_state : []);
+  const usbState = Array.isArray(px.usb_state) ? px.usb_state : usb;
+  const presentUsb = Array.isArray(px.present_usb) ? px.present_usb : [];
+  const unknownUsb = Array.isArray(px.unknown_usb) ? px.unknown_usb : [];
+  const vhDevices = px.vh_devices || {};
+  const reclone = host.reclone_state || {};
+  const spokeCfg = host.spoke_config || {};
+  const certifiedUsb = parseJsonList(spokeCfg.usb_vidpids || "[]");
 
-  // Categorise VMs — use host's own spoke config for template IDs (hub context, no currentSettings).
   const hostCfg = host.telemetry?.config || {};
   const configuredTemplateIds = new Set([
     String(hostCfg.vm_image_1_template_id || 100),
@@ -11448,9 +11455,19 @@ function renderHubVmServerDetail(container, host) {
   const statusCls = isOnline ? "online" : "offline";
   const statusLabel = isOnline ? "Online" : "Offline";
 
+  if (_hubNodeRefreshTimer) clearInterval(_hubNodeRefreshTimer);
+  _hubNodeRefreshTimer = setInterval(() => {
+    if (activeTab !== "vm-server" || hubVmServerSelectedSpoke !== spokeId) {
+      clearInterval(_hubNodeRefreshTimer);
+      _hubNodeRefreshTimer = null;
+      return;
+    }
+    loadVmServer();
+  }, 10000);
+
   const mainTabs = [
-    { id: "vms",         label: "VMs",          badge: vms.length },
-    { id: "usb",         label: "USB (T2)",      badge: usb.length },
+    { id: "vms",         label: "VMs",           badge: vms.length },
+    { id: "usb",         label: "USB (T2)",      badge: usbState.length },
     { id: "t3",          label: "IoT (T3)",      badge: null },
     { id: "virtualhere", label: "VirtualHere",   badge: null },
     { id: "commands",    label: "Command Queue", badge: null },
@@ -11479,7 +11496,7 @@ function renderHubVmServerDetail(container, host) {
         ${host.vm_count != null ? `<span class="hub-node-ctx-row1-pill">${escHtml(String(host.vm_count))} VMs</span>` : ""}
         ${host.usb_count != null ? `<span class="hub-node-ctx-row1-pill">· ${escHtml(String(host.usb_count))} USB</span>` : ""}
         ${px.agent_version ? `<span class="hub-node-ctx-row1-pill">· Agent v${escHtml(px.agent_version)}</span>` : ""}
-        ${px.pve_version   ? `<span class="hub-node-ctx-row1-pill">· PVE ${escHtml(px.pve_version)}</span>`   : ""}
+        ${px.pve_version ? `<span class="hub-node-ctx-row1-pill">· PVE ${escHtml(px.pve_version)}</span>` : ""}
         <span class="hub-node-ctx-row1-actions">
           <button class="btn btn-secondary btn-small" id="hub-vmserver-update-agent-btn" type="button" title="Update proxmox agent on this node">⬆️ Update Agent</button>
         </span>
@@ -11499,26 +11516,30 @@ function renderHubVmServerDetail(container, host) {
       <div id="hub-vmserver-subpanel" class="hub-node-ctx-subpanel"></div>
     </div>`;
 
-  document.getElementById("hub-vmserver-back-btn").addEventListener("click", () => {
+  document.getElementById("hub-vmserver-back-btn")?.addEventListener("click", () => {
+    if (_hubNodeRefreshTimer) {
+      clearInterval(_hubNodeRefreshTimer);
+      _hubNodeRefreshTimer = null;
+    }
     hubVmServerSelectedSpoke = null;
     renderHubVmServer();
   });
 
   document.getElementById("hub-vmserver-update-agent-btn")?.addEventListener("click", async () => {
     const btn = document.getElementById("hub-vmserver-update-agent-btn");
-    if (btn) { btn.disabled = true; btn.textContent = "Updating…"; }
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Updating…";
+    }
     try {
-      const token = sessionStorage.getItem("hub_token");
-      const resp = await fetch(`/api/${encodeURIComponent(currentTenantId)}/spokes/${encodeURIComponent(spokeId)}/update-agent`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      showToast("Agent update queued for this node.", "ok");
+      await sendHubProxmoxCommand(currentHubTenantId, spokeId, "update_agent", {});
     } catch (err) {
       showToast(`Update failed: ${err.message}`, "error");
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = "⬆️ Update Agent"; }
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "⬆️ Update Agent";
+      }
     }
   });
 
@@ -11526,32 +11547,39 @@ function renderHubVmServerDetail(container, host) {
     btn.addEventListener("click", () => {
       hubVmServerActiveSubtab = btn.dataset.hvmsubtab;
       document.querySelectorAll(".hub-vmserver-nodetab").forEach(b => b.classList.toggle("active", b === btn));
-      renderHubVmServerSubpanel(spokeId, hubVmServerActiveSubtab, { simVms, otherVms, containerVms, templateVms, usb, reclone, px, host, clients, apiServer, central });
+      renderHubVmServerSubpanel(spokeId, hubVmServerActiveSubtab, {
+        simVms, otherVms, containerVms, templateVms, usb, usbState, presentUsb, unknownUsb, vhDevices,
+        reclone, px, node, host, clients, apiServer, central, certifiedUsb, spokeCfg,
+      });
     });
   });
 
-  renderHubVmServerSubpanel(spokeId, hubVmServerActiveSubtab, { simVms, otherVms, containerVms, templateVms, usb, reclone, px, host, clients, apiServer, central });
+  renderHubVmServerSubpanel(spokeId, hubVmServerActiveSubtab, {
+    simVms, otherVms, containerVms, templateVms, usb, usbState, presentUsb, unknownUsb, vhDevices,
+    reclone, px, node, host, clients, apiServer, central, certifiedUsb, spokeCfg,
+  });
 }
 
-function renderHubVmServerSubpanel(spokeId, subtab, { simVms, otherVms, containerVms, templateVms, usb, reclone, px, host = {}, clients = [], apiServer = {}, central = {} }) {
+function renderHubVmServerSubpanel(spokeId, subtab, { simVms, otherVms, containerVms, templateVms, usb, usbState = [], presentUsb = [], unknownUsb = [], vhDevices = {}, reclone, px, node = {}, host = {}, clients = [], apiServer = {}, central = {}, certifiedUsb = [], spokeCfg = {} }) {
   const panel = document.getElementById("hub-vmserver-subpanel");
   if (!panel) return;
 
   if (subtab === "vms") {
-    panel.innerHTML = renderHubVmServerVmsPanel(spokeId, { simVms, otherVms, containerVms, templateVms, reclone, px, usb });
+    panel.innerHTML = renderHubVmServerVmsPanel(spokeId, { simVms, otherVms, containerVms, templateVms, usbState, reclone, px });
     wireHubVmActions(panel, spokeId);
   } else if (subtab === "usb") {
-    panel.innerHTML = renderHubVmServerUsbPanel(usb);
+    panel.innerHTML = renderHubVmServerUsbPanel({ usb, usbState, presentUsb, unknownUsb, certifiedUsb, vms: Array.isArray(host.proxmox_vms) ? host.proxmox_vms : [] });
+    wireHubVmActions(panel, spokeId);
   } else if (subtab === "t3") {
     panel.innerHTML = renderHubVmServerT3Panel(otherVms, usb);
   } else if (subtab === "virtualhere") {
-    panel.innerHTML = renderHubVmServerVirtualHerePanel(host);
+    panel.innerHTML = renderHubVmServerVirtualHerePanel(vhDevices, presentUsb, px);
   } else if (subtab === "commands") {
     panel.innerHTML = renderHubVmServerCommandQueuePanel();
     loadHubNodeCommandQueue(panel, spokeId);
     wireHubNodeCommandQueue(panel, spokeId);
   } else if (subtab === "details") {
-    panel.innerHTML = renderHubVmServerDetailsPanel(host, px);
+    panel.innerHTML = renderHubVmServerDetailsPanel(node, px, host, spokeCfg);
     wireHubVmServerDetailsPanel(panel, spokeId);
   } else if (subtab === "clients") {
     panel.innerHTML = renderHubVmServerClientsPanel(clients);
@@ -11562,118 +11590,156 @@ function renderHubVmServerSubpanel(spokeId, subtab, { simVms, otherVms, containe
   }
 }
 
-function _hubVmStatusDot(vm) {
-  if (vm.prov_status === "provisioning") return "🔵";
+function _hubVmStatusDot(vm = {}) {
+  if (vm.prov_status === "provisioning" || vm.pending_checkin === true) return "��";
   if (vm.status === "running") return "🟢";
   if (vm.status === "paused") return "🟡";
   return "⚫";
 }
 
-function _hubVmActionButtons(spokeId, vm) {
-  return `
-    <button class="btn btn-secondary btn-small hub-vm-action" data-action="start_vm"
-            data-vmid="${escHtml(String(vm.vmid))}" title="Start">▶</button>
-    <button class="btn btn-secondary btn-small hub-vm-action" data-action="stop_vm"
-            data-vmid="${escHtml(String(vm.vmid))}" title="Stop">■</button>
-    <button class="btn btn-warning btn-small hub-vm-action" data-action="reclone_vm"
-            data-vmid="${escHtml(String(vm.vmid))}" title="Reclone">↺</button>`;
+function _hubVmSort(a, b) {
+  const aRunning = a.status === "running" ? 1 : 0;
+  const bRunning = b.status === "running" ? 1 : 0;
+  if (aRunning !== bRunning) return aRunning - bRunning;
+  return Number(a.vmid || 0) - Number(b.vmid || 0);
 }
 
-function _hubVmTable(spokeId, vms, label) {
-  if (!vms.length) return `<div class="empty-state" style="padding:12px;">${label}: none.</div>`;
-  return `
-    <table class="data-table">
-      <thead><tr><th>Status</th><th>VMID</th><th>Name</th><th>Type</th><th>USB</th><th>Actions</th></tr></thead>
-      <tbody>
-        ${vms.map(vm => `
-          <tr>
-            <td>${_hubVmStatusDot(vm)} ${escHtml(vm.status || "—")}</td>
-            <td>${escHtml(String(vm.vmid ?? "—"))}</td>
-            <td>${escHtml(vm.name || "—")}</td>
-            <td>${escHtml(vm.type || "qemu")}</td>
-            <td>${vm.has_usb_config || vm.reclone_bus_path ? "🔌 USB" : "—"}</td>
-            <td style="white-space:nowrap;">${_hubVmActionButtons(spokeId, vm)}</td>
-          </tr>`).join("")}
-      </tbody>
-    </table>`;
+function _hubVmCpuText(vm = {}) {
+  return (vm.status === "running") && vm.cpu != null && !Number.isNaN(Number(vm.cpu))
+    ? `${Number(vm.cpu).toFixed(1)}%`
+    : "—";
 }
 
-function renderHubVmServerVmsPanel(spokeId, { simVms, otherVms, containerVms, templateVms, reclone = {}, px = {}, usb = [] }) {
-  // ── Fleet Reclone card ────────────────────────────────────────────────────
-  const recloneStatus = reclone.status || "idle";
-  const reclonePct    = (reclone.total > 0) ? Math.round((reclone.completed / reclone.total) * 100) : 0;
-  const recloneLog    = Array.isArray(reclone.log) ? reclone.log : [];
+function _hubVmRamText(vm = {}) {
+  const memUsed = vm.mem ? fmtSize(Number(vm.mem) * 1024 * 1024) : "—";
+  const memTotal = vm.maxmem ? fmtSize(Number(vm.maxmem) * 1024 * 1024) : "—";
+  return `${memUsed} / ${memTotal}`;
+}
+
+function _hubRelativeTime(value) {
+  if (!value) return "—";
+  if (typeof value === "number") return formatRelativeTime(value);
+  if (/^\d+(?:\.\d+)?$/.test(String(value))) return formatRelativeTime(Number(value));
+  return relativeTime(value);
+}
+
+function _hubFormatFaults(faults = []) {
+  if (!faults.length) return '<span class="muted">None</span>';
+  return faults.map(fault => {
+    const label = fault.type || fault.check || "fault";
+    const detail = fault.message || fault.detail || JSON.stringify(fault);
+    return `<div>⚠️ ${escHtml(label)} — ${escHtml(detail)}</div>`;
+  }).join("");
+}
+
+function renderHubVmServerVmsPanel(spokeId, { simVms, otherVms, containerVms, templateVms, usbState = [], reclone = {}, px = {} }) {
+  const VM_ACTIONS = [
+    { action: "start_vm", label: "▶", title: "Start" },
+    { action: "stop_vm", label: "■", title: "Stop" },
+    { action: "reboot_vm", label: "↺", title: "Reboot" },
+    { action: "snapshot_vm", label: "📷", title: "Snapshot" },
+    { action: "reclone_vm", label: "⎘", title: "Reclone" },
+    { action: "delete_vm", label: "✕", title: "Delete" },
+  ];
+
+  const recloneStatus = String(reclone.status || "idle").toLowerCase();
   const recloneRunning = recloneStatus === "running";
-  const recloneItems  = recloneRunning ? recloneLog.filter(e => e && !["done"].includes(e.status)).slice(0, 5) : [];
+  const recloneTotal = Number(reclone.total || 0);
+  const recloneCompleted = Number(reclone.completed || 0);
+  const reclonePct = recloneTotal > 0 ? Math.max(0, Math.min(100, Math.round((recloneCompleted / recloneTotal) * 100))) : 0;
+  const recloneLog = Array.isArray(reclone.log) ? reclone.log.slice(-12).reverse() : [];
 
-  // ── Auto-provisioning card ────────────────────────────────────────────────
-  const provSlots   = usb.filter(u => u.prov_status === "provisioning");
-  const pendingCheckin = [...simVms, ...otherVms].filter(v => v.pending_checkin === true);
-  const provRunning = provSlots.length > 0 || pendingCheckin.length > 0;
-  const provComplete = usb.filter(u => u.prov_status && u.prov_status !== "provisioning" && u.vmid).length;
-  const provTotal   = usb.filter(u => u.prov_status).length || (provSlots.length + provComplete);
-  const provPct     = provTotal > 0 ? Math.round((provComplete / provTotal) * 100) : 0;
+  const provisioningUsb = usbState.filter(item => item && item.prov_status === "provisioning");
+  const provisioningVmids = new Set(provisioningUsb.map(item => String(item?.vmid || "")).filter(Boolean));
+  const pendingCheckin = simVms.filter(vm => vm && vm.pending_checkin === true && !provisioningVmids.has(String(vm.vmid)));
+  const activeProvisioning = provisioningUsb.length + pendingCheckin.length;
+  const provisionable = usbState.filter(item => item && item.prov_status);
+  const completedProvisioning = provisionable.filter(item => item.prov_status !== "provisioning" && item.vmid != null).length;
+  const provisioningTotal = Math.max(provisionable.length, activeProvisioning);
+  const provisioningPct = provisioningTotal > 0 ? Math.max(0, Math.min(100, Math.round((completedProvisioning / provisioningTotal) * 100))) : 0;
+  const slotItems = [
+    ...provisioningUsb.map(item => ({
+      name: item.name || item.hostname || `VM ${item.vmid || item.bus_path || "—"}`,
+      phase: "Cloning",
+      cls: "autoprov-phase-cloning",
+    })),
+    ...pendingCheckin.map(vm => ({
+      name: vm.name || `VM ${vm.vmid}`,
+      phase: "Waiting for check-in",
+      cls: "autoprov-phase-configuring",
+    })),
+  ];
 
-  const slotItems = [...provSlots.map(u => ({
-    name: u.name || u.hostname || `Slot ${u.vmid || u.bus_path || "—"}`,
-    phase: "Cloning", cls: "autoprov-phase-cloning",
-  })), ...pendingCheckin.map(v => ({
-    name: v.name || `Slot ${v.vmid}`,
-    phase: "Waiting for check-in", cls: "autoprov-phase-configuring",
-  }))];
-
-  // ── VM row renderer ───────────────────────────────────────────────────────
-  const vmRow = (vm, isTemplate = false) => {
-    const isProvisioning = vm.prov_status === "provisioning" || vm.pending_checkin === true;
-    const statusDot  = isProvisioning ? "🔵" : vm.status === "running" ? "🟢" : vm.status === "paused" ? "🟡" : "⚫";
-    const statusText = isProvisioning ? "provisioning" : (vm.status || "unknown");
-    const cpuVal  = (vm.status === "running") && vm.cpu != null && !isNaN(Number(vm.cpu))
-      ? `${Number(vm.cpu).toFixed(1)}%` : "—";
-    const memUsed  = vm.mem    ? fmtSize(Number(vm.mem)    * 1024 * 1024) : "—";
-    const memTotal = vm.maxmem ? fmtSize(Number(vm.maxmem) * 1024 * 1024) : "—";
-
-    if (isTemplate) return `<tr>
-      <td>${escHtml(String(vm.vmid ?? "—"))}</td>
-      <td>${escHtml(vm.name || "—")}</td>
-      <td>${cpuVal}</td>
-      <td>${memUsed} / ${memTotal}</td>
-      <td>${statusDot} ${escHtml(statusText)}</td>
-    </tr>`;
-
-    return `<tr data-vmid="${escHtml(String(vm.vmid))}">
-      <td><input type="checkbox" class="hub-vm-check" data-vmid="${escHtml(String(vm.vmid))}"></td>
-      <td>${statusDot} ${escHtml(statusText)}</td>
-      <td>${escHtml(String(vm.vmid ?? "—"))}</td>
-      <td>${escHtml(vm.name || "—")}</td>
-      <td>${cpuVal}</td>
-      <td>${memUsed} / ${memTotal}</td>
-      <td style="white-space:nowrap;">
-        <button class="btn-icon hub-vm-action" data-action="start_vm"   data-vmid="${escHtml(String(vm.vmid))}" title="Start">▶</button>
-        <button class="btn-icon hub-vm-action" data-action="stop_vm"    data-vmid="${escHtml(String(vm.vmid))}" title="Stop">■</button>
-        <button class="btn-icon hub-vm-action" data-action="reclone_vm" data-vmid="${escHtml(String(vm.vmid))}" title="Reclone">↺</button>
-        <button class="btn-icon hub-vm-action" data-action="delete_vm"  data-vmid="${escHtml(String(vm.vmid))}" title="Delete">✕</button>
-      </td>
-    </tr>`;
+  const renderRecloneItem = (entry) => {
+    if (typeof entry === "string") {
+      return `<div class="autoprov-live-item reclone-live-item"><div class="autoprov-live-item-main"><div class="autoprov-live-item-name">${escHtml(entry)}</div></div></div>`;
+    }
+    const status = String(entry?.status || "queued").replace(/_/g, " ");
+    const label = entry?.name || (entry?.vmid != null ? `VM ${entry.vmid}` : "Task");
+    return `
+      <div class="autoprov-live-item reclone-live-item">
+        <div class="autoprov-live-item-main">
+          <div class="autoprov-live-item-name">${escHtml(label)}</div>
+        </div>
+        <span class="autoprov-phase autoprov-phase-${escHtml(String(entry?.status || "queued"))}">${escHtml(status)}</span>
+      </div>`;
   };
 
-  const vmPanel = (cat, vms) => {
+  const renderVmRows = (vmList, isTemplate = false) => {
+    const sorted = [...vmList].sort(_hubVmSort);
+    if (!sorted.length) return "";
+    return sorted.map(vm => {
+      const isProvisioning = vm.prov_status === "provisioning" || vm.pending_checkin === true;
+      const statusText = isProvisioning ? "provisioning" : (vm.status || "unknown");
+      const recloneSupported = vm.reclone_supported !== false;
+      const recloneReason = vm.reclone_reason || "This guest cannot be recloned from the current configuration";
+      const vmType = vm.type || "qemu";
+      const sourceVmid = vm.reclone_source_vmid != null ? String(vm.reclone_source_vmid) : "";
+      if (isTemplate) {
+        return `<tr>
+          <td>${escHtml(String(vm.vmid ?? "—"))}</td>
+          <td>${escHtml(vm.name || "—")}</td>
+          <td>${_hubVmCpuText(vm)}</td>
+          <td>${_hubVmRamText(vm)}</td>
+          <td>${_hubVmStatusDot(vm)} ${escHtml(statusText)}</td>
+        </tr>`;
+      }
+      return `<tr data-vm-type="${escHtml(vmType)}" data-reclone-source-vmid="${escHtml(sourceVmid)}">
+        <td><input type="checkbox" class="hub-vm-check" data-vmid="${escHtml(String(vm.vmid))}"${vm.status === "deleting" ? " disabled" : ""}></td>
+        <td>${_hubVmStatusDot(vm)} ${escHtml(statusText)}</td>
+        <td>${escHtml(String(vm.vmid ?? "—"))}</td>
+        <td>${escHtml(vm.name || "—")}</td>
+        <td>${_hubVmCpuText(vm)}</td>
+        <td>${_hubVmRamText(vm)}</td>
+        <td style="white-space:nowrap;">
+          ${VM_ACTIONS.map(action => {
+            const disabled = vm.status === "deleting" || (action.action === "reclone_vm" && !recloneSupported);
+            const title = action.action === "reclone_vm" && !recloneSupported ? recloneReason : action.title;
+            return `<button class="btn-icon hub-vm-action-btn" data-action="${action.action}" data-vmid="${escHtml(String(vm.vmid))}" title="${escHtml(title)}"${disabled ? " disabled" : ""}>${action.label}</button>`;
+          }).join(" ")}
+        </td>
+      </tr>`;
+    }).join("");
+  };
+
+  const vmPanel = (cat, vms, emptyText) => {
     const isTemplate = cat === "templates";
-    const empty = isTemplate ? "No templates detected." : cat === "sim" ? "Waiting for Proxmox agent to check in…" : cat === "containers" ? "No containers found." : "No other VMs found.";
-    const tableHead = isTemplate
+    const header = isTemplate
       ? `<tr><th>VM ID</th><th>Name</th><th>CPU %</th><th>RAM</th><th>Status</th></tr>`
-      : `<tr><th style="width:36px;"><input type="checkbox" class="hub-vm-th-check" data-cat="${cat}"></th><th>Status</th><th>VM ID</th><th>Name</th><th>CPU %</th><th>RAM</th><th>Actions</th></tr>`;
+      : `<tr><th style="width:36px;"><input type="checkbox" id="hub-server-th-check-${cat}" ${vms.length ? "" : "disabled"}></th><th>Status</th><th>${cat === "containers" ? "CT ID" : "VM ID"}</th><th>Name</th><th>CPU %</th><th>RAM</th><th>Actions</th></tr>`;
+    const rows = renderVmRows(vms, isTemplate);
     return `
       <div id="hub-vm-cat-panel-${cat}" class="setup-card${cat !== "sim" ? " hidden" : ""}">
         <table class="data-table">
-          <thead>${tableHead}</thead>
-          <tbody>${vms.map(v => vmRow(v, isTemplate)).join("") || `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px;">${empty}</td></tr>`}</tbody>
+          <thead>${header}</thead>
+          <tbody id="hub-vm-tbody-${cat}">${rows}</tbody>
         </table>
+        <div id="hub-server-empty-${cat}" style="text-align:center;color:var(--muted);padding:32px;${rows ? "display:none;" : ""}">${escHtml(emptyText)}</div>
       </div>`;
   };
 
   return `
     <div>
-      <!-- Fleet Reclone + Auto-Prov top cards (always visible, matching spoke layout) -->
       <div class="reclone-autoprov-grid setup-section-gap">
         <div id="hub-reclone-status-panel" class="setup-card vm-server-status-tile">
           <div class="autoprov-two-col">
@@ -11683,24 +11749,21 @@ function renderHubVmServerVmsPanel(spokeId, { simVms, otherVms, containerVms, te
               </div>
               <div class="reclone-action-stack">
                 <button id="hub-reclone-all-btn" class="btn btn-primary btn-small" type="button">⟳ Reclone All Now</button>
-                <div class="badge badge-${recloneRunning ? "blue" : "grey"}">${recloneRunning ? "Running" : "Stopped"}</div>
+                <div class="badge ${recloneRunning ? "badge-blue" : "badge-grey"}">${recloneRunning ? "Running" : escHtml(reclone.status || "Idle")}</div>
               </div>
-              ${recloneRunning ? `
-              <div class="reclone-meta">
-                <span class="muted">${reclone.completed || 0} / ${reclone.total || 0}</span>
+              <div${recloneRunning ? "" : ' class="hidden"'}>
+                <div class="reclone-meta">
+                  <span class="muted">${escHtml(String(reclone.completed || 0))} / ${escHtml(String(reclone.total || 0))}</span>
+                  ${reclone.current_vm != null ? `<span class="muted">Current VM ${escHtml(String(reclone.current_vm))}</span>` : ""}
+                </div>
+                <div class="progress-bar-wrap"><div class="progress-bar" style="width:${reclonePct}%"></div></div>
+                <div>${reclonePct}% complete</div>
               </div>
-              <div class="progress-bar-wrap"><div class="progress-bar" style="width:${reclonePct}%"></div></div>` : ""}
-              <div class="reclone-last-run">Last run: ${reclone.last_run ? escHtml(String(reclone.last_run)) : "—"}</div>
+              <div class="reclone-last-run">Last run: ${escHtml(_hubRelativeTime(reclone.last_run))}</div>
             </div>
             <div class="autoprov-right">
               <div class="autoprov-live-list">
-                ${recloneItems.map(e => `
-                  <div class="autoprov-live-item reclone-live-item">
-                    <div class="autoprov-live-item-main">
-                      <div class="autoprov-live-item-name">${escHtml(e.name || `VM ${e.vmid}`)}</div>
-                    </div>
-                    <span class="autoprov-phase autoprov-phase-${escHtml(e.status || "cloning")}">${escHtml(e.status || "cloning")}</span>
-                  </div>`).join("")}
+                ${recloneLog.length ? recloneLog.map(renderRecloneItem).join("") : '<div class="muted" style="padding:8px 0;">No reclone activity recorded.</div>'}
               </div>
             </div>
           </div>
@@ -11712,123 +11775,240 @@ function renderHubVmServerVmsPanel(spokeId, { simVms, otherVms, containerVms, te
               <div class="setup-card-header" style="margin-bottom:8px;">
                 <h2 style="font-size:1rem;margin:0;">VM Auto-Provisioning</h2>
               </div>
-              <div class="autoprov-live-summary">
-                ${provRunning ? `
+              ${activeProvisioning ? `
+                <div class="autoprov-live-summary">
                   <div class="autoprov-live-summary-main">
-                    <strong>${provSlots.length} cloning · ${pendingCheckin.length} waiting</strong>
-                    <span class="muted">${provPct}%</span>
+                    <strong>${escHtml(String(provisioningUsb.length))} cloning · ${escHtml(String(pendingCheckin.length))} waiting</strong>
+                    <span class="muted">${provisioningPct}%</span>
                   </div>
-                  <div class="progress-bar-wrap autoprov-progress-wrap">
-                    <div class="progress-bar" style="width:${provPct}%"></div>
-                  </div>` : `
-                  <div class="muted" style="padding:6px 0;">No provisioning in progress. Dongles inserted will trigger auto-provisioning.</div>`}
-              </div>
+                  <div class="progress-bar-wrap autoprov-progress-wrap"><div class="progress-bar" style="width:${provisioningPct}%"></div></div>
+                </div>` : `
+                <div class="autoprov-live-summary">
+                  <div class="muted" style="padding:6px 0;">No provisioning in progress. Dongles inserted will trigger auto-provisioning.</div>
+                </div>`}
             </div>
             <div class="autoprov-right">
               <div class="autoprov-live-list">
-                ${slotItems.map(s => `
+                ${slotItems.length ? slotItems.map(item => `
                   <div class="autoprov-live-item">
-                    <span class="autoprov-live-item-name">${escHtml(s.name)}</span>
-                    <span class="autoprov-phase ${s.cls}">${escHtml(s.phase)}</span>
-                  </div>`).join("")}
+                    <span class="autoprov-live-item-name">${escHtml(item.name)}</span>
+                    <span class="autoprov-phase ${item.cls}">${escHtml(item.phase)}</span>
+                  </div>`).join("") : '<div class="muted" style="padding:8px 0;">No active provisioning items.</div>'}
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Category tabs + autoprov status pill -->
       <div class="vm-cat-tab-nav setup-section-gap">
-        <button class="vm-cat-tab setup-subtab active" data-hvmcat="sim"        type="button">Simulation Clients <span class="badge-count">${simVms.length}</span></button>
-        <button class="vm-cat-tab setup-subtab"         data-hvmcat="other"       type="button">Other Clients <span class="badge-count">${otherVms.length}</span></button>
-        <button class="vm-cat-tab setup-subtab"         data-hvmcat="containers"  type="button">Containers <span class="badge-count">${containerVms.length}</span></button>
-        <button class="vm-cat-tab setup-subtab"         data-hvmcat="templates"   type="button">Templates <span class="badge-count">${templateVms.length}</span></button>
-        ${provRunning ? `
-        <div class="autoprov-status-bar is-active" style="margin-left:auto;">
-          <span class="autoprov-status-icon"><span class="autoprov-spinner"></span></span>
-          <span>Provisioning… ${provSlots.length + pendingCheckin.length} active</span>
-        </div>` : ""}
+        <button class="vm-cat-tab hub-vm-cat-tab setup-subtab active" data-cat="sim" type="button">Simulation Clients <span class="badge-count">${simVms.length}</span></button>
+        <button class="vm-cat-tab hub-vm-cat-tab setup-subtab" data-cat="other" type="button">Other Clients <span class="badge-count">${otherVms.length}</span></button>
+        <button class="vm-cat-tab hub-vm-cat-tab setup-subtab" data-cat="containers" type="button">Containers <span class="badge-count">${containerVms.length}</span></button>
+        <button class="vm-cat-tab hub-vm-cat-tab setup-subtab" data-cat="templates" type="button">Templates <span class="badge-count">${templateVms.length}</span></button>
+        ${activeProvisioning ? `
+          <div class="autoprov-status-bar is-active" style="margin-left:auto;">
+            <span class="autoprov-status-icon"><span class="autoprov-spinner"></span></span>
+            <span>Provisioning… ${escHtml(String(activeProvisioning))} active</span>
+          </div>` : ""}
       </div>
 
-      <!-- Shared bulk action bar (hidden for templates) -->
-      <div class="server-bulk-bar" id="hub-vm-bulk-bar">
+      <div class="server-bulk-bar" id="hub-server-bulk-bar">
         <label><input type="checkbox" id="hub-vm-select-all"> Select All</label>
-        <button class="btn btn-primary hub-vm-bulk-action"  data-action="start_vm"   type="button">▶ Start</button>
-        <button class="btn btn-primary hub-vm-bulk-action"  data-action="stop_vm"    type="button">■ Stop</button>
-        <button class="btn btn-warning hub-vm-bulk-action"  data-action="reclone_vm" type="button">↺ Reclone</button>
-        <button class="btn btn-danger  hub-vm-bulk-action"  data-action="delete_vm"  type="button">✕ Delete</button>
+        <button class="btn btn-primary hub-vm-bulk-action" data-action="start_vm" type="button">▶ Start</button>
+        <button class="btn btn-primary hub-vm-bulk-action" data-action="stop_vm" type="button">■ Stop</button>
+        <button class="btn btn-warning hub-vm-bulk-action" data-action="reclone_vm" type="button">↺ Reclone</button>
+        <button class="btn btn-danger hub-vm-bulk-action" data-action="delete_vm" type="button">✕ Delete</button>
       </div>
 
-      ${vmPanel("sim",        simVms)}
-      ${vmPanel("other",      otherVms)}
-      ${vmPanel("containers", containerVms)}
-      ${vmPanel("templates",  templateVms)}
+      ${vmPanel("sim", simVms, "Waiting for Proxmox agent to check in...")}
+      ${vmPanel("other", otherVms, "No other VMs found.")}
+      ${vmPanel("containers", containerVms, "No containers found.")}
+      ${vmPanel("templates", templateVms, "No templates detected.")}
     </div>`;
 }
 
-function renderHubVmServerUsbPanel(usb) {
-  // Group by VID:PID to match spoke's USB(T2) table layout
-  const grouped = {};
-  for (const d of usb) {
-    const key = d.vidpid || d.vid_pid || "unknown";
-    if (!grouped[key]) grouped[key] = { name: d.product || d.description || "USB Device", vidpid: key, assigned: [], count: 0 };
-    grouped[key].assigned.push(d.vmid);
-    grouped[key].count++;
-  }
-  const rows = Object.values(grouped);
-  if (!rows.length) return '<div class="setup-card"><div class="empty-state" style="padding:16px;">No USB (T2) devices assigned.</div></div>';
+function renderHubVmServerUsbPanel({ usbState = [], presentUsb = [], unknownUsb = [], certifiedUsb = [], vms = [] }) {
+  const certified = Array.isArray(certifiedUsb) ? certifiedUsb : [];
+  const vmMap = new Map(vms.map(vm => [Number(vm.vmid), vm]));
+  const presentBusSet = new Set(presentUsb.map(item => String(item?.bus_path || "").trim()).filter(Boolean));
+  const certifiedSet = new Set(certified.map(device => String(device?.vidpid || "").toLowerCase()).filter(Boolean));
+  const missingVmids = new Set(
+    usbState
+      .filter(item => item?.missing_since && !presentBusSet.has(String(item?.bus_path || "").trim()))
+      .map(item => Number(item.vmid))
+      .filter(Boolean)
+  );
+  const runningVms = vms.filter(vm => vm.status === "running" && !vm.is_template && !missingVmids.has(Number(vm.vmid)));
+  const simRunning = runningVms.filter(vm => String(vm.name || "").startsWith("client-sim-")).length;
+  const filteredUnknownUsb = unknownUsb.filter(device => !certifiedSet.has(String(device?.vidpid || "").toLowerCase().trim()));
+
+  const summaryRows = certified.map(device => {
+    const vidpid = String(device?.vidpid || "").toLowerCase();
+    const entries = usbState.filter(item => String(item?.vidpid || "").toLowerCase() === vidpid);
+    const missingEntries = entries.filter(item => item?.missing_since && !presentBusSet.has(String(item?.bus_path || "").trim()));
+    const activeEntries = entries.filter(item => !missingEntries.includes(item));
+    const total = presentUsb.filter(item => String(item?.vidpid || "").toLowerCase() === vidpid).length;
+    const available = Math.max(0, total - activeEntries.length);
+    const hwName = entries.find(item => item?.name)?.name || presentUsb.find(item => String(item?.vidpid || "").toLowerCase() == vidpid)?.name || "";
+    const activeVmHtml = activeEntries.length
+      ? activeEntries.map(entry => {
+          const vm = vmMap.get(Number(entry.vmid));
+          const name = vm?.name || `VM ${entry.vmid}`;
+          const dot = vm?.status === "running" ? "🟢" : "⚫";
+          return `<div style="white-space:nowrap">${dot} ${escHtml(name)}</div>`;
+        }).join("")
+      : "—";
+    const missingHtml = missingEntries.length
+      ? `<div class="usb-missing-list">${missingEntries.map(entry => {
+          const vm = vmMap.get(Number(entry.vmid));
+          const name = vm?.name || `VM ${entry.vmid}`;
+          return `<div class="usb-missing-item">🔴 ${escHtml(name)}</div>`;
+        }).join("")}</div>`
+      : "—";
+    const vidpidHtml = hwName
+      ? `${escHtml(device?.vidpid || "—")}<div class="muted" style="font-size:0.78rem;margin-top:2px;">${escHtml(hwName)}</div>`
+      : escHtml(device?.vidpid || "—");
+    const usbType = escHtml(device?.type || "wireless");
+    return `<tr>
+      <td>${escHtml(device?.label || device?.vidpid || "—")}</td>
+      <td>${vidpidHtml}</td>
+      <td class="usb-type-${usbType}">${usbType}</td>
+      <td>${activeVmHtml}</td>
+      <td>${missingHtml}</td>
+      <td>${available > 0 ? `<span class="badge badge-green">${available}</span>` : '<span class="muted">—</span>'}</td>
+      <td>${total}</td>
+    </tr>`;
+  }).join("");
+
+  const unknownRows = filteredUnknownUsb.map(device => {
+    const vidpid = escHtml(device?.vidpid || "");
+    const name = escHtml(device?.name || device?.bus_path || "Unknown device");
+    return `<tr>
+      <td>${name}</td>
+      <td>${vidpid || "—"}</td>
+      <td class="usb-actions">
+        <button type="button" class="btn btn-primary btn-small" data-action="certify" data-vidpid="${vidpid}" data-name="${name}">Add to certified</button>
+        <button type="button" class="btn btn-primary btn-small" data-action="ignore" data-vidpid="${vidpid}">Ignore</button>
+      </td>
+    </tr>`;
+  }).join("");
+
   return `
-    <div class="setup-card setup-section-gap">
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead><tr>
-            <th>Device</th><th>VID:PID</th><th>Type</th><th>Active VMs</th><th>Count</th>
-          </tr></thead>
-          <tbody>
-            ${rows.map(r => `<tr>
-              <td>${escHtml(r.name)}</td>
-              <td><code>${escHtml(r.vidpid)}</code></td>
-              <td>T2</td>
-              <td>${r.assigned.map(v => `<span class="badge" style="background:var(--info-color,#3182ce);color:#fff;font-size:0.75rem;margin-right:2px;border-radius:4px;padding:1px 5px;">${escHtml(String(v))}</span>`).join("") || "—"}</td>
-              <td>${r.count}</td>
-            </tr>`).join("")}
-          </tbody>
+    <div id="hub-usb-summary-panel" class="setup-card setup-section-gap">
+      <div class="setup-card-header">
+        <h2>USB Devices</h2>
+        <div id="hub-usb-vm-stat-pills" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <span class="server-stat-pill" title="Running VMs with dongles present">🟢 ${runningVms.length} running VM${runningVms.length !== 1 ? "s" : ""}</span>
+          ${simRunning > 0 ? `<span class="server-stat-pill" title="client-sim-* VMs running">${simRunning} sim client${simRunning !== 1 ? "s" : ""}</span>` : ""}
+        </div>
+      </div>
+      <table class="data-table" id="hub-usb-summary-table">
+        <colgroup>
+          <col>
+          <col style="width:105px">
+          <col style="width:90px">
+          <col style="width:200px">
+          <col style="width:200px">
+          <col style="width:100px">
+          <col style="width:75px">
+        </colgroup>
+        <thead>
+          <tr><th>Device</th><th>VID:PID</th><th>Type</th><th title="VMs with this USB device actively assigned via USB provisioning">Active VMs</th><th>Missing Dongle</th><th>Available</th><th>Count</th></tr>
+        </thead>
+        <tbody id="hub-usb-summary-tbody">${summaryRows || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px;">No certified USB devices configured.</td></tr>'}</tbody>
+      </table>
+      <div id="hub-unknown-usb-section"${unknownRows ? '' : ' class="hidden"'} style="margin-top:16px;">
+        <div class="setup-card-header" style="padding:0 0 8px;">
+          <h3>⚠️ Uncertified Devices Detected</h3>
+          <p>These USB devices are connected but not in the certified list. Add or ignore them below.</p>
+        </div>
+        <table class="data-table" id="hub-unknown-usb-table">
+          <colgroup>
+            <col>
+            <col style="width:105px">
+            <col style="width:300px">
+          </colgroup>
+          <thead><tr><th>Device</th><th>VID:PID</th><th>Actions</th></tr></thead>
+          <tbody id="hub-unknown-usb-tbody">${unknownRows}</tbody>
         </table>
       </div>
     </div>`;
 }
 
 function renderHubVmServerT3Panel(otherVms = [], usb = []) {
-  const usbVmIds = new Set(usb.map(u => u.vmid));
-  const t3 = otherVms.filter(vm => !vm.is_template);
-  if (!t3.length) return '<div class="setup-card"><div class="empty-state" style="padding:16px;">No IoT (T3) clients.</div></div>';
+  const usbVmIds = new Set(usb.map(item => Number(item?.vmid)).filter(Boolean));
+  const rows = otherVms.filter(vm => !vm.is_template).sort((a, b) => Number(a.vmid || 0) - Number(b.vmid || 0)).map(vm => `
+    <tr>
+      <td>${escHtml(String(vm.vmid ?? "—"))}</td>
+      <td>${escHtml(vm.name || "—")}</td>
+      <td>${escHtml(vm.type || "qemu")}</td>
+      <td>${_hubVmStatusDot(vm)} ${escHtml(vm.status || "unknown")}</td>
+      <td>${usbVmIds.has(Number(vm.vmid)) ? "🔌 USB" : "—"}</td>
+    </tr>`).join("");
+
   return `
     <div class="setup-card setup-section-gap">
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead><tr><th>Status</th><th>VMID</th><th>Name</th><th>Type</th><th>USB</th></tr></thead>
-          <tbody>
-            ${t3.map(vm => `<tr>
-              <td>${_hubVmStatusDot(vm)} ${escHtml(vm.status || "—")}</td>
-              <td>${escHtml(String(vm.vmid ?? "—"))}</td>
-              <td>${escHtml(vm.name || "—")}</td>
-              <td>${escHtml(vm.type || "qemu")}</td>
-              <td>${usbVmIds.has(vm.vmid) ? "🔌 USB" : "—"}</td>
-            </tr>`).join("")}
-          </tbody>
-        </table>
+      <div class="setup-card-header">
+        <h2>IoT (T3) Clients</h2>
+        <p>IoT client classification coming soon.</p>
       </div>
+      <table class="data-table">
+        <thead><tr><th>VMID</th><th>Name</th><th>Type</th><th>Status</th><th>USB</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:32px;">No IoT clients found.</td></tr>'}</tbody>
+      </table>
     </div>`;
 }
 
-function renderHubVmServerVirtualHerePanel(host) {
+function renderHubVmServerVirtualHerePanel(vhDevices = {}, presentUsb = [], px = {}) {
+  const devices = Array.isArray(vhDevices.devices) ? vhDevices.devices : [];
+  const svcActive = vhDevices.vh_service_active;
+  const connected = vhDevices.vh_connected;
+  const autoUseAll = vhDevices.auto_use_all;
+  const count = vhDevices.count ?? devices.length;
+  const inUse = devices.filter(d => d.auto_use).length;
+  const available = devices.filter(d => !d.auto_use).length;
+
+  const pills = [
+    `<span class="server-stat-pill">${svcActive ? "🟢 Service running" : "🔴 Service stopped"}</span>`,
+    `<span class="server-stat-pill">${autoUseAll ? "⚡ Auto-Use All: ON" : "⚫ Auto-Use All: OFF"}</span>`,
+    `<span class="server-stat-pill">${connected ? (count > 0 ? `🔌 ${count} device${count !== 1 ? "s" : ""} — ${inUse} in use, ${available} available` : "⚫ No VH devices detected") : "⚫ Not connected to VH server"}</span>`
+  ].join("");
+
+  const groups = new Map();
+  devices.forEach(device => {
+    const server = device.server || "Unknown Server";
+    if (!groups.has(server)) groups.set(server, []);
+    groups.get(server).push(device);
+  });
+
+  const listHtml = devices.length
+    ? [...groups.entries()].map(([server, devs]) => `
+        <div style="margin-bottom:8px;">
+          <div style="font-size:0.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">Server: ${escHtml(server)}</div>
+          <table class="data-table">
+            <thead><tr><th>Adapter</th><th>Address</th><th>Vendor</th><th>VID:PID</th><th>Serial</th><th>Status</th></tr></thead>
+            <tbody>${devs.map(device => `
+              <tr>
+                <td><strong>${escHtml(device.name || "Unknown")}</strong></td>
+                <td><code>${escHtml(device.address || "—")}</code></td>
+                <td>${escHtml(device.vendor || "—")}</td>
+                <td>${device.vendor_id && device.product_id ? `<code>${escHtml(device.vendor_id)}:${escHtml(device.product_id)}</code>` : "—"}</td>
+                <td><code>${escHtml(device.serial || "—")}</code></td>
+                <td>${device.auto_use ? `<span class="badge badge-green">In Use${device.in_use_by ? ` by ${escHtml(device.in_use_by)}` : ""}</span>` : '<span class="badge badge-grey">Available</span>'}</td>
+              </tr>`).join("")}</tbody>
+          </table>
+        </div>`).join("")
+    : `<p class="muted" style="padding:8px 0;">${px.connected === false ? "Proxmox telemetry is currently disconnected." : "No VirtualHere adapters found. Ensure the VH client service is running and connected to a server."}</p>`;
+
   return `
     <div class="setup-card setup-section-gap">
-      <div class="empty-state" style="padding:32px;text-align:center;">
-        <div style="font-size:2.5rem;margin-bottom:10px;">🔌</div>
-        <strong>VirtualHere</strong>
-        <div class="muted" style="margin-top:8px;">VirtualHere server data is not relayed through the hub.<br>Connect directly to the spoke to manage VirtualHere.</div>
+      <div class="setup-card-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+        <div>
+          <h2>🔌 VirtualHere Devices</h2>
+          <div id="hub-vh-stat-pills" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px;">${pills}</div>
+        </div>
       </div>
+      <div id="hub-vh-device-list" style="margin-top:12px;">${listHtml}</div>
     </div>`;
 }
 
@@ -11925,35 +12105,41 @@ function wireHubNodeCommandQueue(panel, spokeId) {
   });
 }
 
-function renderHubVmServerDetailsPanel(host, px = {}) {
-  // Match spoke's server-node (Details) panel — node stats + update agent
-  const node = host.proxmox || px || {};
-  const cpuRaw = node.cpu;
-  const cpuPct = cpuRaw != null ? (Number(cpuRaw) < 2 ? (Number(cpuRaw) * 100).toFixed(1) : Number(cpuRaw).toFixed(1)) : null;
-  const memUsed = node.mem != null ? fmtSize(node.mem * 1024 * 1024) : null;
-  const memMax = node.maxmem != null ? fmtSize(node.maxmem * 1024 * 1024) : null;
-  const lastSeen = node.last_seen
-    ? new Date(typeof node.last_seen === "number" ? node.last_seen * 1000 : node.last_seen).toLocaleString()
-    : "—";
-  const hwFaults = Array.isArray(node.hw_faults) ? node.hw_faults : [];
+function renderHubVmServerDetailsPanel(node = {}, px = {}, host = {}, spokeCfg = {}) {
+  const networkTypes = new Set(["nfs", "cifs", "glusterfs", "cephfs", "rbd", "iscsi", "pbs"]);
+  const hostname = node.hostname || spokeCfg.hostname || host.spoke_name || "—";
+  const cpu = node.cpu_percent != null && !Number.isNaN(Number(node.cpu_percent)) ? Number(node.cpu_percent).toFixed(1) : "—";
+  const ramUsed = node.mem_used_kb ? fmtSizeKB(node.mem_used_kb) : "—";
+  const ramTotal = node.mem_total_kb ? fmtSizeKB(node.mem_total_kb) : "—";
+  const storagePills = Array.isArray(node.storage) ? node.storage.map(storage => {
+    const icon = networkTypes.has(storage.type) ? "🌐" : "🗄️";
+    const storageName = escHtml(storage.name || "—");
+    const storageType = escHtml(storage.type || "dir");
+    return `<span class="server-stat-pill" title="${storageName} (${storageType})">${icon} ${storageName}: ${fmtSizeKB(storage.used)} / ${fmtSizeKB(storage.total)}</span>`;
+  }).join("") : "";
+  const hwFaults = Array.isArray(px.hw_faults?.faults) ? px.hw_faults.faults : [];
+
   return `
     <div class="setup-card setup-section-gap">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
-        <h2 style="font-size:1rem;margin:0;">Node Details</h2>
-        <button class="btn btn-warning btn-small" id="hub-node-update-agent-btn" type="button">Update Agent</button>
-        <span id="hub-node-update-msg" class="form-msg" style="font-size:0.85rem;"></span>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+        <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;">
+          <h2 id="server-node-name">${escHtml(hostname)}</h2>
+          <span class="server-stat-pill">⚡ CPU: ${escHtml(cpu)}%</span>
+          <span class="server-stat-pill">🧠 RAM: ${escHtml(ramUsed)} / ${escHtml(ramTotal)}</span>
+        </div>
+        <div>
+          <button class="btn btn-warning" id="hub-node-update-agent-btn">⬆️ Update Agent</button>
+        </div>
       </div>
-      <table class="data-table" style="margin-bottom:16px;">
+      <div id="hub-server-storage-pills" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">${storagePills}</div>
+      <table class="data-table" style="margin-top:16px;">
         <tbody>
-          <tr><th>Proxmox Connected</th><td>${node.connected ? "🟢 Yes" : "⚫ No"}</td></tr>
-          <tr><th>Agent Version</th><td>${escHtml(node.agent_version || "—")}</td></tr>
-          <tr><th>PVE Version</th><td>${escHtml(node.pve_version || "—")}</td></tr>
-          <tr><th>Node</th><td>${escHtml(host.hostname || node.node || "—")}</td></tr>
-          <tr><th>CPU</th><td>${cpuPct != null ? cpuPct + "%" : "—"}</td></tr>
-          <tr><th>Memory</th><td>${memUsed && memMax ? `${memUsed} / ${memMax}` : "—"}</td></tr>
-          <tr><th>VMs</th><td>${node.vm_count != null ? `${node.vm_count} total, ${node.running_count ?? 0} running` : "—"}</td></tr>
-          <tr><th>Last Check-in</th><td>${escHtml(lastSeen)}</td></tr>
-          ${hwFaults.length ? `<tr><th>HW Faults</th><td style="color:var(--danger-color,#e74c3c);">${hwFaults.map(f => escHtml(String(f))).join(", ")}</td></tr>` : ""}
+          <tr><th>Agent Version</th><td>${escHtml(px.agent_version || "—")}</td></tr>
+          <tr><th>PVE Version</th><td>${escHtml(px.pve_version || "—")}</td></tr>
+          <tr><th>Connected</th><td>${px.connected ? "Yes" : "No"}</td></tr>
+          <tr><th>VMs</th><td>${escHtml(String(px.vm_count ?? host.vm_count ?? 0))} total, ${escHtml(String(px.running_count ?? 0))} running</td></tr>
+          <tr><th>Last Check-in</th><td>${escHtml(_hubRelativeTime(px.last_seen || host.last_seen))}</td></tr>
+          <tr><th>HW Faults</th><td>${_hubFormatFaults(hwFaults)}</td></tr>
         </tbody>
       </table>
     </div>`;
@@ -11961,18 +12147,18 @@ function renderHubVmServerDetailsPanel(host, px = {}) {
 
 function wireHubVmServerDetailsPanel(panel, spokeId) {
   const btn = panel.querySelector("#hub-node-update-agent-btn");
-  const msg = panel.querySelector("#hub-node-update-msg");
   if (!btn) return;
   btn.addEventListener("click", async () => {
     btn.disabled = true;
-    if (msg) { msg.textContent = "Sending…"; msg.className = "form-msg"; }
+    const original = btn.textContent;
+    btn.textContent = "Updating…";
     try {
       await sendHubProxmoxCommand(currentHubTenantId, spokeId, "update_agent", {});
-      if (msg) { msg.textContent = "✓ Update queued"; msg.className = "form-msg ok"; }
     } catch (err) {
-      if (msg) { msg.textContent = `Error: ${err.message}`; msg.className = "form-msg error"; }
+      showToast(`Error: ${err.message}`, "error");
     } finally {
       btn.disabled = false;
+      btn.textContent = original;
     }
   });
 }
@@ -12170,73 +12356,122 @@ function renderHubVmServerConfigPanel(host) {
 
 async function sendHubProxmoxCommand(tenantId, spokeId, action, args = {}) {
   const token = sessionStorage.getItem("hub_token");
-  try {
-    const resp = await fetch(`/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/proxmox-command`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ action, args }),
-    });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    showToast(`Command queued: ${action}`, "ok");
-  } catch (err) {
-    showToast(`Command failed: ${err.message}`, "error");
-  }
+  const resp = await fetch(`/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/proxmox-command`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ action, args }),
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const data = await resp.json().catch(() => ({}));
+  showToast(`Command queued: ${action}`, "ok");
+  return data;
 }
 
 function wireHubVmActions(panel, spokeId) {
-  // VM category inner-tabs
-  panel.querySelectorAll("[data-hvmcat]").forEach(btn => {
+  const tenantId = currentHubTenantId;
+
+  panel.querySelectorAll(".hub-vm-cat-tab").forEach(btn => {
     btn.addEventListener("click", () => {
-      panel.querySelectorAll("[data-hvmcat]").forEach(b => b.classList.toggle("active", b === btn));
+      panel.querySelectorAll(".hub-vm-cat-tab").forEach(b => b.classList.toggle("active", b === btn));
+      const cat = btn.dataset.cat;
       panel.querySelectorAll("[id^=hub-vm-cat-panel-]").forEach(p => p.classList.add("hidden"));
-      const target = panel.querySelector(`#hub-vm-cat-panel-${btn.dataset.hvmcat}`);
-      if (target) target.classList.remove("hidden");
+      panel.querySelector(`#hub-vm-cat-panel-${cat}`)?.classList.remove("hidden");
+      const bulkBar = panel.querySelector("#hub-server-bulk-bar");
+      if (bulkBar) bulkBar.classList.toggle("hidden", cat === "templates");
     });
   });
 
-  // Reclone All button (shown in top cards when reclone is active)
-  panel.querySelector("#hub-reclone-all-btn")?.addEventListener("click", () => {
-    if (!confirm("Reclone all VMs on this spoke via hub?")) return;
-    sendHubProxmoxCommand(currentTenantId, spokeId, "reclone_all", {});
-  });
-
-  // Select-all checkboxes
-  panel.querySelectorAll(".hub-vm-select-all").forEach(sa => {
-    sa.addEventListener("change", () => {
-      const catPanel = sa.closest("[id^=hub-vm-cat-panel-]");
-      if (!catPanel) return;
-      catPanel.querySelectorAll(".hub-vm-check").forEach(cb => { cb.checked = sa.checked; });
+  panel.querySelector("#hub-vm-select-all")?.addEventListener("change", (e) => {
+    panel.querySelectorAll(".hub-vm-check:not([disabled])").forEach(cb => {
+      cb.checked = e.target.checked;
     });
   });
 
-  // Per-VM action buttons
-  panel.querySelectorAll(".hub-vm-action").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const action = btn.dataset.action;
-      const vmid = parseInt(btn.dataset.vmid, 10);
-      if (action === "delete_vm" && !confirm(`Delete VM ${vmid}?`)) return;
-      sendHubProxmoxCommand(currentTenantId, spokeId, action, { vmid });
-    });
-  });
-
-  // Bulk action buttons
-  panel.querySelectorAll(".hub-vm-bulk-action").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const action = btn.dataset.action;
-      const catPanel = btn.closest("[id^=hub-vm-cat-panel-]");
-      if (!catPanel) return;
-      const checked = [...catPanel.querySelectorAll(".hub-vm-check:checked")];
-      if (!checked.length) { showToast("Select at least one VM.", "warning"); return; }
-      if (action === "delete_vm" && !confirm(`Delete ${checked.length} VM(s)?`)) return;
-      checked.forEach(cb => {
-        const vmid = parseInt(cb.dataset.vmid, 10);
-        sendHubProxmoxCommand(currentTenantId, spokeId, action, { vmid });
+  panel.querySelectorAll("[id^=hub-server-th-check-]").forEach(thChk => {
+    thChk.addEventListener("change", (e) => {
+      const cat = thChk.id.replace("hub-server-th-check-", "");
+      const tbody = panel.querySelector(`#hub-vm-tbody-${cat}`);
+      tbody?.querySelectorAll(".hub-vm-check:not([disabled])").forEach(cb => {
+        cb.checked = e.target.checked;
       });
-      showToast(`${action.replace("_vm","").replace("_"," ")} sent for ${checked.length} VM(s).`, "ok");
+    });
+  });
+
+  panel.querySelectorAll(".hub-vm-action-btn:not([disabled])").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const vmid = parseInt(btn.dataset.vmid, 10);
+      const action = btn.dataset.action;
+      const tr = btn.closest("tr");
+      const vmType = tr?.dataset.vmType || "qemu";
+      const srcVmid = tr?.dataset.recloneSourceVmid;
+      const args = { vmid, type: vmType };
+      if (srcVmid) args.source_vmid = parseInt(srcVmid, 10);
+      try {
+        await sendHubProxmoxCommand(tenantId, spokeId, action, args);
+      } catch (err) {
+        showToast(`Error: ${err.message}`, "error");
+      }
+    });
+  });
+
+  panel.querySelectorAll(".hub-vm-bulk-action").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const action = btn.dataset.action;
+      const checked = [...panel.querySelectorAll(".hub-vm-check:checked")];
+      if (!checked.length) {
+        showToast("No VMs selected", "warn");
+        return;
+      }
+      for (const cb of checked) {
+        const vmid = parseInt(cb.dataset.vmid, 10);
+        const tr = cb.closest("tr");
+        const vmType = tr?.dataset.vmType || "qemu";
+        const srcVmid = tr?.dataset.recloneSourceVmid;
+        const args = { vmid, type: vmType };
+        if (srcVmid) args.source_vmid = parseInt(srcVmid, 10);
+        try {
+          await sendHubProxmoxCommand(tenantId, spokeId, action, args);
+        } catch (err) {
+          showToast(`Error on VM ${vmid}: ${err.message}`, "error");
+        }
+      }
+      showToast(`${action} sent to ${checked.length} VM(s)`, "ok");
+    });
+  });
+
+  panel.querySelector("#hub-reclone-all-btn")?.addEventListener("click", async () => {
+    try {
+      await sendHubProxmoxCommand(tenantId, spokeId, "reclone_all", {});
+    } catch (err) {
+      showToast(`Error: ${err.message}`, "error");
+    }
+  });
+
+  panel.querySelectorAll("[data-action='certify']").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const vidpid = btn.dataset.vidpid;
+      const name = btn.dataset.name;
+      try {
+        await sendHubProxmoxCommand(tenantId, spokeId, "certify_usb", { vidpid, name });
+        showToast(`${vidpid} queued for certification`, "ok");
+      } catch (err) {
+        showToast(`Error: ${err.message}`, "error");
+      }
+    });
+  });
+
+  panel.querySelectorAll("[data-action='ignore']").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const vidpid = btn.dataset.vidpid;
+      try {
+        await sendHubProxmoxCommand(tenantId, spokeId, "ignore_usb", { vidpid });
+        showToast(`${vidpid} queued for ignore`, "ok");
+      } catch (err) {
+        showToast(`Error: ${err.message}`, "error");
+      }
     });
   });
 }
-
 
 function wireHubRecloneActions(panel, spokeId, actionVms) {
   panel.querySelector("#hub-reclone-all-btn")?.addEventListener("click", () => {
@@ -13720,9 +13955,11 @@ async function initTsNotificationsTab(tenantId) {
 async function initTsTroubleshootTab(tenantId) {
   const select = $("#ts-troubleshoot-spoke-select");
   const updateBtn = $("#ts-troubleshoot-update-btn");
+  const clearQueueBtn = $("#ts-troubleshoot-clear-queue-btn");
   const msg = $("#ts-troubleshoot-msg");
   if (!select || !updateBtn || !tenantId) return;
   updateBtn.disabled = !canManageTenant(tenantId);
+  if (clearQueueBtn) clearQueueBtn.disabled = !canManageTenant(tenantId);
   await populateSpokeSelect(select, tenantId, select.value || "all", true);
 
   const clearTroubleshootFields = () => {
@@ -13754,6 +13991,7 @@ async function initTsTroubleshootTab(tenantId) {
   };
 
   select.onchange = () => { void loadTroubleshoot().catch((error) => showInlineMessage(msg, error.message || "Failed to load troubleshooting data.", true)); };
+
   updateBtn.onclick = async () => {
     const spokeId = select.value;
     if (!spokeId) return;
@@ -13768,6 +14006,28 @@ async function initTsTroubleshootTab(tenantId) {
       showInlineMessage(msg, ok ? "Update queued for spoke ✓" : "Failed to queue update.", !ok);
     }
   };
+
+  if (clearQueueBtn) {
+    clearQueueBtn.onclick = async () => {
+      const spokeId = select.value;
+      const label = spokeId === "all" ? "all spokes" : (select.options[select.selectedIndex]?.text || "this spoke");
+      if (!confirm(`Clear all pending commands for ${label}? This cannot be undone.`)) return;
+      try {
+        const url = spokeId === "all"
+          ? `/api/${tenantId}/commands`
+          : `/api/${tenantId}/commands?spoke_id=${encodeURIComponent(spokeId)}`;
+        const res = await fetch(url, { method: "DELETE", headers: { Authorization: `Bearer ${getToken()}` } });
+        const data = await res.json();
+        if (res.ok) {
+          showInlineMessage(msg, `Cleared ${data.cleared} command(s) from queue ✓`, false);
+        } else {
+          showInlineMessage(msg, data.detail || "Failed to clear queue.", true);
+        }
+      } catch (e) {
+        showInlineMessage(msg, e.message || "Failed to clear queue.", true);
+      }
+    };
+  }
 
   await loadTroubleshoot();
 }

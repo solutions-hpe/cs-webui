@@ -1493,6 +1493,36 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   flex-direction: column;
   gap: 10px;
 }
+/* Node context nav — two-row nav bar rendered inside VM Server panel */
+.hub-node-ctx { display: flex; flex-direction: column; margin: -16px -16px 0; }
+.hub-node-ctx-row1 {
+  display: flex;
+  align-items: center;
+  background: var(--hpe-navy, #0d1b2e);
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  padding: 0 4px;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.hub-node-ctx-row1 .tab {
+  font-size: 0.78rem;
+  padding: 6px 14px;
+  opacity: 0.8;
+  color: #fff;
+  border-bottom: 2px solid transparent;
+}
+.hub-node-ctx-row1 .tab:hover { opacity: 1; color: #fff; }
+.hub-node-ctx-row1 .tab.tab-back { font-weight: 600; opacity: 0.9; }
+.hub-node-ctx-row1-title { color: #fff; font-weight: 600; font-size: 0.9rem; padding: 0 4px; white-space: nowrap; }
+.hub-node-ctx-row1-status { font-size: 0.75rem; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+.hub-node-ctx-row1-status.online  { background: rgba(1,169,130,0.25); color: #5fffcf; }
+.hub-node-ctx-row1-status.offline { background: rgba(192,57,43,0.25); color: #ff9090; }
+.hub-node-ctx-row1-pill { color: rgba(255,255,255,0.6); font-size: 0.75rem; padding: 0 2px; white-space: nowrap; }
+.hub-node-ctx-row1-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; padding: 4px 4px; }
+.hub-node-ctx-row2 { display: flex; align-items: center; border-bottom: 1px solid var(--border); }
+.hub-node-ctx-row2 .tab { font-size: 0.88rem; }
+.hub-node-ctx-subpanel { padding: 16px 0 0; }
+
 .hub-vmserver-list {
   display: flex;
   flex-direction: column;

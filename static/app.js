@@ -11449,42 +11449,55 @@ function renderHubVmServerDetail(container, host) {
   const apiServer = telem.api_server || {};
   const central = telem.central || {};
 
-  const subtabs = [
-    { id: "clients", label: `Clients <span class="badge-count">${clients.length}</span>` },
-    { id: "vms", label: `VMs <span class="badge-count">${vms.length}</span>` },
-    { id: "usb", label: `USB <span class="badge-count">${usb.length}</span>` },
-    { id: "reclone", label: "Reclone" },
-    { id: "api-server", label: "API Server" },
-    { id: "central", label: "Central" },
-    { id: "config", label: "Config" },
+  const isOnline = !!host.spoke_online;
+  const statusCls = isOnline ? "online" : "offline";
+  const statusLabel = isOnline ? "Online" : "Offline";
+
+  const mainTabs = [
+    { id: "clients",    label: `Clients`,    badge: clients.length },
+    { id: "vms",        label: `VMs`,        badge: vms.length },
+    { id: "usb",        label: `USB`,        badge: usb.length },
+    { id: "reclone",    label: `Reclone`,    badge: null },
+    { id: "api-server", label: `API Server`, badge: null },
+    { id: "central",    label: `Central`,    badge: null },
   ];
+  const configTab = { id: "config", label: "Config", badge: null };
+
+  const tabBtn = (t) => {
+    const bdg = t.badge !== null ? ` <span class="badge-count">${t.badge}</span>` : "";
+    return `<button class="tab hub-vmserver-nodetab ${t.id === hubVmServerActiveSubtab ? "active" : ""}" data-hvmsubtab="${t.id}" type="button">${escHtml(t.label)}${bdg}</button>`;
+  };
+
+  const hwFaults = Array.isArray(px.hw_faults?.faults) ? px.hw_faults.faults : [];
 
   container.innerHTML = `
-    <div class="hub-vmserver-detail">
-      <div class="hub-vmserver-detail-header" style="display:flex;align-items:center;gap:8px;padding:8px 0 10px;flex-wrap:wrap;">
-        <button class="btn btn-secondary btn-small" id="hub-vmserver-back-btn" type="button">← Back</button>
-        <strong style="font-size:1rem;">${spokeName}</strong>
-        <span class="stat-pill ${host.spoke_online ? "online" : "offline"}">${host.spoke_online ? "Online" : "Offline"}</span>
-        <span class="stat-pill">${escHtml(String(host.vm_count || 0))} VMs</span>
-        <span class="stat-pill">${escHtml(String(host.usb_count || 0))} USB</span>
-        ${px.agent_version ? `<span class="stat-pill">Agent v${escHtml(px.agent_version)}</span>` : ""}
-        ${px.pve_version ? `<span class="stat-pill">PVE ${escHtml(px.pve_version)}</span>` : ""}
-        <button class="btn btn-secondary btn-small" id="hub-vmserver-update-agent-btn" type="button" title="Update proxmox agent on this node">⬆️ Update Agent</button>
-        <button class="btn btn-secondary btn-small" id="hub-vmserver-open-tab-btn" type="button" title="Open this node in a new browser tab">🔗 Open in Tab</button>
+    <div class="hub-node-ctx">
+      <div class="hub-node-ctx-row1">
+        <button class="tab tab-back" id="hub-vmserver-back-btn" type="button">← VM Server</button>
+        <span class="tab-nav-sep" aria-hidden="true"></span>
+        <span class="hub-node-ctx-row1-title">${spokeName}</span>
+        <span class="hub-node-ctx-row1-status ${statusCls}">${statusLabel}</span>
+        ${host.vm_count != null ? `<span class="hub-node-ctx-row1-pill">${escHtml(String(host.vm_count))} VMs</span>` : ""}
+        ${host.usb_count != null ? `<span class="hub-node-ctx-row1-pill">· ${escHtml(String(host.usb_count))} USB</span>` : ""}
+        ${px.agent_version ? `<span class="hub-node-ctx-row1-pill">· Agent v${escHtml(px.agent_version)}</span>` : ""}
+        ${px.pve_version   ? `<span class="hub-node-ctx-row1-pill">· PVE ${escHtml(px.pve_version)}</span>`   : ""}
+        <span class="hub-node-ctx-row1-actions">
+          <button class="btn btn-secondary btn-small" id="hub-vmserver-update-agent-btn" type="button" title="Update proxmox agent on this node">⬆️ Update Agent</button>
+        </span>
       </div>
-      ${(px.hw_faults?.faults?.length > 0) ? `
-      <div class="setup-card" style="margin-bottom:8px;border-left:3px solid var(--warning-color,#f39c12);padding:8px 12px;">
-        <strong>⚠️ Hardware Faults (${px.hw_faults.faults.length})</strong>
-        <ul style="margin:4px 0 0;padding-left:18px;font-size:0.85rem;">
-          ${px.hw_faults.faults.slice(-5).map(f => `<li>${escHtml(f.type || f.check || "fault")} — ${escHtml(f.message || f.detail || JSON.stringify(f))}</li>`).join("")}
+      <nav class="hub-node-ctx-row2" role="tablist">
+        ${mainTabs.map(tabBtn).join("")}
+        <span class="tab-nav-sep" aria-hidden="true"></span>
+        ${tabBtn(configTab)}
+      </nav>
+      ${hwFaults.length ? `
+      <div style="padding:8px 16px;background:rgba(243,156,18,0.1);border-bottom:1px solid var(--border);">
+        <strong style="font-size:0.85rem;">⚠️ Hardware Faults (${hwFaults.length})</strong>
+        <ul style="margin:4px 0 0;padding-left:18px;font-size:0.82rem;">
+          ${hwFaults.slice(-5).map(f => `<li>${escHtml(f.type || f.check || "fault")} — ${escHtml(f.message || f.detail || JSON.stringify(f))}</li>`).join("")}
         </ul>
       </div>` : ""}
-      <nav class="setup-subnav" role="tablist" id="hub-vmserver-subnav">
-        ${subtabs.map(t => `
-          <button class="setup-subtab hub-vmserver-subtab ${t.id === hubVmServerActiveSubtab ? "active" : ""}"
-                  data-hvmsubtab="${t.id}" role="tab" type="button">${t.label}</button>`).join("")}
-      </nav>
-      <div id="hub-vmserver-subpanel"></div>
+      <div id="hub-vmserver-subpanel" class="hub-node-ctx-subpanel"></div>
     </div>`;
 
   document.getElementById("hub-vmserver-back-btn").addEventListener("click", () => {
@@ -11510,16 +11523,10 @@ function renderHubVmServerDetail(container, host) {
     }
   });
 
-  document.getElementById("hub-vmserver-open-tab-btn")?.addEventListener("click", () => {
-    const params = new URLSearchParams({ spoke: spokeId });
-    if (currentTenantId) params.set("tenant", currentTenantId);
-    window.open(`?${params.toString()}`, "_blank");
-  });
-
-  document.querySelectorAll(".hub-vmserver-subtab").forEach(btn => {
+  document.querySelectorAll(".hub-vmserver-nodetab").forEach(btn => {
     btn.addEventListener("click", () => {
       hubVmServerActiveSubtab = btn.dataset.hvmsubtab;
-      document.querySelectorAll(".hub-vmserver-subtab").forEach(b => b.classList.toggle("active", b === btn));
+      document.querySelectorAll(".hub-vmserver-nodetab").forEach(b => b.classList.toggle("active", b === btn));
       renderHubVmServerSubpanel(spokeId, hubVmServerActiveSubtab, { simVms, otherVms, containerVms, templateVms, usb, reclone, px, host, clients, apiServer, central });
     });
   });

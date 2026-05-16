@@ -11406,14 +11406,15 @@ function renderHubVmServer() {
     }
   });
   container.querySelectorAll(".hub-vmserver-spoke-card").forEach(card => {
-    const drillIn = () => {
+    const openSpokeTab = () => {
       const spokeId = card.dataset.spokeId;
-      hubVmServerSelectedSpoke = spokeId;
-      renderHubVmServer();
+      const params = new URLSearchParams({ spoke: spokeId });
+      if (currentTenantId) params.set("tenant", currentTenantId);
+      window.open(`?${params.toString()}`, "_blank");
     };
-    card.addEventListener("click", drillIn);
+    card.addEventListener("click", openSpokeTab);
     card.addEventListener("keydown", e => {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); drillIn(); }
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openSpokeTab(); }
     });
   });
   scheduleHubVmServerFleetPoll();
@@ -11453,13 +11454,24 @@ function renderHubVmServerDetail(container, host) {
 
   container.innerHTML = `
     <div class="hub-vmserver-detail">
-      <div class="hub-vmserver-detail-header" style="display:flex;align-items:center;gap:8px;padding:8px 0 10px;">
+      <div class="hub-vmserver-detail-header" style="display:flex;align-items:center;gap:8px;padding:8px 0 10px;flex-wrap:wrap;">
         <button class="btn btn-secondary btn-small" id="hub-vmserver-back-btn" type="button">← Back</button>
         <strong style="font-size:1rem;">${spokeName}</strong>
         <span class="stat-pill ${host.spoke_online ? "online" : "offline"}">${host.spoke_online ? "Online" : "Offline"}</span>
         <span class="stat-pill">${escHtml(String(host.vm_count || 0))} VMs</span>
         <span class="stat-pill">${escHtml(String(host.usb_count || 0))} USB</span>
+        ${px.agent_version ? `<span class="stat-pill">Agent v${escHtml(px.agent_version)}</span>` : ""}
+        ${px.pve_version ? `<span class="stat-pill">PVE ${escHtml(px.pve_version)}</span>` : ""}
+        <button class="btn btn-secondary btn-small" id="hub-vmserver-update-agent-btn" type="button" title="Update proxmox agent on this node">⬆️ Update Agent</button>
+        <button class="btn btn-secondary btn-small" id="hub-vmserver-open-tab-btn" type="button" title="Open this node in a new browser tab">🔗 Open in Tab</button>
       </div>
+      ${(px.hw_faults?.faults?.length > 0) ? `
+      <div class="setup-card" style="margin-bottom:8px;border-left:3px solid var(--warning-color,#f39c12);padding:8px 12px;">
+        <strong>⚠️ Hardware Faults (${px.hw_faults.faults.length})</strong>
+        <ul style="margin:4px 0 0;padding-left:18px;font-size:0.85rem;">
+          ${px.hw_faults.faults.slice(-5).map(f => `<li>${escHtml(f.type || f.check || "fault")} — ${escHtml(f.message || f.detail || JSON.stringify(f))}</li>`).join("")}
+        </ul>
+      </div>` : ""}
       <nav class="setup-subnav" role="tablist" id="hub-vmserver-subnav">
         ${subtabs.map(t => `
           <button class="setup-subtab hub-vmserver-subtab ${t.id === hubVmServerActiveSubtab ? "active" : ""}"
@@ -11471,6 +11483,30 @@ function renderHubVmServerDetail(container, host) {
   document.getElementById("hub-vmserver-back-btn").addEventListener("click", () => {
     hubVmServerSelectedSpoke = null;
     renderHubVmServer();
+  });
+
+  document.getElementById("hub-vmserver-update-agent-btn")?.addEventListener("click", async () => {
+    const btn = document.getElementById("hub-vmserver-update-agent-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Updating…"; }
+    try {
+      const token = sessionStorage.getItem("hub_token");
+      const resp = await fetch(`/api/${encodeURIComponent(currentTenantId)}/spokes/${encodeURIComponent(spokeId)}/update-agent`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      showToast("Agent update queued for this node.", "ok");
+    } catch (err) {
+      showToast(`Update failed: ${err.message}`, "error");
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "⬆️ Update Agent"; }
+    }
+  });
+
+  document.getElementById("hub-vmserver-open-tab-btn")?.addEventListener("click", () => {
+    const params = new URLSearchParams({ spoke: spokeId });
+    if (currentTenantId) params.set("tenant", currentTenantId);
+    window.open(`?${params.toString()}`, "_blank");
   });
 
   document.querySelectorAll(".hub-vmserver-subtab").forEach(btn => {
@@ -15995,10 +16031,23 @@ function bindEvents() {
   await loadUserContext();
   if (currentUser) {
     connectHubWebSocket();
+    const _urlParams = new URLSearchParams(location.search);
+    const _urlSpoke = _urlParams.get("spoke");
+    const _urlTenant = _urlParams.get("tenant");
+    if (_urlTenant && _urlTenant !== currentTenantId) {
+      // Switch to the tenant from the URL before loading
+      currentTenantId = _urlTenant;
+    }
     if (currentTenantId) await ensureSpokes(true);
     syncTenantContextChrome();
     syncHubPermissionUI();
-    await loadDashboard();
+    if (_urlSpoke) {
+      // Navigate directly to this spoke's detail in vm-server tab
+      hubVmServerSelectedSpoke = _urlSpoke;
+      showTab("vm-server");
+    } else {
+      await loadDashboard();
+    }
   }
   startAutoRefresh();
 })();

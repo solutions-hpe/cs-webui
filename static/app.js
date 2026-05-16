@@ -11430,10 +11430,11 @@ function renderHubVmServerDetail(container, host) {
   const reclone = host.reclone_state || {};
   const px = host.proxmox || {};
 
-  // Categorise VMs to match the spoke drill-in view.
+  // Categorise VMs — use host's own spoke config for template IDs (hub context, no currentSettings).
+  const hostCfg = host.telemetry?.config || {};
   const configuredTemplateIds = new Set([
-    String(currentSettings?.vm_image_1_template_id || "100"),
-    String(currentSettings?.vm_image_2_template_id || "200"),
+    String(hostCfg.vm_image_1_template_id || 100),
+    String(hostCfg.vm_image_2_template_id || 200),
   ]);
   const templateVms = vms.filter(v =>
     v.is_template === true || v.is_template === "true" || configuredTemplateIds.has(String(v.vmid))

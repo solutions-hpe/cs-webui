@@ -11241,6 +11241,10 @@ function renderHubVmServer() {
   const usbProvisioning = aggregateUsbProvisioningStatus || defaultUsbProvisioningStatus();
   const vmCount = hosts.reduce((sum, h) => sum + Number(h.vm_count || 0), 0);
   const usbCount = hosts.reduce((sum, h) => sum + Number(h.usb_count || 0), 0);
+  if (!hubVmServerSelectedSpoke && _hubNodeRefreshTimer) {
+    clearInterval(_hubNodeRefreshTimer);
+    _hubNodeRefreshTimer = null;
+  }
   $("#hub-vm-hosts-pill") && ($("#hub-vm-hosts-pill").textContent = `${hosts.length} hosts`);
   $("#hub-vm-vms-pill") && ($("#hub-vm-vms-pill").textContent = `${vmCount} VMs`);
   $("#hub-vm-usb-pill") && ($("#hub-vm-usb-pill").textContent = `${usbCount} USB devices`);
@@ -11533,6 +11537,7 @@ function renderHubVmServerDetail(container, host) {
     }
     try {
       await sendHubProxmoxCommand(currentHubTenantId, spokeId, "update_agent", {});
+      showToast("Agent update queued for this node.", "ok");
     } catch (err) {
       showToast(`Update failed: ${err.message}`, "error");
     } finally {
@@ -11591,7 +11596,7 @@ function renderHubVmServerSubpanel(spokeId, subtab, { simVms, otherVms, containe
 }
 
 function _hubVmStatusDot(vm = {}) {
-  if (vm.prov_status === "provisioning" || vm.pending_checkin === true) return "��";
+  if (vm.prov_status === "provisioning" || vm.pending_checkin === true) return "🔵";
   if (vm.status === "running") return "🟢";
   if (vm.status === "paused") return "🟡";
   return "⚫";
@@ -11849,7 +11854,7 @@ function renderHubVmServerUsbPanel({ usbState = [], presentUsb = [], unknownUsb 
     const activeEntries = entries.filter(item => !missingEntries.includes(item));
     const total = presentUsb.filter(item => String(item?.vidpid || "").toLowerCase() === vidpid).length;
     const available = Math.max(0, total - activeEntries.length);
-    const hwName = entries.find(item => item?.name)?.name || presentUsb.find(item => String(item?.vidpid || "").toLowerCase() == vidpid)?.name || "";
+    const hwName = entries.find(item => item?.name)?.name || presentUsb.find(item => String(item?.vidpid || "").toLowerCase() === vidpid)?.name || "";
     const activeVmHtml = activeEntries.length
       ? activeEntries.map(entry => {
           const vm = vmMap.get(Number(entry.vmid));
@@ -12123,7 +12128,7 @@ function renderHubVmServerDetailsPanel(node = {}, px = {}, host = {}, spokeCfg =
     <div class="setup-card setup-section-gap">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
         <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;">
-          <h2 id="server-node-name">${escHtml(hostname)}</h2>
+          <h2 id="hub-server-node-name" style="margin:0;">${escHtml(hostname)}</h2>
           <span class="server-stat-pill">⚡ CPU: ${escHtml(cpu)}%</span>
           <span class="server-stat-pill">🧠 RAM: ${escHtml(ramUsed)} / ${escHtml(ramTotal)}</span>
         </div>
@@ -12154,6 +12159,7 @@ function wireHubVmServerDetailsPanel(panel, spokeId) {
     btn.textContent = "Updating…";
     try {
       await sendHubProxmoxCommand(currentHubTenantId, spokeId, "update_agent", {});
+      showToast("Agent update queued for this node.", "ok");
     } catch (err) {
       showToast(`Error: ${err.message}`, "error");
     } finally {
@@ -12362,9 +12368,7 @@ async function sendHubProxmoxCommand(tenantId, spokeId, action, args = {}) {
     body: JSON.stringify({ action, args }),
   });
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  const data = await resp.json().catch(() => ({}));
-  showToast(`Command queued: ${action}`, "ok");
-  return data;
+  return await resp.json().catch(() => ({}));
 }
 
 function wireHubVmActions(panel, spokeId) {

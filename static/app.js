@@ -11293,21 +11293,15 @@ function renderHubVmServer() {
       </section>
       <section class="setup-card">
         <div class="setup-card-header" style="display:flex;align-items:center;gap:8px;justify-content:space-between;">
-          <div><h2>Auto-Provisioning</h2><p>USB provisioning capacity reported across approved spokes.</p></div>
+          <div><h2>Auto-Provisioning</h2><p>USB dongle capacity and active VM cloning across approved spokes.</p></div>
           <span class="badge ${usbProvisioning.auto_provision_on ? "badge-blue" : "badge-grey"}" id="hub-autoprovisioning-toggle" style="cursor:pointer;" title="Click to toggle">${usbProvisioning.auto_provision_on ? "On" : "Off"}</span>
         </div>
-        <div style="font-weight:600;margin-bottom:6px;">${escHtml(String(usbProvisioning.used_slots || 0))} deployed VMs / ${escHtml(String(usbProvisioning.total_dongles || usbProvisioning.total_slots || 0))} USB dongles</div>
+        <div style="font-weight:600;margin-bottom:4px;">${escHtml(String(usbProvisioning.used_slots || 0))} deployed VMs / ${escHtml(String(usbProvisioning.total_dongles || usbProvisioning.total_slots || 0))} USB dongles</div>
         <div class="progress-bar-wrap" style="margin-bottom:8px;"><div class="progress-bar" style="width:${usbPct}%"></div></div>
-        <div class="muted" style="font-size:0.82rem;">${escHtml(String((usbProvisioning.spokes || []).filter(spoke => spoke.auto_provision).length))} spoke(s) with auto-provisioning enabled.</div>
-      </section>
-      <section class="setup-card">
-        <div class="setup-card-header" style="display:flex;align-items:center;gap:8px;justify-content:space-between;">
-          <div><h2>Active Provisioning</h2><p>Fleet-wide cloning and pending VM check-in activity across approved spokes.</p></div>
-          <span class="badge ${totalActiveProv > 0 ? "badge-blue" : "badge-grey"}">${totalActiveProv > 0 ? "Active" : "Idle"}</span>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;">
+          <span class="muted" style="font-size:0.82rem;">${escHtml(String((usbProvisioning.spokes || []).filter(spoke => spoke.auto_provision).length))} spoke(s) enabled</span>
+          ${totalActiveProv > 0 ? `<span class="muted" style="font-size:0.82rem;">🔵 ${escHtml(String(totalActiveProv))} VM(s) cloning / checking in</span>` : `<span class="muted" style="font-size:0.82rem;">⚫ No active cloning</span>`}
         </div>
-        <div style="font-weight:600;margin-bottom:6px;">${escHtml(String(totalActiveProv))} VM(s) actively cloning / checking in</div>
-        <div class="progress-bar-wrap" style="margin-bottom:8px;"><div class="progress-bar" style="width:${activeProvPct}%"></div></div>
-        <div class="muted" style="font-size:0.82rem;">${escHtml(String(spokesWithActiveProv))} spoke(s) with active provisioning</div>
       </section>
       <section class="setup-card">
         <div class="setup-card-header">

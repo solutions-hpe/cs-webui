@@ -11541,7 +11541,7 @@ function renderHubVmServerDetail(container, host) {
       btn.textContent = "Updating…";
     }
     try {
-      await sendHubProxmoxCommand(currentHubTenantId, spokeId, "update_agent", {});
+      await sendHubProxmoxCommand(getActiveTenantId(), spokeId, "update_agent", {});
       showToast("Agent update queued for this node.", "ok");
     } catch (err) {
       showToast(`Update failed: ${err.message}`, "error");
@@ -12051,7 +12051,7 @@ function renderHubVmServerCommandQueuePanel() {
 
 async function loadHubNodeCommandQueue(panel, spokeId) {
   const token = sessionStorage.getItem("hub_token");
-  const tenantId = currentHubTenantId;
+  const tenantId = getActiveTenantId();
   const list = panel.querySelector("#hub-node-cmd-list");
   if (!list) return;
   try {
@@ -12104,7 +12104,7 @@ function wireHubNodeCommandQueue(panel, spokeId) {
     sendBtn.disabled = true;
     if (msgEl) { msgEl.textContent = "Sending…"; msgEl.className = "form-msg"; }
     try {
-      await sendHubProxmoxCommand(currentHubTenantId, spokeId, action, args);
+      await sendHubProxmoxCommand(getActiveTenantId(), spokeId, action, args);
       if (msgEl) { msgEl.textContent = "✓ Sent"; msgEl.className = "form-msg ok"; }
       setTimeout(() => loadHubNodeCommandQueue(panel, spokeId), 1200);
     } catch (err) {
@@ -12163,7 +12163,7 @@ function wireHubVmServerDetailsPanel(panel, spokeId) {
     const original = btn.textContent;
     btn.textContent = "Updating…";
     try {
-      await sendHubProxmoxCommand(currentHubTenantId, spokeId, "update_agent", {});
+      await sendHubProxmoxCommand(getActiveTenantId(), spokeId, "update_agent", {});
       showToast("Agent update queued for this node.", "ok");
     } catch (err) {
       showToast(`Error: ${err.message}`, "error");
@@ -12377,7 +12377,7 @@ async function sendHubProxmoxCommand(tenantId, spokeId, action, args = {}) {
 }
 
 function wireHubVmActions(panel, spokeId) {
-  const tenantId = currentHubTenantId;
+  const tenantId = getActiveTenantId();
 
   panel.querySelectorAll(".hub-vm-cat-tab").forEach(btn => {
     btn.addEventListener("click", () => {

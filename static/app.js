@@ -12841,12 +12841,14 @@ function hubRefreshCentralSitesDraftState() {
 
 async function loadHubCentralAvailableChecksCatalog() {
   const msgId = "hub-central-sites-msg";
+  const tenantId = aggregateCentralData?.tenant_id || getActiveTenantId();
+  if (!tenantId) return;
   try {
-    const data = await requestJson('/api/central/available');
+    const data = await requestJson(`/api/central/available?tenant_id=${encodeURIComponent(tenantId)}`);
     hubCentralAvailableChecks = {
       alerts: data.alerts || [],
       insights: data.insights || [],
-      hardware: data.alerts || [],
+      hardware: data.hardware || [],
     };
     hubRenderCentralAvailableCheckGroups(document.getElementById("hub-central-available-checks"), hubCentralCollectMonitoredChecks());
     hubRenderCentralAvailableHardware(document.getElementById("hub-central-available-hardware"), hubCentralCollectHardwareChecks());
@@ -13338,7 +13340,7 @@ function applyHubCentralData(data) {
   hubCentralData = data;
   hubSyncCentralLiveState(data);
   const spokes = data.spokes || [];
-  const siteCount = spokes.reduce((n, s) => n + (s.sites || []).length, 0);
+  const siteCount = hubCentralAggregateSites(data).length;
   $("#hcs-spokes-pill") && ($("#hcs-spokes-pill").textContent = `${spokes.length} spokes`);
   $("#hcs-sites-pill") && ($("#hcs-sites-pill").textContent = `${siteCount} sites`);
   renderHubCentralStatus();
@@ -13402,58 +13404,113 @@ function renderHubCentralStatus() {
   else if (hubCentralActiveSubtab === "hcs-clients") renderHubCentralClients();
 }
 
-function renderHubCentralSites() {
-  const container = $("#hcs-overview");
-  if (!container || !hubCentralData) return;
-  const { spokes = [], mode, token_valid: hubTokenValid } = hubCentralData;
+function hubCentralAggregateSites(statusData = hubCentralData) {
+  const source = statusData || {};
+  const spokes = Array.isArray(source.spokes) ? source.spokes : [];
+  const centralized = (source.mode || "distributed") === "centralized";
+  const siteMap = new Map();
 
-  // Aggregate by wsite across all spokes
-  const siteMap = {};
   for (const spoke of spokes) {
     for (const site of (spoke.sites || [])) {
-      if (!siteMap[site.wsite]) {
-        siteMap[site.wsite] = {
-          wsite: site.wsite,
+      const wsite = String(site?.wsite || "").trim();
+      if (!wsite) continue;
+      if (!siteMap.has(wsite)) {
+        siteMap.set(wsite, {
+          wsite,
           central_site: site.central_site || "",
-          check_ok: 0, check_fail: 0, check_unknown: 0, wireless_clients: 0,
+          check_ok: 0,
+          check_fail: 0,
+          check_unknown: 0,
+          wireless_clients: 0,
           status_map: {},
-          token_valid: mode === "centralized" ? hubTokenValid : false,
+          token_valid: centralized ? Boolean(source.token_valid) : false,
           spokes: [],
-        };
+        });
       }
-      const agg = siteMap[site.wsite];
-      agg.check_ok += site.check_ok || 0;
-      agg.check_fail += site.check_fail || 0;
-      agg.check_unknown += site.check_unknown || 0;
-      agg.wireless_clients += typeof site.wireless_clients === "number" ? site.wireless_clients : 0;
-      if (mode !== "centralized" && spoke.token_valid) agg.token_valid = true;
-      // Merge status_map — ERROR wins over OK for same check
+      const agg = siteMap.get(wsite);
+      if (!agg.central_site && site.central_site) agg.central_site = site.central_site;
+      if (centralized) {
+        agg.check_ok = Math.max(agg.check_ok, site.check_ok || 0);
+        agg.check_fail = Math.max(agg.check_fail, site.check_fail || 0);
+        agg.check_unknown = Math.max(agg.check_unknown, site.check_unknown || 0);
+        if (typeof site.wireless_clients === "number" && !agg.wireless_clients) agg.wireless_clients = site.wireless_clients;
+      } else {
+        agg.check_ok += site.check_ok || 0;
+        agg.check_fail += site.check_fail || 0;
+        agg.check_unknown += site.check_unknown || 0;
+        if (typeof site.wireless_clients === "number") agg.wireless_clients += site.wireless_clients;
+        if (spoke.token_valid) agg.token_valid = true;
+      }
       for (const [cid, cv] of Object.entries(site.status_map || {})) {
         if (!agg.status_map[cid] || (cv.status === "ERROR" && agg.status_map[cid].status !== "ERROR")) {
           agg.status_map[cid] = { ...cv };
         }
       }
-      agg.spokes.push({ spoke_id: spoke.spoke_id, spoke_name: spoke.spoke_name, spoke_online: spoke.spoke_online });
+      if (!agg.spokes.some(existing => existing.spoke_id === spoke.spoke_id)) {
+        agg.spokes.push({ spoke_id: spoke.spoke_id, spoke_name: spoke.spoke_name, spoke_online: spoke.spoke_online });
+      }
     }
   }
 
-  const sites = Object.values(siteMap);
+  return [...siteMap.values()].sort((a, b) => a.wsite.localeCompare(b.wsite));
+}
+
+function hubCentralAggregateHardwareAlerts(statusData = hubCentralData) {
+  const source = statusData || {};
+  const alertMap = new Map();
+
+  for (const spoke of (source.spokes || [])) {
+    for (const alert of (spoke.hardware_alerts || [])) {
+      const key = `${alert?.id || alert?.name || "unknown"}::${alert?.device_type || ""}`;
+      if (!alertMap.has(key)) {
+        alertMap.set(key, {
+          id: alert?.id || "",
+          name: alert?.name || alert?.id || "—",
+          device_type: alert?.device_type || "",
+          sites: {},
+        });
+      }
+      const aggregate = alertMap.get(key);
+      for (const [wsite, info] of Object.entries(alert?.sites || {})) {
+        const existing = aggregate.sites[wsite] || { site_name: info?.site_name || wsite, devices: [] };
+        const mergedDevices = new Set([...(existing.devices || []), ...((info?.devices || []).filter(Boolean))]);
+        aggregate.sites[wsite] = {
+          site_name: info?.site_name || existing.site_name || wsite,
+          devices: [...mergedDevices].sort(),
+        };
+      }
+    }
+  }
+
+  return [...alertMap.values()]
+    .map(alert => ({
+      ...alert,
+      total: Object.values(alert.sites || {}).reduce((sum, site) => sum + ((site?.devices || []).length), 0),
+    }))
+    .sort((a, b) => String(a.name || a.id || "").localeCompare(String(b.name || b.id || "")));
+}
+
+function renderHubCentralSites() {
+  const container = $("#hcs-overview");
+  if (!container || !hubCentralData) return;
+  const sites = hubCentralAggregateSites(hubCentralData);
+
   if (!sites.length) {
     container.innerHTML = '<div class="empty-state">No Central sites configured on any spoke.</div>';
     return;
   }
 
-  const rows = sites.map(s => {
-    const hasChecks = Object.keys(s.status_map).length > 0;
-    return `<tr style="cursor:pointer;" title="View ${escHtml(s.wsite)} detail">
-      <td><strong>${escHtml(s.wsite)}</strong></td>
-      <td>${escHtml(s.central_site || '—')}</td>
-      <td style="color:var(--hpe-green-dark);">${hasChecks ? s.check_ok : '—'}</td>
-      <td style="color:${s.check_fail ? '#c0392b' : 'inherit'};">${hasChecks ? s.check_fail : '—'}</td>
-      <td style="color:var(--muted);">${hasChecks ? s.check_unknown : '—'}</td>
-      <td>${typeof s.wireless_clients === "number" ? s.wireless_clients : '—'}</td>
-      <td><span class="status-dot ${s.token_valid ? 'online' : 'offline'}"></span></td>
-      <td><button class="btn btn-small btn-secondary hcs-view-btn" data-wsite="${escHtml(s.wsite)}" type="button">View →</button></td>
+  const rows = sites.map(site => {
+    const hasChecks = Object.keys(site.status_map).length > 0;
+    return `<tr style="cursor:pointer;" title="View ${escHtml(site.wsite)} detail">
+      <td><strong>${escHtml(site.wsite)}</strong></td>
+      <td>${escHtml(site.central_site || '—')}</td>
+      <td style="color:var(--hpe-green-dark);">${hasChecks ? site.check_ok : '—'}</td>
+      <td style="color:${site.check_fail ? '#c0392b' : 'inherit'};">${hasChecks ? site.check_fail : '—'}</td>
+      <td style="color:var(--muted);">${hasChecks ? site.check_unknown : '—'}</td>
+      <td>${typeof site.wireless_clients === "number" ? site.wireless_clients : '—'}</td>
+      <td><span class="status-dot ${site.token_valid ? 'online' : 'offline'}"></span></td>
+      <td><button class="btn btn-small btn-secondary hcs-view-btn" data-wsite="${escHtml(site.wsite)}" type="button">View →</button></td>
     </tr>`;
   }).join('');
 
@@ -13465,45 +13522,28 @@ function renderHubCentralSites() {
       </table>
     </div>`;
 
-  // Wire click handlers
   container.querySelectorAll("tr[title]").forEach(tr => {
     tr.addEventListener("click", () => openHubSiteDetail(tr.querySelector(".hcs-view-btn")?.dataset.wsite));
   });
   container.querySelectorAll(".hcs-view-btn").forEach(btn => {
-    btn.addEventListener("click", e => { e.stopPropagation(); openHubSiteDetail(btn.dataset.wsite); });
+    btn.addEventListener("click", event => { event.stopPropagation(); openHubSiteDetail(btn.dataset.wsite); });
   });
 }
 
 function openHubSiteDetail(wsite) {
   if (!wsite || !hubCentralData) return;
   hubCentralSiteOpen = wsite;
-
-  // Build aggregated site data
-  const { spokes = [], mode, token_valid: hubTokenValid } = hubCentralData;
-  let centralSite = "", statusMap = {}, wirelessTotal = 0, spokeList = [];
-  for (const spoke of spokes) {
-    for (const site of (spoke.sites || [])) {
-      if (site.wsite !== wsite) continue;
-      centralSite = centralSite || site.central_site || "";
-      wirelessTotal += typeof site.wireless_clients === "number" ? site.wireless_clients : 0;
-      spokeList.push({ ...spoke });
-      for (const [cid, cv] of Object.entries(site.status_map || {})) {
-        if (!statusMap[cid] || (cv.status === "ERROR" && statusMap[cid].status !== "ERROR")) {
-          statusMap[cid] = { ...cv };
-        }
-      }
-    }
-  }
+  const site = hubCentralAggregateSites(hubCentralData).find(entry => entry.wsite === wsite);
+  if (!site) return;
 
   $("#hcs-overview")?.classList.add("hidden");
   $("#hcs-site-detail")?.classList.remove("hidden");
   const titleEl = $("#hcs-detail-title");
   const subEl = $("#hcs-detail-sub");
   if (titleEl) titleEl.textContent = wsite;
-  if (subEl) subEl.textContent = centralSite ? `Central site: ${centralSite}` : "No Central site mapping";
+  if (subEl) subEl.textContent = site.central_site ? `Central site: ${site.central_site}` : "No Central site mapping";
 
-  // Render checks table
-  const checks = Object.entries(statusMap);
+  const checks = Object.entries(site.status_map || {});
   let checksHtml = "";
   if (checks.length) {
     const checkRows = checks.map(([cid, cv]) => {
@@ -13531,13 +13571,12 @@ function openHubSiteDetail(wsite) {
     checksHtml = `<div class="setup-card" style="margin-bottom:8px;"><div class="empty-state">No check data available for this site.</div></div>`;
   }
 
-  // Spokes section (distributed mode — shows which spokes see this site)
   let spokesHtml = "";
-  if (mode === "distributed" && spokeList.length > 1) {
-    const spokeRows = spokeList.map(s => `<tr>
-      <td>${escHtml(s.spoke_name || s.spoke_id)}</td>
-      <td><span class="status-dot ${s.spoke_online ? 'online' : 'offline'}"></span> ${s.spoke_online ? 'Online' : 'Offline'}</td>
-      <td>${s.token_valid ? '✓ Valid' : '—'}</td>
+  if ((hubCentralData.mode || "distributed") === "distributed" && site.spokes.length > 1) {
+    const spokeRows = site.spokes.map(spoke => `<tr>
+      <td>${escHtml(spoke.spoke_name || spoke.spoke_id)}</td>
+      <td><span class="status-dot ${spoke.spoke_online ? 'online' : 'offline'}"></span> ${spoke.spoke_online ? 'Online' : 'Offline'}</td>
+      <td>${site.token_valid ? '✓ Valid' : '—'}</td>
     </tr>`).join('');
     spokesHtml = `
       <div class="setup-card" style="margin-bottom:8px;">
@@ -13549,22 +13588,20 @@ function openHubSiteDetail(wsite) {
       </div>`;
   }
 
-  // Summary card
   const summaryHtml = `
     <div class="setup-card" style="margin-bottom:8px;">
       <div class="setup-status-grid">
-        <div class="setup-status-item"><span class="setup-status-label">Wireless Clients</span><span class="setup-status-value">${wirelessTotal}</span></div>
-        <div class="setup-status-item"><span class="setup-status-label">Checks Passing</span><span class="setup-status-value" style="color:var(--hpe-green-dark);">${checks.filter(([,v]) => v.status === "OK").length} / ${checks.length}</span></div>
-        <div class="setup-status-item"><span class="setup-status-label">Mode</span><span class="setup-status-value" style="text-transform:capitalize;">${escHtml(mode || '—')}</span></div>
+        <div class="setup-status-item"><span class="setup-status-label">Wireless Clients</span><span class="setup-status-value">${site.wireless_clients}</span></div>
+        <div class="setup-status-item"><span class="setup-status-label">Checks Passing</span><span class="setup-status-value" style="color:var(--hpe-green-dark);">${checks.filter(([, value]) => value.status === "OK").length} / ${checks.length}</span></div>
+        <div class="setup-status-item"><span class="setup-status-label">Mode</span><span class="setup-status-value" style="text-transform:capitalize;">${escHtml(hubCentralData.mode || '—')}</span></div>
       </div>
     </div>`;
 
   const detailContent = $("#hcs-detail-content");
   if (detailContent) detailContent.innerHTML = summaryHtml + checksHtml + spokesHtml;
 
-  // Wire back button
   const backBtn = $("#hcs-detail-back");
-  if (backBtn) { backBtn.onclick = closeHubSiteDetail; }
+  if (backBtn) backBtn.onclick = closeHubSiteDetail;
 }
 
 function closeHubSiteDetail() {
@@ -13576,16 +13613,16 @@ function closeHubSiteDetail() {
 function renderHubCentralAlerts() {
   const container = $("#hcs-alerts-content");
   if (!container || !hubCentralData) return;
-  const alerts = (hubCentralData.spokes || []).flatMap(s => s.hardware_alerts || []);
+  const alerts = hubCentralAggregateHardwareAlerts(hubCentralData);
   if (!alerts.length) {
     container.innerHTML = '<div class="empty-state">No active hardware alerts.</div>';
     return;
   }
-  const rows = alerts.map(a => `
+  const rows = alerts.map(alert => `
     <tr>
-      <td>${escHtml(a.name || a.id || '—')}</td>
-      <td>${a.total ?? 0}</td>
-      <td>${escHtml(Object.keys(a.sites || {}).join(', ') || '—')}</td>
+      <td>${escHtml(alert.name || alert.id || '—')}</td>
+      <td>${alert.total ?? 0}</td>
+      <td>${escHtml(Object.keys(alert.sites || {}).join(', ') || '—')}</td>
     </tr>`).join('');
   container.innerHTML = `
     <div class="setup-card">
@@ -13599,14 +13636,12 @@ function renderHubCentralAlerts() {
 function renderHubCentralClients() {
   const container = $("#hcs-clients-content");
   if (!container || !hubCentralData) return;
-  const rows = (hubCentralData.spokes || []).flatMap(s =>
-    (s.sites || []).map(site => `
-      <tr>
-        <td>${escHtml(site.wsite)}</td>
-        <td>${escHtml(site.central_site || '—')}</td>
-        <td>${site.wireless_clients ?? '—'}</td>
-      </tr>`)
-  ).join('');
+  const rows = hubCentralAggregateSites(hubCentralData).map(site => `
+    <tr>
+      <td>${escHtml(site.wsite)}</td>
+      <td>${escHtml(site.central_site || '—')}</td>
+      <td>${site.wireless_clients ?? '—'}</td>
+    </tr>`).join('');
   if (!rows) {
     container.innerHTML = '<div class="empty-state">No client data available.</div>';
     return;

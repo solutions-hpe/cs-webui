@@ -11406,22 +11406,21 @@ function renderHubVmServer() {
     }
   });
   container.querySelectorAll(".hub-vmserver-spoke-card").forEach(card => {
-    const openSpokeTab = () => {
+    const drillIn = () => {
       const spokeId = card.dataset.spokeId;
-      const params = new URLSearchParams({ spoke: spokeId });
-      if (currentTenantId) params.set("tenant", currentTenantId);
-      window.open(`?${params.toString()}`, "_blank");
+      hubVmServerSelectedSpoke = spokeId;
+      renderHubVmServer();
     };
-    card.addEventListener("click", openSpokeTab);
+    card.addEventListener("click", drillIn);
     card.addEventListener("keydown", e => {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openSpokeTab(); }
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); drillIn(); }
     });
   });
   scheduleHubVmServerFleetPoll();
 }
 
 // ── Hub VM Server drill-in view ──────────────────────────────────────────────
-let hubVmServerActiveSubtab = "vms";
+let hubVmServerActiveSubtab = "clients";
 
 function renderHubVmServerDetail(container, host) {
   const spokeId = host.spoke_id;
@@ -11445,10 +11444,18 @@ function renderHubVmServerDetail(container, host) {
   const simVms = qemuVms.filter(v => Number(v.vmid) > 90000);
   const otherVms = qemuVms.filter(v => !simVms.includes(v));
 
+  const telem = host.telemetry || {};
+  const clients = Array.isArray(telem.clients) ? telem.clients : [];
+  const apiServer = telem.api_server || {};
+  const central = telem.central || {};
+
   const subtabs = [
+    { id: "clients", label: `Clients <span class="badge-count">${clients.length}</span>` },
     { id: "vms", label: `VMs <span class="badge-count">${vms.length}</span>` },
     { id: "usb", label: `USB <span class="badge-count">${usb.length}</span>` },
     { id: "reclone", label: "Reclone" },
+    { id: "api-server", label: "API Server" },
+    { id: "central", label: "Central" },
     { id: "config", label: "Config" },
   ];
 
@@ -11513,18 +11520,20 @@ function renderHubVmServerDetail(container, host) {
     btn.addEventListener("click", () => {
       hubVmServerActiveSubtab = btn.dataset.hvmsubtab;
       document.querySelectorAll(".hub-vmserver-subtab").forEach(b => b.classList.toggle("active", b === btn));
-      renderHubVmServerSubpanel(spokeId, hubVmServerActiveSubtab, { simVms, otherVms, containerVms, templateVms, usb, reclone, px, host });
+      renderHubVmServerSubpanel(spokeId, hubVmServerActiveSubtab, { simVms, otherVms, containerVms, templateVms, usb, reclone, px, host, clients, apiServer, central });
     });
   });
 
-  renderHubVmServerSubpanel(spokeId, hubVmServerActiveSubtab, { simVms, otherVms, containerVms, templateVms, usb, reclone, px, host });
+  renderHubVmServerSubpanel(spokeId, hubVmServerActiveSubtab, { simVms, otherVms, containerVms, templateVms, usb, reclone, px, host, clients, apiServer, central });
 }
 
-function renderHubVmServerSubpanel(spokeId, subtab, { simVms, otherVms, containerVms, templateVms, usb, reclone, px, host = {} }) {
+function renderHubVmServerSubpanel(spokeId, subtab, { simVms, otherVms, containerVms, templateVms, usb, reclone, px, host = {}, clients = [], apiServer = {}, central = {} }) {
   const panel = document.getElementById("hub-vmserver-subpanel");
   if (!panel) return;
 
-  if (subtab === "vms") {
+  if (subtab === "clients") {
+    panel.innerHTML = renderHubVmServerClientsPanel(clients);
+  } else if (subtab === "vms") {
     panel.innerHTML = renderHubVmServerVmsPanel(spokeId, { simVms, otherVms, containerVms, templateVms });
     wireHubVmActions(panel, spokeId);
   } else if (subtab === "usb") {
@@ -11532,6 +11541,10 @@ function renderHubVmServerSubpanel(spokeId, subtab, { simVms, otherVms, containe
   } else if (subtab === "reclone") {
     panel.innerHTML = renderHubVmServerReclonePanel(spokeId, reclone, [...simVms, ...otherVms]);
     wireHubRecloneActions(panel, spokeId, [...simVms, ...otherVms]);
+  } else if (subtab === "api-server") {
+    panel.innerHTML = renderHubVmServerApiServerPanel(apiServer);
+  } else if (subtab === "central") {
+    panel.innerHTML = renderHubVmServerCentralPanel(central);
   } else if (subtab === "config") {
     panel.innerHTML = renderHubVmServerConfigPanel(host);
     wireHubVmServerConfigPanel(panel, spokeId, host);
@@ -11673,6 +11686,102 @@ function renderHubVmServerReclonePanel(spokeId, reclone, actionVms) {
             </tbody>
           </table>
         </div>` : ""}
+    </div>`;
+}
+
+function renderHubVmServerClientsPanel(clients) {
+  if (!clients.length) {
+    return `<div class="setup-card setup-section-gap"><div class="empty-state">No clients reported by this spoke.</div></div>`;
+  }
+  const rows = clients.map(c => {
+    const status = c.status || c.state || "unknown";
+    const dot = status === "online" || status === "up" ? "🟢" : status === "offline" || status === "down" ? "⚫" : "🟡";
+    return `<tr>
+      <td>${dot} ${escHtml(status)}</td>
+      <td>${escHtml(c.hostname || c.name || "—")}</td>
+      <td>${escHtml(String(c.vmid ?? c.proxmox_vmid ?? "—"))}</td>
+      <td>${escHtml(c.ip || c.ip_address || "—")}</td>
+      <td>${escHtml(c.site || c.site_name || "—")}</td>
+      <td>${escHtml(c.type || c.client_type || "—")}</td>
+    </tr>`;
+  }).join("");
+  return `
+    <div class="setup-card setup-section-gap">
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr><th>Status</th><th>Hostname</th><th>VMID</th><th>IP</th><th>Site</th><th>Type</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function renderHubVmServerApiServerPanel(apiServer) {
+  const health = apiServer.health || {};
+  const services = apiServer.services || {};
+  const serviceRows = Object.entries(services).map(([name, svc]) => {
+    const ok = svc.consecutive_errors === 0;
+    const dot = ok ? "🟢" : "🔴";
+    const lastRun = svc.last_run ? new Date(svc.last_run).toLocaleTimeString() : "—";
+    return `<tr>
+      <td>${dot}</td>
+      <td>${escHtml(name)}</td>
+      <td>${escHtml(String(svc.run_count ?? "—"))}</td>
+      <td>${escHtml(String(svc.consecutive_errors ?? "—"))}</td>
+      <td>${escHtml(lastRun)}</td>
+    </tr>`;
+  }).join("");
+
+  const healthDot = health.status === "ok" ? "🟢" : "🔴";
+  return `
+    <div class="setup-card setup-section-gap">
+      <table class="data-table" style="margin-bottom:16px;">
+        <tbody>
+          <tr><th>Status</th><td>${healthDot} ${escHtml(health.status || "—")}</td></tr>
+          <tr><th>Version</th><td>${escHtml(health.version || "—")}</td></tr>
+          <tr><th>Clients</th><td>${escHtml(String(health.clients ?? "—"))}</td></tr>
+          <tr><th>Repo Synced</th><td>${health.repo_synced ? "✅ Yes" : "⚠️ No"}</td></tr>
+          ${health.repo_error ? `<tr><th>Repo Error</th><td style="color:var(--danger-color)">${escHtml(health.repo_error)}</td></tr>` : ""}
+        </tbody>
+      </table>
+      ${serviceRows ? `
+      <h3 style="margin:0 0 8px;font-size:0.95rem;">Background Services</h3>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr><th></th><th>Service</th><th>Runs</th><th>Errors</th><th>Last Run</th></tr></thead>
+          <tbody>${serviceRows}</tbody>
+        </table>
+      </div>` : ""}
+    </div>`;
+}
+
+function renderHubVmServerCentralPanel(central) {
+  const tokenState = central.token_state || {};
+  const alerts = Array.isArray(central.hardware_alerts) ? central.hardware_alerts : [];
+  const tokenDot = central.token_valid ? "🟢" : "⚫";
+
+  const alertRows = alerts.map(a => `<tr>
+    <td>${escHtml(a.severity || "—")}</td>
+    <td>${escHtml(a.device || a.name || "—")}</td>
+    <td>${escHtml(a.description || a.message || "—")}</td>
+  </tr>`).join("");
+
+  return `
+    <div class="setup-card setup-section-gap">
+      <table class="data-table" style="margin-bottom:16px;">
+        <tbody>
+          <tr><th>Token</th><td>${tokenDot} ${escHtml(tokenState.state || (central.token_valid ? "valid" : "invalid"))}</td></tr>
+          ${tokenState.detail ? `<tr><th>Detail</th><td class="muted">${escHtml(tokenState.detail)}</td></tr>` : ""}
+        </tbody>
+      </table>
+      ${alerts.length ? `
+      <h3 style="margin:0 0 8px;font-size:0.95rem;">Hardware Alerts (${alerts.length})</h3>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr><th>Severity</th><th>Device</th><th>Description</th></tr></thead>
+          <tbody>${alertRows}</tbody>
+        </table>
+      </div>` : `<div class="empty-state">No hardware alerts.</div>`}
     </div>`;
 }
 

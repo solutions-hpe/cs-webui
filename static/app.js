@@ -14578,9 +14578,19 @@ function renderSpokeConfigTab() {
   const telemetry = state?.loaded ? (state.telemetry || {}) : (spoke.telemetry || {});
   const proxmox = telemetry?.proxmox || activeSpokeModal.vmHost?.proxmox || {};
   const online = spoke.last_seen ? isOnline(spoke.last_seen) : Boolean(activeSpokeModal.vmHost?.spoke_online);
-  const usbCount = Array.isArray(proxmox.usb_state)
-    ? proxmox.usb_state.length
-    : Number(activeSpokeModal.vmHost?.usb_count ?? proxmox.usb_count ?? 0);
+  const hostUsbCount = Number(activeSpokeModal.vmHost?.usb_count);
+  const telemetryUsbCount = Number(proxmox.usb_count);
+  const usbCount = Number.isFinite(hostUsbCount)
+    ? hostUsbCount
+    : Array.isArray(proxmox.present_usb)
+      ? proxmox.present_usb.length
+      : Number.isFinite(telemetryUsbCount)
+        ? telemetryUsbCount
+        : Array.isArray(telemetry?.usb_devices)
+          ? telemetry.usb_devices.length
+          : Array.isArray(proxmox.usb_state)
+            ? proxmox.usb_state.length
+            : 0;
   const lastSeen = spoke.last_seen || telemetry?.last_seen || activeSpokeModal.vmHost?.last_seen || null;
   const proxmoxConnected = proxmox.connected == null ? "—" : (proxmox.connected ? "Yes" : "No");
   const agentVersion = proxmox.agent_version || telemetry?.api_server?.health?.version || activeSpokeModal.vmHost?.proxmox?.agent_version || "—";

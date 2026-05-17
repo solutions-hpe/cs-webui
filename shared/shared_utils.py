@@ -70,12 +70,15 @@ def serialize_client(hostname: str, client: dict[str, Any]) -> dict[str, Any]:
 
 def proxmox_summary(proxmox_state: dict[str, Any]) -> dict[str, Any]:
     """
-    Build a lean, telemetry-safe summary of Proxmox state.
+    Build a telemetry-safe summary of Proxmox state for the hub.
 
-    Strips large arrays (log lines, pending agents) and returns only what
-    the hub needs to render the Server tab in the spoke modal.
+    Includes enough data for the hub to render the spoke drill-in identically
+    to the spoke's own VM Server view — including CPU/RAM per VM, VirtualHere
+    devices, and USB state.  Large volatile arrays (log lines, pending agents)
+    are still stripped to keep the payload lean.
     """
     vms = proxmox_state.get("vms", [])
+    usb_state = proxmox_state.get("usb_state", [])
     return {
         "connected": proxmox_state.get("connected", False),
         "last_seen": proxmox_state.get("last_seen"),
@@ -84,16 +87,60 @@ def proxmox_summary(proxmox_state: dict[str, Any]) -> dict[str, Any]:
         "running_count": sum(1 for v in vms if v.get("status") == "running"),
         "vms": [
             {
-                "vmid": v.get("vmid"),
-                "name": v.get("name", ""),
-                "status": v.get("status", ""),
-                "type": v.get("type", ""),
+                "vmid":               v.get("vmid"),
+                "name":               v.get("name", ""),
+                "status":             v.get("status", ""),
+                "type":               v.get("type", ""),
+                "is_template":        v.get("is_template", False),
+                # Resource stats (present for running VMs from Proxmox API)
+                "cpu":                v.get("cpu"),
+                "mem":                v.get("mem"),
+                "maxmem":             v.get("maxmem"),
+                # USB / reclone metadata
+                "has_usb_config":     v.get("has_usb_config", False),
+                "reclone_bus_path":   v.get("reclone_bus_path"),
+                "reclone_supported":  v.get("reclone_supported", True),
+                "reclone_reason":     v.get("reclone_reason"),
+                "reclone_source_vmid": v.get("reclone_source_vmid"),
+                "prov_status":        v.get("prov_status"),
+                "pending_checkin":    v.get("pending_checkin", False),
             }
             for v in vms
         ],
-        "usb_count": len(proxmox_state.get("usb_state", [])),
-        "agent_version": proxmox_state.get("agent_version"),
-        "pve_version": proxmox_state.get("pve_version"),
+        "usb_count": len(usb_state),
+        "usb_state": usb_state,
+        "agent_version":    proxmox_state.get("agent_version"),
+        "pve_version":      proxmox_state.get("pve_version"),
+        "usb_auto_provision": proxmox_state.get("usb_auto_provision"),
+        # VirtualHere device state (stripped to essential fields only)
+        "vh_devices": _summarise_vh_devices(proxmox_state.get("vh_devices")),
+    }
+
+
+def _summarise_vh_devices(vh: Any) -> dict[str, Any] | None:
+    """Return a lightweight copy of vh_devices safe for hub telemetry."""
+    if not isinstance(vh, dict):
+        return None
+    devices = vh.get("devices") or []
+    return {
+        "vh_service_active": vh.get("vh_service_active"),
+        "vh_connected":      vh.get("vh_connected"),
+        "auto_use_all":      vh.get("auto_use_all"),
+        "count":             vh.get("count", len(devices)),
+        "devices": [
+            {
+                "name":       d.get("name"),
+                "address":    d.get("address"),
+                "vendor":     d.get("vendor"),
+                "vendor_id":  d.get("vendor_id"),
+                "product_id": d.get("product_id"),
+                "serial":     d.get("serial"),
+                "server":     d.get("server"),
+                "auto_use":   d.get("auto_use", False),
+                "in_use_by":  d.get("in_use_by"),
+            }
+            for d in devices if isinstance(d, dict)
+        ],
     }
 
 

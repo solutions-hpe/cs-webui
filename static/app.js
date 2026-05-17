@@ -11617,24 +11617,31 @@ async function loadVmServer(force = false) {
     renderHubVmServer();
   };
 
-  if (!force && aggregateProxmoxHosts.length) {
-    await loadHubVmServerAggregateStatus();
-    renderHubVmServer();
-    revalidate();
-    return;
-  }
+  if (loadVmServer._inFlight) return;
+  loadVmServer._inFlight = true;
 
-  const cached = loadCache();
-  if (!force && cached && cached.length) {
-    aggregateProxmoxHosts = cached;
-    await loadHubVmServerAggregateStatus();
-    renderHubVmServer();
-    revalidate();
-    return;
-  }
+  try {
+    if (aggregateProxmoxHosts.length) {
+      await loadHubVmServerAggregateStatus();
+      renderHubVmServer();
+      revalidate();
+      return;
+    }
 
-  container.innerHTML = '<div class="empty-state">Loading…</div>';
-  await revalidate();
+    const cached = loadCache();
+    if (!force && cached && cached.length) {
+      aggregateProxmoxHosts = cached;
+      await loadHubVmServerAggregateStatus();
+      renderHubVmServer();
+      revalidate();
+      return;
+    }
+
+    container.innerHTML = '<div class="empty-state">Loading…</div>';
+    await revalidate();
+  } finally {
+    loadVmServer._inFlight = false;
+  }
 }
 
 async function loadApiServer(force = false) {

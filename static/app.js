@@ -11144,8 +11144,8 @@ function renderHubVmServerDetail(container, host) {
 
   // Categorise VMs to match the spoke drill-in view.
   const configuredTemplateIds = new Set([
-    String(currentSettings?.vm_image_1_template_id || "100"),
-    String(currentSettings?.vm_image_2_template_id || "200"),
+    String(host.proxmox?.vm_image_1_template_id || "100"),
+    String(host.proxmox?.vm_image_2_template_id || "200"),
   ]);
   const templateVms = vms.filter(v =>
     v.is_template === true || v.is_template === "true" || configuredTemplateIds.has(String(v.vmid))

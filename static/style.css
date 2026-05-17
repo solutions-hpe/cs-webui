@@ -2619,3 +2619,7 @@ body.mode-spoke .hub-only  { display: none !important; }
 .diag-log-attrs { color: var(--text-secondary); word-break: break-all; }
 .diag-log-entry.is-error .diag-log-event { color: var(--error, #ef4444); }
 .diag-log-entry.is-ok .diag-log-event { color: var(--success, #22c55e); }
+
+/* ── Hub VM Server spoke list — compact card overrides ─────────── */
+.hub-vmserver-spoke-card { padding: 10px 20px; }
+.hub-vmserver-spoke-card .panel-header { margin-bottom: 2px; }

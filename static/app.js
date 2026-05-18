@@ -11796,6 +11796,22 @@ function renderHubVmServerDetailsPanel(px, host) {
         <button id="hub-proxmox-api-token-save-btn" class="btn btn-primary" style="flex-shrink:0;" type="button">Save Token</button>
       </div>
       <div id="hub-proxmox-token-status" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
+    </div>
+    <div class="setup-card setup-section-gap" style="padding:14px 16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        <div style="font-weight:600;font-size:13px;">📋 Remote Logs</div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <select id="hub-log-source-select" style="font-size:12px;padding:3px 6px;">
+            <option value="watchdog">Watchdog</option>
+            <option value="journal">Journal</option>
+            <option value="agent">Agent</option>
+            <option value="install">Install</option>
+          </select>
+          <button id="hub-log-fetch-btn" class="btn btn-secondary" style="font-size:12px;padding:4px 10px;" type="button">Fetch</button>
+          <button id="hub-log-clear-btn" class="btn" style="font-size:12px;padding:4px 10px;background:transparent;border:1px solid var(--muted);" type="button">Clear</button>
+        </div>
+      </div>
+      <pre id="hub-log-output" style="margin:0;max-height:320px;overflow:auto;background:#0f172a;color:#e2e8f0;border-radius:8px;padding:10px;font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-all;">[Select a source and click Fetch]</pre>
     </div>`;
 }
 
@@ -11836,6 +11852,38 @@ function wireHubVmServerDetailsPanel(panel, tenantId, spokeId) {
       showToast(`Failed to save token: ${err.message}`, "error");
     }
   });
+
+  // ── Remote log viewer ──────────────────────────────────────────────────────
+  const logOutput = panel.querySelector("#hub-log-output");
+  const logSelect = panel.querySelector("#hub-log-source-select");
+
+  const fetchLogs = async () => {
+    const source = logSelect?.value || "watchdog";
+    if (logOutput) logOutput.textContent = `Fetching ${source} logs…`;
+    try {
+      const resp = await apiFetch(
+        `/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/remote-logs?source=${encodeURIComponent(source)}&lines=300`
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        if (logOutput) logOutput.textContent = `Error: ${err.detail || resp.status}`;
+        return;
+      }
+      const data = await resp.json();
+      if (logOutput) logOutput.textContent = (data.lines || []).join("\n") || "[No log output]";
+      if (logOutput) logOutput.scrollTop = logOutput.scrollHeight;
+    } catch (err) {
+      if (logOutput) logOutput.textContent = `Failed: ${err.message}`;
+    }
+  };
+
+  panel.querySelector("#hub-log-fetch-btn")?.addEventListener("click", fetchLogs);
+  panel.querySelector("#hub-log-clear-btn")?.addEventListener("click", () => {
+    if (logOutput) logOutput.textContent = "[Cleared]";
+  });
+
+  // Auto-fetch watchdog on open
+  fetchLogs();
 }
 
 // ── Shared: send proxmox command via hub ──────────────────────────────────────

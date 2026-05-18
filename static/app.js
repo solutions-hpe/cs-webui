@@ -11104,9 +11104,9 @@ function renderHubVmServer() {
               <div style="padding:8px 16px;font-size:0.82rem;color:var(--muted);">
                 Agent ${escHtml(host.proxmox?.agent_version || "—")} &nbsp;·&nbsp;
                 PVE ${escHtml(host.proxmox?.pve_version || "—")} &nbsp;·&nbsp;
-                ${host.proxmox?.connected
+                ${host.proxmox?.connected && host.spoke_online
                   ? "🟢 Proxmox connected"
-                  : (host.spoke_online ? "⚠️ Proxmox agent not reporting" : "⚫ Proxmox disconnected")}
+                  : (host.spoke_online ? "⚠️ Proxmox agent not reporting" : "⚫ Spoke offline")}
               </div>
             </div>`;
         }).join("")}

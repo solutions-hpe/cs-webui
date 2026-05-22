@@ -373,6 +373,12 @@ async function hydrateSetupSubtab(subtabId) {
   if (subtabId === 'setup-central') {
     await loadCentralStatus().catch(() => {});
   }
+
+  // When the Proxmox setup sub-tab is activated, load unknown USB devices from all spokes
+  // so the admin can certify them directly from the hub without logging into each spoke.
+  if (subtabId === 'setup-proxmox') {
+    loadAndRenderSpokeUnknownUsb().catch(() => {});
+  }
 }
 
 function activateSetupSubtab(subtabId = 'setup-github') {
@@ -2866,6 +2872,77 @@ function updateUsbCountdowns() {
     const until = Number(node.dataset.missingUntil || 0) * 1000;
     const remaining = Math.max(0, Math.floor((until - Date.now()) / 1000));
     node.textContent = remaining > 0 ? `${Math.ceil(remaining / 60)}m remaining` : 'Ready to destroy';
+  });
+}
+
+// ── Unknown USB devices from spokes ───────────────────────────────────────────
+// Loads the aggregate Proxmox data for all spokes and renders a table of USB
+// devices that are present on spoke hardware but not yet in the certified list.
+// Each row gets a "Certify" button so the admin can add it to usb_vidpids
+// directly from the hub, then push to all spokes with one click.
+
+async function loadAndRenderSpokeUnknownUsb() {
+  const tbody = document.getElementById('unknown-usb-spokes-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="4" class="empty-state">Loading…</td></tr>';
+  try {
+    // Reuse the same aggregate/proxmox endpoint used by the VM-server tab.
+    const data = await loadAggregateData('proxmox');
+    const hosts = data?.hosts || [];
+    renderSpokeUnknownUsbTable(hosts);
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="4" class="empty-state" style="color:var(--text-danger);">Error: ${escHtml(err.message)}</td></tr>`;
+  }
+}
+
+function renderSpokeUnknownUsbTable(hosts) {
+  const tbody = document.getElementById('unknown-usb-spokes-tbody');
+  if (!tbody) return;
+  // Collect all unknown USB entries from all spokes into a flat list with spoke info attached.
+  const rows = [];
+  hosts.forEach((host) => {
+    const unknown = host.proxmox?.unknown_usb;
+    if (!Array.isArray(unknown) || !unknown.length) return; // skip spokes with no unknown devices
+    unknown.forEach((device) => {
+      rows.push({
+        spokeName: host.spoke_name || host.spoke_id || '—',
+        spokeId: host.spoke_id,
+        vidpid: device.vidpid || device.vid_pid || '',
+        name: device.name || device.product || device.label || '',
+      });
+    });
+  });
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No unknown devices reported by any spoke.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = '';
+  rows.forEach((row) => {
+    const tr = document.createElement('tr');
+    // Build the Certify button — clicking adds this VID:PID to the hub's certified list.
+    const certBtn = document.createElement('button');
+    certBtn.type = 'button';
+    certBtn.className = 'btn btn-secondary btn-small';
+    certBtn.textContent = '+ Certify';
+    certBtn.title = 'Add to Certified Devices list (then push to all spokes)';
+    certBtn.addEventListener('click', async () => {
+      certBtn.disabled = true;
+      certBtn.textContent = '…';
+      // addUnknownToCertified adds to usb_vidpids in currentSettings and saves to hub.
+      await addUnknownToCertified(row.vidpid, row.name);
+      // Re-render so the certified row disappears from this table immediately.
+      tr.remove();
+      if (!tbody.childElementCount) {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No unknown devices reported by any spoke.</td></tr>';
+      }
+    });
+    tr.innerHTML = `<td>${escHtml(row.spokeName)}</td><td>${escHtml(row.vidpid || '—')}</td><td>${escHtml(row.name || '—')}</td>`;
+    const td = document.createElement('td');
+    td.appendChild(certBtn);
+    tr.appendChild(td);
+    tbody.appendChild(tr);
   });
 }
 
@@ -6448,6 +6525,15 @@ if (pushUsbAllowlistBtn) {
       // Always re-enable the button so the user can retry if something failed.
       pushUsbAllowlistBtn.disabled = false;
     }
+  });
+}
+
+// Wire the refresh button for the unknown-USB-from-spokes table.
+const refreshUnknownUsbBtn = document.getElementById('refresh-unknown-usb-btn');
+if (refreshUnknownUsbBtn) {
+  refreshUnknownUsbBtn.addEventListener('click', () => {
+    // Re-fetch spoke telemetry and re-render the unknown device table.
+    loadAndRenderSpokeUnknownUsb().catch(() => {});
   });
 }
 

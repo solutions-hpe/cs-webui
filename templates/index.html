@@ -2363,6 +2363,25 @@
                 <div id="usb-ignored-list" class="badge-list"></div>
               </div>
 
+              <!-- Unknown devices reported by spokes — auto-populated from spoke telemetry -->
+              <div class="settings-section">
+                <div class="settings-section-title" style="display:flex;align-items:center;gap:8px;">
+                  Unknown Devices (from Spokes)
+                  <button type="button" class="btn btn-secondary btn-small" id="refresh-unknown-usb-btn" style="font-size:0.75rem;padding:2px 8px;">↻ Refresh</button>
+                </div>
+                <p style="font-size:0.82rem;color:var(--text-secondary);margin:4px 0 8px;">USB dongles seen by spokes that are not yet in the certified list. Certifying a device adds it to the Certified Devices list above — click <strong>Push to All Spokes</strong> afterwards to deploy.</p>
+                <div class="table-scroll">
+                  <table class="data-table" id="unknown-usb-spokes-table">
+                    <thead>
+                      <tr><th>Spoke</th><th>VID:PID</th><th>Name</th><th></th></tr>
+                    </thead>
+                    <tbody id="unknown-usb-spokes-tbody">
+                      <tr><td colspan="4" class="empty-state">Loading…</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
               <div id="usb-settings-message" class="settings-message hidden" role="alert"></div>
 
             </div>

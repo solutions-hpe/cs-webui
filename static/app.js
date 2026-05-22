@@ -10139,6 +10139,17 @@ function showTab(rawTabId, opts = {}) {
   syncTenantContextChrome();
   syncHubPermissionUI();
   updateHubRefreshPausedState();
+  // When navigating to the Clients tab, reset which spoke groups have been "seen"
+  // so that all groups auto-expand on arrival (preserving user collapse state only
+  // while they stay on the tab — a fresh navigation always shows expanded rows).
+  if (tabId === "clients" && currentTenantId) {
+    if (hubClientUiState.seenSitesByTenant[currentTenantId]) {
+      hubClientUiState.seenSitesByTenant[currentTenantId].clear();
+    }
+    if (hubClientUiState.expandedByTenant[currentTenantId]) {
+      hubClientUiState.expandedByTenant[currentTenantId].clear();
+    }
+  }
   refreshCurrentView();
 }
 

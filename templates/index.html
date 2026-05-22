@@ -478,9 +478,7 @@
         <div class="page-toolbar">
           <span class="server-node-name">Proxmox Settings</span>
           <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-            <label class="form-label" style="margin:0;">Spoke:</label>
-            <select id="ts-proxmox-spoke-select" class="form-input" style="width:200px;"></select>
-            <button id="ts-proxmox-save-btn" class="btn btn-primary btn-small" type="button">💾 Push to Spoke</button>
+            <button id="ts-proxmox-save-btn" class="btn btn-primary btn-small" type="button">💾 Push to All Spokes</button>
           </div>
         </div>
         <div id="ts-proxmox-content">
@@ -533,6 +531,75 @@
                 </div>
               </div>
               <div id="ts-proxmox-msg" class="settings-message hidden"></div>
+            </div>
+          </div>
+
+          <!-- Per-spoke override card -->
+          <div class="setup-card" style="margin:16px;">
+            <div class="setup-card-header" id="ts-proxmox-override-header" style="cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;">
+              <h2>Spoke Override <span style="font-size:12px;font-weight:normal;color:var(--muted);">— push different values to a specific spoke</span></h2>
+              <span id="ts-proxmox-override-chevron" style="font-size:12px;color:var(--muted);">▶ expand</span>
+            </div>
+            <div id="ts-proxmox-override-body" class="hidden">
+              <div class="setup-form" style="padding-top:0;">
+                <div class="settings-section">
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label class="form-label" for="ts-proxmox-spoke-select">Spoke</label>
+                      <select id="ts-proxmox-spoke-select" class="form-input"></select>
+                    </div>
+                  </div>
+                </div>
+                <div class="settings-section">
+                  <div class="settings-section-title">Provisioning Behavior</div>
+                  <div class="toggle-grid">
+                    <label class="toggle-label">
+                      <input type="checkbox" id="ts-ov-usb-auto-provision">
+                      <span>Auto-Provision VMs</span>
+                    </label>
+                  </div>
+                  <div class="form-row" style="margin-top:12px;">
+                    <div class="form-group">
+                      <label class="form-label" for="ts-ov-usb-missing-timeout">Destroy after missing (minutes)</label>
+                      <input id="ts-ov-usb-missing-timeout" class="form-input" type="number" value="60" min="1" placeholder="60">
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label" for="ts-ov-usb-max-slots">Max VMs per host</label>
+                      <input id="ts-ov-usb-max-slots" class="form-input" type="number" value="24" min="1" max="256" placeholder="24">
+                    </div>
+                  </div>
+                </div>
+                <div class="settings-section">
+                  <div class="settings-section-title">VM Templates</div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label class="form-label" for="ts-ov-vm-image-1-template-id">VM Image 1 Template VMID</label>
+                      <input id="ts-ov-vm-image-1-template-id" class="form-input" type="number" value="100" min="1">
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label" for="ts-ov-vm-image-2-template-id">VM Image 2 Template VMID</label>
+                      <input id="ts-ov-vm-image-2-template-id" class="form-input" type="number" value="200" min="1">
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label" for="ts-ov-vm-image-1-pct">VM Image 1 % target</label>
+                      <input id="ts-ov-vm-image-1-pct" class="form-input" type="number" value="50" min="0" max="100">
+                    </div>
+                  </div>
+                </div>
+                <div class="settings-section">
+                  <div class="settings-section-title">Parallel Provisioning</div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label class="form-label" for="ts-ov-reclone-concurrency">Max parallel operations</label>
+                      <input id="ts-ov-reclone-concurrency" class="form-input" type="number" value="1" min="1" max="20" placeholder="1">
+                    </div>
+                  </div>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+                  <button id="ts-proxmox-override-save-btn" class="btn btn-primary btn-small" type="button">💾 Push to Spoke</button>
+                </div>
+                <div id="ts-proxmox-override-msg" class="settings-message hidden"></div>
+              </div>
             </div>
           </div>
         </div>

@@ -12542,37 +12542,32 @@ function setTroubleshootField(id, value) {
 }
 
 async function initTsProxmoxTab(tenantId) {
-  const select = $("#ts-proxmox-spoke-select");
   const saveBtn = $("#ts-proxmox-save-btn");
   const msg = $("#ts-proxmox-msg");
-  if (!select || !saveBtn || !tenantId) return;
+  if (!saveBtn || !tenantId) return;
   saveBtn.disabled = !canManageTenant(tenantId);
-  const currentSpokeId = select.value;
-  await populateSpokeSelect(select, tenantId, currentSpokeId);
 
-  const loadProxmox = async () => {
-    const spokeId = select.value;
-    if (!spokeId) {
-      showInlineMessage(msg, "No spokes available for this tenant.", true);
-      return;
-    }
-    const data = await loadSpokeConfig(tenantId, spokeId);
-    const cfg = data.config || {};
-    const autoProvision = cfg.usb_auto_provision === true || String(cfg.usb_auto_provision || "").toLowerCase() === "on";
-    $("#ts-usb-auto-provision") && ($("#ts-usb-auto-provision").checked = autoProvision);
-    $("#ts-usb-missing-timeout") && ($("#ts-usb-missing-timeout").value = cfg.usb_missing_timeout ?? 60);
-    $("#ts-usb-max-slots") && ($("#ts-usb-max-slots").value = cfg.usb_max_slots ?? 24);
-    $("#ts-vm-image-1-template-id") && ($("#ts-vm-image-1-template-id").value = cfg.vm_image_1_template_id ?? 100);
-    $("#ts-vm-image-2-template-id") && ($("#ts-vm-image-2-template-id").value = cfg.vm_image_2_template_id ?? 200);
-    $("#ts-vm-image-1-pct") && ($("#ts-vm-image-1-pct").value = cfg.vm_image_1_pct ?? 50);
-    $("#ts-reclone-concurrency") && ($("#ts-reclone-concurrency").value = cfg.reclone_concurrency ?? 1);
-    showInlineMessage(msg, "", false, 0);
-  };
+  // Load defaults from first available spoke so the form isn't blank
+  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes`);
+  const spokes = (res?.ok ? await res.json() : null) || [];
+  if (spokes.length) {
+    try {
+      const data = await loadSpokeConfig(tenantId, spokes[0].id);
+      const cfg = data.config || {};
+      const autoProvision = cfg.usb_auto_provision === true || String(cfg.usb_auto_provision || "").toLowerCase() === "on";
+      $("#ts-usb-auto-provision") && ($("#ts-usb-auto-provision").checked = autoProvision);
+      $("#ts-usb-missing-timeout") && ($("#ts-usb-missing-timeout").value = cfg.usb_missing_timeout ?? 60);
+      $("#ts-usb-max-slots") && ($("#ts-usb-max-slots").value = cfg.usb_max_slots ?? 24);
+      $("#ts-vm-image-1-template-id") && ($("#ts-vm-image-1-template-id").value = cfg.vm_image_1_template_id ?? 100);
+      $("#ts-vm-image-2-template-id") && ($("#ts-vm-image-2-template-id").value = cfg.vm_image_2_template_id ?? 200);
+      $("#ts-vm-image-1-pct") && ($("#ts-vm-image-1-pct").value = cfg.vm_image_1_pct ?? 50);
+      $("#ts-reclone-concurrency") && ($("#ts-reclone-concurrency").value = cfg.reclone_concurrency ?? 1);
+    } catch (_) { /* leave form at HTML defaults */ }
+  }
 
-  select.onchange = () => { void loadProxmox().catch((error) => showInlineMessage(msg, error.message || "Failed to load Proxmox settings.", true)); };
+  // Push to ALL spokes
   saveBtn.onclick = async () => {
-    const spokeId = select.value;
-    if (!spokeId) return;
+    if (!spokes.length) { showInlineMessage(msg, "No spokes available.", true); return; }
     const config = {
       usb_auto_provision: $("#ts-usb-auto-provision")?.checked ? "on" : "off",
       usb_missing_timeout: parseInt($("#ts-usb-missing-timeout")?.value || "60", 10) || 60,
@@ -12583,14 +12578,76 @@ async function initTsProxmoxTab(tenantId) {
       reclone_concurrency: parseInt($("#ts-reclone-concurrency")?.value || "1", 10) || 1,
     };
     try {
-      await pushSpokeConfig(tenantId, spokeId, config);
-      showInlineMessage(msg, "Pushed to spoke ✓", false);
+      await Promise.all(spokes.map((s) => pushSpokeConfig(tenantId, s.id, config)));
+      showInlineMessage(msg, `Pushed to ${spokes.length} spoke${spokes.length !== 1 ? "s" : ""} ✓`, false);
     } catch (error) {
-      showInlineMessage(msg, error.message || "Failed to push Proxmox settings.", true);
+      showInlineMessage(msg, error.message || "Failed to push settings.", true);
     }
   };
 
-  await loadProxmox();
+  // Override section — collapsible, targets a single spoke
+  const overrideHeader = $("#ts-proxmox-override-header");
+  const overrideBody = $("#ts-proxmox-override-body");
+  const overrideChevron = $("#ts-proxmox-override-chevron");
+  const overrideSelect = $("#ts-proxmox-spoke-select");
+  const overrideSaveBtn = $("#ts-proxmox-override-save-btn");
+  const overrideMsg = $("#ts-proxmox-override-msg");
+
+  if (overrideHeader && overrideBody) {
+    overrideHeader.onclick = () => {
+      const hidden = overrideBody.classList.toggle("hidden");
+      if (overrideChevron) overrideChevron.textContent = hidden ? "▶ expand" : "▼ collapse";
+    };
+  }
+
+  if (overrideSelect) {
+    await populateSpokeSelect(overrideSelect, tenantId, "");
+    const loadOverride = async () => {
+      const spokeId = overrideSelect.value;
+      if (!spokeId) return;
+      try {
+        const data = await loadSpokeConfig(tenantId, spokeId);
+        const cfg = data.config || {};
+        const autoProvision = cfg.usb_auto_provision === true || String(cfg.usb_auto_provision || "").toLowerCase() === "on";
+        $("#ts-ov-usb-auto-provision") && ($("#ts-ov-usb-auto-provision").checked = autoProvision);
+        $("#ts-ov-usb-missing-timeout") && ($("#ts-ov-usb-missing-timeout").value = cfg.usb_missing_timeout ?? 60);
+        $("#ts-ov-usb-max-slots") && ($("#ts-ov-usb-max-slots").value = cfg.usb_max_slots ?? 24);
+        $("#ts-ov-vm-image-1-template-id") && ($("#ts-ov-vm-image-1-template-id").value = cfg.vm_image_1_template_id ?? 100);
+        $("#ts-ov-vm-image-2-template-id") && ($("#ts-ov-vm-image-2-template-id").value = cfg.vm_image_2_template_id ?? 200);
+        $("#ts-ov-vm-image-1-pct") && ($("#ts-ov-vm-image-1-pct").value = cfg.vm_image_1_pct ?? 50);
+        $("#ts-ov-reclone-concurrency") && ($("#ts-ov-reclone-concurrency").value = cfg.reclone_concurrency ?? 1);
+        showInlineMessage(overrideMsg, "", false, 0);
+      } catch (error) {
+        showInlineMessage(overrideMsg, error.message || "Failed to load spoke config.", true);
+      }
+    };
+    overrideSelect.onchange = () => void loadOverride();
+    await loadOverride();
+  }
+
+  if (overrideSaveBtn) {
+    overrideSaveBtn.disabled = !canManageTenant(tenantId);
+    overrideSaveBtn.onclick = async () => {
+      const spokeId = overrideSelect?.value;
+      if (!spokeId) return;
+      const config = {
+        usb_auto_provision: $("#ts-ov-usb-auto-provision")?.checked ? "on" : "off",
+        usb_missing_timeout: parseInt($("#ts-ov-usb-missing-timeout")?.value || "60", 10) || 60,
+        usb_max_slots: parseInt($("#ts-ov-usb-max-slots")?.value || "24", 10) || 24,
+        vm_image_1_template_id: parseInt($("#ts-ov-vm-image-1-template-id")?.value || "100", 10) || 100,
+        vm_image_2_template_id: parseInt($("#ts-ov-vm-image-2-template-id")?.value || "200", 10) || 200,
+        vm_image_1_pct: parseInt($("#ts-ov-vm-image-1-pct")?.value || "50", 10) || 50,
+        reclone_concurrency: parseInt($("#ts-ov-reclone-concurrency")?.value || "1", 10) || 1,
+      };
+      try {
+        await pushSpokeConfig(tenantId, spokeId, config);
+        const spokeName = overrideSelect.options[overrideSelect.selectedIndex]?.text || spokeId;
+        showInlineMessage(overrideMsg, `Pushed to ${spokeName} ✓`, false);
+      } catch (error) {
+        showInlineMessage(overrideMsg, error.message || "Failed to push to spoke.", true);
+      }
+    };
+  }
 }
 
 async function initTsGithubTab(tenantId) {

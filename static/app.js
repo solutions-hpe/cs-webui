@@ -8121,6 +8121,37 @@ function simulationStatusSortValue(status) {
   return String(status || "").toLowerCase().includes("running") ? 0 : 1;
 }
 
+// ── T3 PCI device section for hub Clients tab ─────────────────────────────────
+// Renders a small table above the client list showing T3 PCI devices detected on
+// the Proxmox node for this spoke group. Shown only when the T3 tab is active.
+// Receives a site object whose clients share spoke-level t3_pci_devices data.
+function renderHubT3PciSection(site) {
+  // All clients on the same spoke share the same node-level t3_pci_devices list;
+  // take it from the first client that has it.
+  const firstWithT3 = (site.clients || []).find(c => Array.isArray(c.t3_pci_devices) && c.t3_pci_devices.length);
+  const devices = firstWithT3?.t3_pci_devices || [];
+  if (!devices.length) return "";
+
+  const rows = devices.map(d => `
+    <tr>
+      <td><code>${escHtml(d.id || "—")}</code></td>
+      <td><code>${escHtml(d.vidpid || "—")}</code></td>
+      <td>${escHtml(d.name || "—")}</td>
+      <td><span class="badge badge-green">Present</span></td>
+    </tr>`).join("");
+
+  return `
+    <div style="margin-bottom:12px;padding:10px 16px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;">
+      <div style="font-weight:700;color:var(--hpe-navy);margin-bottom:6px;">📡 T3 IoT PCI Devices on this node</div>
+      <div class="table-scroll">
+        <table class="data-table" style="font-size:0.85rem;">
+          <thead><tr><th>PCI Address</th><th>VID:PID</th><th>Device</th><th>Status</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
 function renderHubSimulationBadges(simulations = [], emptyLabel = "—") {
   const uniqueSimulations = [...new Set((simulations || []).filter(Boolean))]
     .sort((left, right) => String(left).localeCompare(String(right), undefined, { sensitivity: "base" }));
@@ -8169,6 +8200,10 @@ function getHubClientExpandedSet(tenantId = currentTenantId) {
 }
 
 function classifyHubClient(client = {}) {
+  // T3: node has a qualifying PCI IoT device (168c:0034 Qualcomm Atheros adapter).
+  // T3 takes precedence because those nodes are a superset — they may also have USB.
+  if (client?.has_t3_pci) return 't3';
+  // T2: node has a USB dongle actively assigned in Proxmox.
   if (client?.has_usb) return 't2';
   return Array.isArray(client?.usb_devices) && client.usb_devices.length ? 't2' : 't1';
 }
@@ -8180,9 +8215,11 @@ function syncHubClientTypeTabs() {
 }
 
 function updateHubClientTypeCounts(allClients = aggregateClientRows) {
-  const counts = { all: allClients.length, t1: 0, t2: 0 };
+  // Count clients per type (t1/t2/t3) and update the badge numbers in the tab bar.
+  const counts = { all: allClients.length, t1: 0, t2: 0, t3: 0 };
   allClients.forEach((client) => {
-    counts[classifyHubClient(client)] += 1;
+    const type = classifyHubClient(client);
+    if (counts[type] !== undefined) counts[type] += 1;
   });
   const countAll = document.getElementById('hub-client-type-count-all');
   const countT1 = document.getElementById('hub-client-type-count-t1');
@@ -8191,11 +8228,12 @@ function updateHubClientTypeCounts(allClients = aggregateClientRows) {
   if (countAll) countAll.textContent = String(counts.all);
   if (countT1) countT1.textContent = String(counts.t1);
   if (countT2) countT2.textContent = String(counts.t2);
-  if (countT3) countT3.textContent = '—';
+  if (countT3) countT3.textContent = String(counts.t3);
 }
 
 function setHubClientTypeFilter(nextFilter = 'all') {
-  hubClientTypeFilter = nextFilter === 't1' || nextFilter === 't2' ? nextFilter : 'all';
+  // Accept all, t1, t2, and t3 as valid filter values; fall back to 'all'.
+  hubClientTypeFilter = ['t1', 't2', 't3'].includes(nextFilter) ? nextFilter : 'all';
   syncHubClientTypeTabs();
   renderClientRowsForHub();
 }
@@ -8766,6 +8804,9 @@ function renderClientRowsForHub() {
         onlineCount: clients.filter(client => client.online).length,
         errorCount: clients.reduce((sum, client) => sum + Number(client.error_count || 0), 0),
         activeSimulations: [...new Set(clients.flatMap(client => client.active_simulations || []).filter(Boolean))].sort((left, right) => left.localeCompare(right)),
+        // T3: take the node-level t3_pci_count from the first client with the field set.
+        // All clients on the same spoke share the same Proxmox node value.
+        t3PciCount: clients.reduce((max, c) => Math.max(max, Number(c.t3_pci_count || 0)), 0),
       };
     })
     .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }));
@@ -8788,11 +8829,13 @@ function renderClientRowsForHub() {
           <span class="badge badge-grey">${site.clients.length} clients</span>
           <span class="badge badge-green">${site.onlineCount} online</span>
           ${site.errorCount > 0 ? `<span class="badge badge-red">${site.errorCount} errors</span>` : ""}
+          ${site.t3PciCount > 0 ? `<span class="badge badge-purple" title="T3 IoT PCI devices on this node">📡 ${site.t3PciCount} T3</span>` : ""}
           <span class="hub-client-site-simulations">${renderHubSimulationBadges(site.activeSimulations, "")}</span>
           <span class="hub-client-site-chevron" aria-hidden="true">${isExpanded ? "▼" : "▶"}</span>
         </button>
         ${isExpanded ? `
           <div class="hub-client-site-rows">
+            ${hubClientTypeFilter === 't3' ? renderHubT3PciSection(site) : ""}
             <div class="table-scroll">
               <table class="data-table hub-client-site-table">
                 <thead><tr><th>Status</th><th>Hostname</th><th>Platform</th><th>SSID</th><th>Active Simulations</th><th style="white-space:nowrap">Last Seen</th><th>Errors</th></tr></thead>

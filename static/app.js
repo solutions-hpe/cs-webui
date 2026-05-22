@@ -7733,6 +7733,8 @@ function startHubApp() {
 "use strict";
 
 let authToken = sessionStorage.getItem("hub_token") || null;
+// Timer handle for the silent token-refresh scheduler (cleared on logout).
+let tokenRefreshTimer = null;
 let currentUser = null;
 let currentTenantId = null;
 let tenants = [];
@@ -11714,20 +11716,27 @@ async function openHubVmConsole(tenantId, spokeId, vmid, vmtype = "qemu") {
 // ── USB (T2) tab ─────────────────────────────────────────────────────────────
 
 function renderHubVmServerUsbPanel(host) {
+  // parseJsonList lives in the spoke IIFE scope and is not accessible from the hub IIFE.
+  // Use this local helper instead — handles both raw JSON strings and already-parsed arrays.
+  function _parseList(val) {
+    if (Array.isArray(val)) return val;
+    try { const p = JSON.parse(val || '[]'); return Array.isArray(p) ? p : []; } catch { return []; }
+  }
+
   // ── Extract all USB-related data from the host/proxmox payload ──────────────
   // The proxmox object carries the full spoke Proxmox telemetry relayed to the hub.
   const px = host.proxmox || {};
   const cfg = host.spoke_config || {};
 
   // Certified devices come from the spoke config stored on the hub.
-  const certified = parseJsonList(cfg.usb_vidpids || "[]");
+  const certified = _parseList(cfg.usb_vidpids || "[]");
   // Raw USB state from the spoke — one entry per dongle↔VM assignment.
   const usbState = Array.isArray(px.usb_state) ? px.usb_state : [];
   // Physically-present dongles reported by the Proxmox agent.
   const presentUsb = Array.isArray(px.present_usb) ? px.present_usb : [];
   // Unknown (uncertified) devices detected on the spoke.
   const certifiedSet = new Set(certified.map(d => String(d?.vidpid || "").toLowerCase()).filter(Boolean));
-  const ignoredSet  = new Set(parseJsonList(cfg.usb_ignored_vidpids || "[]").map(v => String(v || "").toLowerCase()).filter(Boolean));
+  const ignoredSet  = new Set(_parseList(cfg.usb_ignored_vidpids || "[]").map(v => String(v || "").toLowerCase()).filter(Boolean));
   const unknownUsb  = (Array.isArray(px.unknown_usb) ? px.unknown_usb : [])
     .filter(d => {
       const v = String(d.vidpid || "").toLowerCase().trim();
@@ -11938,12 +11947,18 @@ function renderHubVmServerUsbPanel(host) {
 // Handles: certify/ignore buttons on uncertified devices, and the save button
 // for the auto-provisioning settings form.
 function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
+  // ── Local JSON list helper (spoke-scope parseJsonList not accessible here) ────
+  function _parseList(val) {
+    if (Array.isArray(val)) return val;
+    try { const p = JSON.parse(val || '[]'); return Array.isArray(p) ? p : []; } catch { return []; }
+  }
+
   // ── Certify / Ignore buttons on unknown USB devices ─────────────────────────
-  // "Add to certified" uses the same tenant-wide flow as the global hub USB list:
-  // addUnknownToCertified() updates usb_vidpids in currentSettings, saves to hub,
-  // then the hub pushes the updated list to all spokes (including this one).
+  // "Certify" fetches the current tenant hub-config, appends the new VID:PID to
+  // usb_vidpids, then PUTs the updated config back — the hub queues a push to all
+  // spokes automatically.
   // "Ignore" adds the VID:PID only to this spoke's usb_ignored_vidpids list via
-  // the per-spoke config-push API.
+  // the per-spoke config-push API (POST /{tenant_id}/spokes/{spoke_id}/config).
   panel.addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-hvmusb-action]");
     if (!btn) return;
@@ -11958,21 +11973,40 @@ function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
 
     try {
       if (action === "certify") {
-        // Add to the tenant-wide certified list (pushes to all spokes).
-        await addUnknownToCertified(vidpid, name);
+        // Fetch current hub config so we can append to usb_vidpids without clobbering other fields.
+        const cfgRes  = await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/hub-config`);
+        const cfgData = await readJson(cfgRes);
+        if (!cfgRes?.ok) throw new Error(cfgData?.detail || "Could not read hub config");
+
+        const hubCfg  = cfgData.hub_config || {};
+        // Parse the existing certified list (may be array or JSON string).
+        const devices = _parseList(hubCfg.usb_vidpids || "[]").filter(
+          d => String(d?.vidpid || "").toLowerCase() !== String(vidpid || "").toLowerCase()
+        );
+        devices.push({ vidpid: vidpid.toLowerCase(), type: "wireless", label: name || vidpid });
+        devices.sort((a, b) => String(a.vidpid).localeCompare(String(b.vidpid)));
+
+        const putRes = await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/hub-config`, {
+          method: "PUT",
+          body: { hub_config_enabled: Boolean(cfgData.hub_config_enabled), hub_config: { ...hubCfg, usb_vidpids: devices } },
+        });
+        const putData = await readJson(putRes);
+        if (!putRes?.ok) throw new Error(putData?.detail || "Could not update hub config");
+        showToast(`${name || vidpid} added to certified list and queued for all spokes`, "ok");
       } else if (action === "ignore") {
         // Add to this spoke's ignored list only.
-        const cfg = host.spoke_config || {};
-        const current = parseJsonList(cfg.usb_ignored_vidpids || "[]");
+        const cfg     = host.spoke_config || {};
+        const current = _parseList(cfg.usb_ignored_vidpids || "[]");
         if (!current.some(v => String(v || "").toLowerCase() === String(vidpid || "").toLowerCase())) {
           current.push(vidpid.toLowerCase());
         }
-        await requestJson(`/api/${tenantId}/spokes/${spokeId}/config`, {
+        const res  = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/config`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ usb_ignored_vidpids: JSON.stringify(current) }),
+          body: { usb_ignored_vidpids: JSON.stringify(current) },
         });
-        showNotification(`${vidpid} added to ignore list for this spoke`, "ok");
+        const data = await readJson(res);
+        if (!res?.ok) throw new Error(data?.detail || "Could not update spoke config");
+        showToast(`${vidpid} added to ignore list for this spoke`, "ok");
       }
       // Remove the row from the DOM so the change is immediately visible.
       btn.closest("tr")?.remove();
@@ -11981,7 +12015,7 @@ function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
         tbody.closest(".setup-card")?.remove();
       }
     } catch (err) {
-      showNotification(`Error: ${err.message}`, "err");
+      showToast(`Error: ${err.message}`, "error");
       btn.disabled = false;
       btn.textContent = origText;
     }
@@ -11998,32 +12032,34 @@ function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
       saveBtn.textContent = "Saving…";
       if (saveMsg) saveMsg.textContent = "";
       try {
-        const autoProvision = panel.querySelector("#hvmusb-auto-provision")?.checked ? "on" : "off";
-        const simPhy        = panel.querySelector("#hvmusb-sim-phy")?.value || "wireless";
+        const autoProvision  = panel.querySelector("#hvmusb-auto-provision")?.checked ? "on" : "off";
+        const simPhy         = panel.querySelector("#hvmusb-sim-phy")?.value || "wireless";
         const missingTimeout = String(parseInt(panel.querySelector("#hvmusb-missing-timeout")?.value || "60", 10) || 60);
         const maxSlots       = String(parseInt(panel.querySelector("#hvmusb-max-slots")?.value || "24", 10) || 24);
         const concurrency    = String(parseInt(panel.querySelector("#hvmusb-concurrency")?.value || "1", 10) || 1);
 
-        await requestJson(`/api/${tenantId}/spokes/${spokeId}/config`, {
+        // apiFetch automatically adds the Authorization header and JSON-encodes plain objects.
+        const res  = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/config`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+          body: {
             usb_auto_provision:  autoProvision,
             usb_sim_phy:         simPhy,
             usb_missing_timeout: missingTimeout,
             usb_max_slots:       maxSlots,
             reclone_concurrency: concurrency,
-          }),
+          },
         });
+        const data = await readJson(res);
+        if (!res?.ok) throw new Error(data?.detail || "Save failed");
         if (saveMsg) saveMsg.textContent = "✓ Saved — changes queued for spoke delivery";
-        saveMsg?.style && (saveMsg.style.color = "var(--accent-green)");
-        showNotification("USB settings saved and queued for spoke delivery", "ok");
+        if (saveMsg?.style) saveMsg.style.color = "var(--accent-green)";
+        showToast("USB settings saved and queued for spoke delivery", "ok");
       } catch (err) {
         if (saveMsg) {
           saveMsg.textContent = `Error: ${err.message}`;
-          saveMsg.style && (saveMsg.style.color = "var(--text-danger)");
+          if (saveMsg.style) saveMsg.style.color = "var(--text-danger)";
         }
-        showNotification(`Error saving USB settings: ${err.message}`, "err");
+        showToast(`Error saving USB settings: ${err.message}`, "error");
       } finally {
         saveBtn.disabled = false;
         saveBtn.textContent = "Save Settings";

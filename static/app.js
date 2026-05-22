@@ -6399,6 +6399,58 @@ if (addVidPidBtn) {
   addVidPidBtn.addEventListener('click', addVidPid);
 }
 
+// ── Push USB Allowlist to All Spokes ─────────────────────────────────────────
+// Fetches all approved spokes for the current tenant and sends the hub's
+// usb_vidpids list to each one via the spoke config push API.
+// This makes the hub the authority for USB allowlist on every managed spoke.
+const pushUsbAllowlistBtn = document.getElementById('push-usb-allowlist-btn');
+if (pushUsbAllowlistBtn) {
+  pushUsbAllowlistBtn.addEventListener('click', async () => {
+    const msgEl = document.getElementById('push-usb-allowlist-msg');
+    const tenantId = currentTenantId;
+    if (!tenantId) {
+      if (msgEl) msgEl.textContent = 'No tenant selected.';
+      return;
+    }
+    // Collect the current allowlist from hub settings — this is what we will push.
+    const vidpids = currentSettings.usb_vidpids;
+    pushUsbAllowlistBtn.disabled = true;
+    if (msgEl) msgEl.textContent = 'Pushing…';
+    try {
+      // Fetch all spokes for this tenant so we can push to each approved one.
+      const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes`);
+      const data = await readJson(res);
+      if (!res || !res.ok) throw new Error(data?.detail || 'Unable to load spokes.');
+      const spokes = (data.spokes || data || []).filter((s) => s.status === 'approved');
+      if (!spokes.length) {
+        if (msgEl) msgEl.textContent = 'No approved spokes found.';
+        return;
+      }
+      // Push usb_vidpids to each approved spoke sequentially; collect any errors.
+      const errors = [];
+      for (const spoke of spokes) {
+        try {
+          await pushSpokeConfig(tenantId, spoke.id, { usb_vidpids: vidpids });
+        } catch (err) {
+          errors.push(`${spoke.name || spoke.id}: ${err.message}`);
+        }
+      }
+      if (errors.length) {
+        if (msgEl) msgEl.textContent = `Pushed with errors: ${errors.join('; ')}`;
+      } else {
+        if (msgEl) msgEl.textContent = `✓ Pushed to ${spokes.length} spoke${spokes.length !== 1 ? 's' : ''}`;
+        // Clear the success message after 4 seconds so the UI doesn't feel stale.
+        setTimeout(() => { if (msgEl) msgEl.textContent = ''; }, 4000);
+      }
+    } catch (err) {
+      if (msgEl) msgEl.textContent = `Error: ${err.message}`;
+    } finally {
+      // Always re-enable the button so the user can retry if something failed.
+      pushUsbAllowlistBtn.disabled = false;
+    }
+  });
+}
+
 if (addIgnoredHostnameBtn) {
   addIgnoredHostnameBtn.addEventListener('click', async () => {
     const hostname = (newIgnoredHostnameInput?.value || '').trim();

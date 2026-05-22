@@ -11351,9 +11351,12 @@ function renderHubVmServerDetail(container, host) {
   const simVms = qemuVms.filter(v => Number(v.vmid) > 90000);
   const otherVms = qemuVms.filter(v => !simVms.includes(v));
 
+  // Use the physically-present dongle count for the USB badge, falling back to
+  // usb_devices (usb_state) length when present_usb is not yet available.
+  const presentUsbCount = Array.isArray(px.present_usb) ? px.present_usb.length : usb.length;
   const subtabs = [
     { id: "vms",      label: `VMs <span class="badge-count">${vms.length}</span>` },
-    { id: "usb",      label: `USB (T2) <span class="badge-count">${usb.length}</span>` },
+    { id: "usb",      label: `USB (T2) <span class="badge-count">${presentUsbCount}</span>` },
     { id: "iot",      label: `IoT (T3) <span class="badge-count">${otherVms.length}</span>` },
     { id: "vh",       label: "VirtualHere" },
     { id: "commands", label: "Command Queue" },
@@ -11402,7 +11405,9 @@ function renderHubVmServerSubpanel({ tenantId, spokeId, simVms, otherVms, contai
     panel.innerHTML = renderHubVmServerVmsPanel(spokeId, { simVms, otherVms, containerVms, templateVms, reclone, px, host });
     wireHubVmsPanelActions(panel, tenantId, spokeId);
   } else if (subtab === "usb") {
-    panel.innerHTML = renderHubVmServerUsbPanel(usb);
+    // Pass the full context so the USB panel can access proxmox state and spoke config.
+    panel.innerHTML = renderHubVmServerUsbPanel(host);
+    wireHubVmServerUsbPanel(panel, tenantId, spokeId, host);
   } else if (subtab === "iot") {
     panel.innerHTML = renderHubVmServerIoTPanel(spokeId, otherVms);
     wireHubVmPerRowActions(panel, tenantId, spokeId);
@@ -11708,28 +11713,336 @@ async function openHubVmConsole(tenantId, spokeId, vmid, vmtype = "qemu") {
 
 // ── USB (T2) tab ─────────────────────────────────────────────────────────────
 
-function renderHubVmServerUsbPanel(usb) {
-  if (!usb.length) {
-    return '<div class="setup-card"><div class="empty-state" style="padding:32px;">No USB devices assigned.</div></div>';
-  }
-  return `
-    <div class="setup-card setup-section-gap">
-      <div class="setup-card-header"><h2>USB Devices</h2></div>
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead><tr><th>VMID</th><th>Device</th><th>VID:PID</th><th>Bus Path</th><th>Status</th></tr></thead>
-          <tbody>
-            ${usb.map(d => `<tr>
-              <td>${escHtml(String(d.vmid ?? "—"))}</td>
-              <td>${escHtml(d.product || d.description || "USB Device")}</td>
-              <td>${escHtml(d.vidpid || "—")}</td>
-              <td>${escHtml(d.bus_path || d.path || "—")}</td>
-              <td>${escHtml(d.prov_status || d.state || "—")}</td>
-            </tr>`).join("")}
-          </tbody>
-        </table>
+function renderHubVmServerUsbPanel(host) {
+  // ── Extract all USB-related data from the host/proxmox payload ──────────────
+  // The proxmox object carries the full spoke Proxmox telemetry relayed to the hub.
+  const px = host.proxmox || {};
+  const cfg = host.spoke_config || {};
+
+  // Certified devices come from the spoke config stored on the hub.
+  const certified = parseJsonList(cfg.usb_vidpids || "[]");
+  // Raw USB state from the spoke — one entry per dongle↔VM assignment.
+  const usbState = Array.isArray(px.usb_state) ? px.usb_state : [];
+  // Physically-present dongles reported by the Proxmox agent.
+  const presentUsb = Array.isArray(px.present_usb) ? px.present_usb : [];
+  // Unknown (uncertified) devices detected on the spoke.
+  const certifiedSet = new Set(certified.map(d => String(d?.vidpid || "").toLowerCase()).filter(Boolean));
+  const ignoredSet  = new Set(parseJsonList(cfg.usb_ignored_vidpids || "[]").map(v => String(v || "").toLowerCase()).filter(Boolean));
+  const unknownUsb  = (Array.isArray(px.unknown_usb) ? px.unknown_usb : [])
+    .filter(d => {
+      const v = String(d.vidpid || "").toLowerCase().trim();
+      return v && !certifiedSet.has(v) && !ignoredSet.has(v);
+    });
+  // Set of bus paths that are currently physically present — used to detect missing dongles.
+  const presentBusSet = new Set(presentUsb.map(p => String(p?.bus_path || "").trim()).filter(Boolean));
+  // All VMs for name lookups.
+  const allVms = Array.isArray(px.vms) ? px.vms : [];
+  const vmMap  = new Map(allVms.map(v => [Number(v.vmid), v]));
+  // Missing dongle timeout from spoke config (in minutes → convert to seconds for countdowns).
+  const missingTimeoutSecs = (parseInt(cfg.usb_missing_timeout || "60", 10) || 60) * 60;
+
+  // ── Stat pills ──────────────────────────────────────────────────────────────
+  // Collect VMIDs whose dongles are missing (being torn down) so they're excluded
+  // from the running count — the number reflects active, stable sim clients.
+  const missingVmids = new Set(
+    usbState
+      .filter(item => item.missing_since && !presentBusSet.has(String(item?.bus_path || "").trim()))
+      .map(item => Number(item.vmid))
+      .filter(Boolean)
+  );
+  const runningVms = allVms.filter(v => v.status === "running" && !v.is_template && !missingVmids.has(Number(v.vmid)));
+  const simRunning = runningVms.filter(v => v.name && v.name.startsWith("client-sim-")).length;
+  const pillHtml = [
+    `<span class="server-stat-pill" title="Running VMs with dongles present">🟢 ${runningVms.length} running VM${runningVms.length !== 1 ? "s" : ""}</span>`,
+    simRunning > 0 ? `<span class="server-stat-pill">${simRunning} sim client${simRunning !== 1 ? "s" : ""}</span>` : "",
+    `<span class="server-stat-pill">🔌 ${presentUsb.length} dongle${presentUsb.length !== 1 ? "s" : ""} present</span>`,
+  ].filter(Boolean).join("");
+
+  // ── Certified devices summary table ────────────────────────────────────────
+  // Each row shows the per-VID:PID summary: which VMs have it, which are missing,
+  // how many are available (present but not assigned).
+  const certRows = certified.map(device => {
+    const vidLower = String(device.vidpid || "").toLowerCase();
+    const entries        = usbState.filter(item => (item.vidpid || "").toLowerCase() === vidLower);
+    const missingEntries = entries.filter(item => item.missing_since && !presentBusSet.has(String(item?.bus_path || "").trim()));
+    const activeEntries  = entries.filter(item => !missingEntries.includes(item));
+    const total          = presentUsb.filter(p => (p.vidpid || "").toLowerCase() === vidLower).length;
+    const available      = Math.max(0, total - activeEntries.length);
+
+    // "Active VMs" cell: list of VMs using this dongle with status dots.
+    const activeVmHtml = activeEntries.length === 0
+      ? "—"
+      : activeEntries.map(e => {
+          const vm   = vmMap.get(Number(e.vmid));
+          const name = escHtml(vm?.name || `VM ${e.vmid}`);
+          const dot  = vm?.status === "running" ? "🟢" : "⚫";
+          return `<div style="white-space:nowrap">${dot} ${name}</div>`;
+        }).join("");
+
+    // "Missing" cell: VMs whose dongle has been removed with a countdown to destruction.
+    const missingHtml = missingEntries.length === 0
+      ? "—"
+      : `<div class="usb-missing-list">${missingEntries.map(item => {
+            const mvm   = vmMap.get(Number(item.vmid));
+            const mname = escHtml(mvm?.name || `VM ${item.vmid}`);
+            return `<div class="usb-missing-item">🔴 ${mname} · <span data-missing-until="${Number(item.missing_since) + missingTimeoutSecs}"></span></div>`;
+          }).join("")}</div>`;
+
+    // Show hardware-detected name as a secondary line under the VID:PID.
+    const hwName   = entries.find(e => e.name)?.name
+                  || presentUsb.find(p => (p.vidpid || "").toLowerCase() === vidLower)?.name
+                  || "";
+    const vidHtml  = hwName
+      ? `${escHtml(device.vidpid || "—")}<div class="muted" style="font-size:0.78rem;margin-top:2px;">${escHtml(hwName)}</div>`
+      : escHtml(device.vidpid || "—");
+
+    return `<tr>
+      <td>${escHtml(device.label || device.vidpid || "—")}</td>
+      <td>${vidHtml}</td>
+      <td class="usb-type-${device.type || "wireless"}">${escHtml(device.type || "wireless")}</td>
+      <td>${activeVmHtml}</td>
+      <td>${missingHtml}</td>
+      <td>${available > 0 ? `<span class="badge badge-green">${available}</span>` : '<span class="muted">—</span>'}</td>
+      <td>${total}</td>
+    </tr>`;
+  }).join("");
+
+  // ── Unknown / uncertified devices section ──────────────────────────────────
+  const unknownRows = unknownUsb.map(device => {
+    const vid       = escHtml(device.vidpid || "");
+    const nameLabel = escHtml(device.name || device.bus_path || "Unknown device");
+    return `<tr>
+      <td>${nameLabel}</td>
+      <td>${vid || "—"}</td>
+      <td class="usb-actions">
+        <button type="button" class="btn btn-primary btn-small"
+                data-hvmusb-action="certify" data-vidpid="${vid}" data-name="${nameLabel}">
+          Add to certified
+        </button>
+        <button type="button" class="btn btn-secondary btn-small"
+                data-hvmusb-action="ignore" data-vidpid="${vid}">
+          Ignore
+        </button>
+      </td>
+    </tr>`;
+  }).join("");
+
+  const unknownSection = unknownUsb.length === 0 ? "" : `
+    <div class="setup-card setup-section-gap" style="margin-top:12px;">
+      <div class="setup-card-header" style="padding:0 0 8px;">
+        <h3>⚠️ Uncertified Devices Detected</h3>
+        <p>These USB devices are connected on this spoke but not in the certified list.
+           Adding to certified updates the tenant-wide list and queues a push to all spokes.</p>
+      </div>
+      <table class="data-table">
+        <colgroup><col><col style="width:105px"><col style="width:300px"></colgroup>
+        <thead><tr><th>Device</th><th>VID:PID</th><th>Actions</th></tr></thead>
+        <tbody id="hub-usb-unknown-tbody">${unknownRows}</tbody>
+      </table>
+    </div>`;
+
+  // ── Auto-provisioning settings ──────────────────────────────────────────────
+  // The spoke's USB auto-provisioning config is displayed as an editable form.
+  // Changes are pushed directly to the spoke via the hub config-push API
+  // (POST /{tenant_id}/spokes/{spoke_id}/config).
+  const autoProvOn  = ["on", "true", "1", "enabled"].includes(String(cfg.usb_auto_provision || "off").toLowerCase());
+  const simPhyVal   = cfg.usb_sim_phy || "wireless";
+  const phyOptions  = ["wireless", "ethernet", "any"].map(v =>
+    `<option value="${v}"${v === simPhyVal ? " selected" : ""}>${v.charAt(0).toUpperCase() + v.slice(1)}</option>`
+  ).join("");
+
+  const settingsSection = `
+    <div class="setup-card setup-section-gap" style="margin-top:12px;">
+      <div class="setup-card-header">
+        <h2>USB Auto-Provisioning</h2>
+        <p>Configure this spoke's USB provisioning behavior. Changes are queued for delivery the next time the spoke checks in.</p>
+      </div>
+      <div class="setup-form">
+        <div class="settings-section">
+          <div class="settings-section-title">Provisioning Behavior</div>
+          <div class="toggle-grid">
+            <label class="toggle-label">
+              <input type="checkbox" id="hvmusb-auto-provision"${autoProvOn ? " checked" : ""}>
+              <span>Auto-Provision VMs</span>
+            </label>
+          </div>
+          <div class="form-row" style="margin-top:12px;">
+            <div class="form-group">
+              <label class="form-label" for="hvmusb-sim-phy">Preferred Dongle Type</label>
+              <select id="hvmusb-sim-phy" class="form-input">${phyOptions}</select>
+              <span class="form-hint">Preferred dongle type for auto-provisioning.</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="hvmusb-missing-timeout">Destroy after missing (minutes)</label>
+              <input id="hvmusb-missing-timeout" class="form-input" type="number"
+                     value="${escHtml(cfg.usb_missing_timeout || "60")}" min="1" placeholder="60">
+              <span class="form-hint">How long a dongle can be absent before its VM is destroyed.</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="hvmusb-max-slots">Max USB slots</label>
+              <input id="hvmusb-max-slots" class="form-input" type="number"
+                     value="${escHtml(cfg.usb_max_slots || "24")}" min="1" max="256" placeholder="24">
+              <span class="form-hint">Maximum number of concurrent USB-provisioned VMs.</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="hvmusb-concurrency">Max parallel reclones</label>
+              <input id="hvmusb-concurrency" class="form-input" type="number"
+                     value="${escHtml(cfg.reclone_concurrency || "1")}" min="1" max="20" placeholder="1">
+              <span class="form-hint">VMs to reclone or provision simultaneously.</span>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:8px;">
+          <button type="button" class="btn btn-primary" id="hvmusb-save-btn">Save Settings</button>
+          <span id="hvmusb-save-msg" style="margin-left:12px;font-size:0.85rem;color:var(--muted);"></span>
+        </div>
       </div>
     </div>`;
+
+  // ── Assemble final HTML ─────────────────────────────────────────────────────
+  return `
+    <div class="setup-card setup-section-gap">
+      <div class="setup-card-header">
+        <h2>USB Devices</h2>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">${pillHtml}</div>
+      </div>
+      ${certified.length === 0 && usbState.length === 0 && presentUsb.length === 0
+        ? '<div class="empty-state" style="padding:24px;">No certified USB devices configured for this spoke.</div>'
+        : `<div class="table-scroll">
+            <table class="data-table">
+              <colgroup>
+                <col><!-- Device: flexible -->
+                <col style="width:115px"><!-- VID:PID -->
+                <col style="width:90px"><!-- Type -->
+                <col style="width:200px"><!-- Active VMs -->
+                <col style="width:200px"><!-- Missing -->
+                <col style="width:90px"><!-- Available -->
+                <col style="width:65px"><!-- Count -->
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>Device</th><th>VID:PID</th><th>Type</th>
+                  <th title="VMs with this USB device actively assigned">Active VMs</th>
+                  <th>Missing Dongle</th><th>Available</th><th>Count</th>
+                </tr>
+              </thead>
+              <tbody>${certRows || '<tr><td colspan="7" class="empty-state">No certified devices configured.</td></tr>'}</tbody>
+            </table>
+           </div>`}
+    </div>
+    ${unknownSection}
+    ${settingsSection}`;
+}
+
+// Wire action handlers for the hub VM-server USB tab panel.
+// Handles: certify/ignore buttons on uncertified devices, and the save button
+// for the auto-provisioning settings form.
+function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
+  // ── Certify / Ignore buttons on unknown USB devices ─────────────────────────
+  // "Add to certified" uses the same tenant-wide flow as the global hub USB list:
+  // addUnknownToCertified() updates usb_vidpids in currentSettings, saves to hub,
+  // then the hub pushes the updated list to all spokes (including this one).
+  // "Ignore" adds the VID:PID only to this spoke's usb_ignored_vidpids list via
+  // the per-spoke config-push API.
+  panel.addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-hvmusb-action]");
+    if (!btn) return;
+    const action = btn.dataset.hvmusbAction;
+    const vidpid = btn.dataset.vidpid;
+    const name   = btn.dataset.name || vidpid;
+    if (!vidpid) return;
+
+    btn.disabled = true;
+    const origText = btn.textContent;
+    btn.textContent = "…";
+
+    try {
+      if (action === "certify") {
+        // Add to the tenant-wide certified list (pushes to all spokes).
+        await addUnknownToCertified(vidpid, name);
+      } else if (action === "ignore") {
+        // Add to this spoke's ignored list only.
+        const cfg = host.spoke_config || {};
+        const current = parseJsonList(cfg.usb_ignored_vidpids || "[]");
+        if (!current.some(v => String(v || "").toLowerCase() === String(vidpid || "").toLowerCase())) {
+          current.push(vidpid.toLowerCase());
+        }
+        await requestJson(`/api/${tenantId}/spokes/${spokeId}/config`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ usb_ignored_vidpids: JSON.stringify(current) }),
+        });
+        showNotification(`${vidpid} added to ignore list for this spoke`, "ok");
+      }
+      // Remove the row from the DOM so the change is immediately visible.
+      btn.closest("tr")?.remove();
+      const tbody = document.getElementById("hub-usb-unknown-tbody");
+      if (tbody && !tbody.childElementCount) {
+        tbody.closest(".setup-card")?.remove();
+      }
+    } catch (err) {
+      showNotification(`Error: ${err.message}`, "err");
+      btn.disabled = false;
+      btn.textContent = origText;
+    }
+  });
+
+  // ── Auto-provisioning settings save ─────────────────────────────────────────
+  // Collects all editable USB settings and pushes them to the spoke via the
+  // hub's config-push endpoint (POST /{tenant_id}/spokes/{spoke_id}/config).
+  const saveBtn = panel.querySelector("#hvmusb-save-btn");
+  const saveMsg = panel.querySelector("#hvmusb-save-msg");
+  if (saveBtn) {
+    saveBtn.addEventListener("click", async () => {
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Saving…";
+      if (saveMsg) saveMsg.textContent = "";
+      try {
+        const autoProvision = panel.querySelector("#hvmusb-auto-provision")?.checked ? "on" : "off";
+        const simPhy        = panel.querySelector("#hvmusb-sim-phy")?.value || "wireless";
+        const missingTimeout = String(parseInt(panel.querySelector("#hvmusb-missing-timeout")?.value || "60", 10) || 60);
+        const maxSlots       = String(parseInt(panel.querySelector("#hvmusb-max-slots")?.value || "24", 10) || 24);
+        const concurrency    = String(parseInt(panel.querySelector("#hvmusb-concurrency")?.value || "1", 10) || 1);
+
+        await requestJson(`/api/${tenantId}/spokes/${spokeId}/config`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            usb_auto_provision:  autoProvision,
+            usb_sim_phy:         simPhy,
+            usb_missing_timeout: missingTimeout,
+            usb_max_slots:       maxSlots,
+            reclone_concurrency: concurrency,
+          }),
+        });
+        if (saveMsg) saveMsg.textContent = "✓ Saved — changes queued for spoke delivery";
+        saveMsg?.style && (saveMsg.style.color = "var(--accent-green)");
+        showNotification("USB settings saved and queued for spoke delivery", "ok");
+      } catch (err) {
+        if (saveMsg) {
+          saveMsg.textContent = `Error: ${err.message}`;
+          saveMsg.style && (saveMsg.style.color = "var(--text-danger)");
+        }
+        showNotification(`Error saving USB settings: ${err.message}`, "err");
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Save Settings";
+      }
+    });
+  }
+
+  // ── Missing dongle countdown timers ─────────────────────────────────────────
+  // Update all [data-missing-until] spans every second while the panel is visible.
+  function tickCountdowns() {
+    panel.querySelectorAll("[data-missing-until]").forEach(node => {
+      const until     = Number(node.dataset.missingUntil || 0) * 1000;
+      const remaining = Math.max(0, Math.floor((until - Date.now()) / 1000));
+      node.textContent = remaining > 0 ? `${Math.ceil(remaining / 60)}m remaining` : "Ready to destroy";
+    });
+  }
+  tickCountdowns();
+  // Store the interval on the panel element so it can be cleared if the panel is torn down.
+  panel._usbCountdownTimer = window.setInterval(tickCountdowns, 1000);
 }
 
 // ── IoT (T3) tab ─────────────────────────────────────────────────────────────

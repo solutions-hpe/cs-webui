@@ -2034,7 +2034,7 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 }
 
 #hub-login-overlay {
-  background: var(--hpe-navy-dark);
+  background: #ffffff;
 }
 
 #spoke-login-overlay {

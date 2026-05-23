@@ -15606,7 +15606,7 @@ function bindEvents() {
     if (saButton) {
       const subtab = saButton.dataset.subtab;
       $$(".sa-subtab").forEach(button => button.classList.toggle("active", button.dataset.subtab === subtab));
-      ["sa-pending", "sa-tenants", "sa-users", "sa-security", "sa-gkill"].forEach(panelId => {
+      ["sa-pending", "sa-tenants", "sa-users", "sa-security", "sa-gkill", "sa-global-usb"].forEach(panelId => {
         document.getElementById(panelId)?.classList.toggle("hidden", panelId !== subtab);
       });
       if (subtab === "sa-security") loadHubAuthConfig().catch(() => {});

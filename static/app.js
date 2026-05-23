@@ -14691,7 +14691,108 @@ async function loadSuperadmin() {
     hubAuthConfigLoaded = false;
   }
   loadGkillState();
+  loadGlobalUsbVidpids();
 }
+
+// ── Global USB certified devices (superadmin) ────────────────────────────────
+
+async function loadGlobalUsbVidpids() {
+  const tbody = $("#sa-global-usb-tbody");
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="4" class="empty-state">Loading…</td></tr>';
+  const res  = await apiFetch("/api/superadmin/global-usb-vidpids");
+  if (!res?.ok) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">Failed to load.</td></tr>';
+    return;
+  }
+  const data = await readJson(res);
+  renderGlobalUsbVidpids(Array.isArray(data?.usb_vidpids) ? data.usb_vidpids : []);
+}
+
+function renderGlobalUsbVidpids(devices) {
+  const tbody = $("#sa-global-usb-tbody");
+  if (!tbody) return;
+  if (!devices.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No globally certified devices.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = devices.map(d => `
+    <tr data-vidpid="${escHtml(d.vidpid || '')}">
+      <td>${escHtml(d.label || d.vidpid || "—")}</td>
+      <td><code>${escHtml(d.vidpid || "—")}</code></td>
+      <td>${escHtml(d.type || "wireless")}</td>
+      <td>
+        <button class="btn btn-danger btn-small" data-sa-usb-remove="${escHtml(d.vidpid || '')}" type="button">Remove</button>
+      </td>
+    </tr>`).join("");
+}
+
+// Wire global USB add/remove — called once after DOM ready.
+(function wireGlobalUsb() {
+  // Add button
+  document.addEventListener("click", async (e) => {
+    if (e.target.id === "sa-usb-add-btn") {
+      const vidpid = ($("#sa-usb-vidpid")?.value || "").trim().toLowerCase();
+      const label  = ($("#sa-usb-label")?.value || "").trim();
+      const type   = $("#sa-usb-type")?.value || "wireless";
+      const msg    = $("#sa-usb-msg");
+      if (!vidpid) { if (msg) { msg.textContent = "VID:PID is required."; msg.style.color = "var(--text-danger)"; } return; }
+      if (!/^[0-9a-f]{4}:[0-9a-f]{4}$/.test(vidpid)) {
+        if (msg) { msg.textContent = "Format must be xxxx:xxxx (hex)."; msg.style.color = "var(--text-danger)"; } return;
+      }
+      e.target.disabled = true;
+      e.target.textContent = "Saving…";
+      if (msg) msg.textContent = "";
+      try {
+        // Fetch current list, append/replace, PUT back.
+        const getRes  = await apiFetch("/api/superadmin/global-usb-vidpids");
+        const getData = await readJson(getRes);
+        if (!getRes?.ok) throw new Error(getData?.detail || "Could not read global USB list");
+        const current = Array.isArray(getData.usb_vidpids) ? getData.usb_vidpids : [];
+        const updated = current.filter(d => d.vidpid !== vidpid);
+        updated.push({ vidpid, label: label || vidpid, type });
+        const putRes  = await apiFetch("/api/superadmin/global-usb-vidpids", {
+          method: "PUT", body: { usb_vidpids: updated },
+        });
+        const putData = await readJson(putRes);
+        if (!putRes?.ok) throw new Error(putData?.detail || "Save failed");
+        renderGlobalUsbVidpids(updated);
+        if ($("#sa-usb-vidpid")) $("#sa-usb-vidpid").value = "";
+        if ($("#sa-usb-label")) $("#sa-usb-label").value = "";
+        if (msg) { msg.textContent = `✓ ${vidpid} added (pushed to ${putData.pushed_to_spokes ?? 0} spokes)`; msg.style.color = "var(--accent-green)"; }
+      } catch (err) {
+        if (msg) { msg.textContent = `Error: ${err.message}`; msg.style.color = "var(--text-danger)"; }
+      } finally {
+        e.target.disabled = false;
+        e.target.textContent = "Add to Global List";
+      }
+    }
+
+    // Remove button
+    const removeVidpid = e.target.dataset?.saUsbRemove;
+    if (removeVidpid !== undefined) {
+      e.target.disabled = true;
+      e.target.textContent = "…";
+      try {
+        const getRes  = await apiFetch("/api/superadmin/global-usb-vidpids");
+        const getData = await readJson(getRes);
+        if (!getRes?.ok) throw new Error(getData?.detail || "Could not read global USB list");
+        const updated = (getData.usb_vidpids || []).filter(d => d.vidpid !== removeVidpid);
+        const putRes  = await apiFetch("/api/superadmin/global-usb-vidpids", {
+          method: "PUT", body: { usb_vidpids: updated },
+        });
+        const putData = await readJson(putRes);
+        if (!putRes?.ok) throw new Error(putData?.detail || "Remove failed");
+        renderGlobalUsbVidpids(updated);
+        showToast(`${removeVidpid} removed from global certified list`, "ok");
+      } catch (err) {
+        showToast(`Error: ${err.message}`, "error");
+        e.target.disabled = false;
+        e.target.textContent = "Remove";
+      }
+    }
+  });
+})();
 
 function renderPendingSpokes(items) {
   $("#sa-pending-count") && ($("#sa-pending-count").textContent = String(items.length));

@@ -11805,6 +11805,17 @@ function renderHubVmServerUsbPanel(host) {
       ? `${escHtml(device.vidpid || "—")}<div class="muted" style="font-size:0.78rem;margin-top:2px;">${escHtml(hwName)}</div>`
       : escHtml(device.vidpid || "—");
 
+    // Source badge: global devices are locked (managed by superadmin); tenant devices can be removed.
+    const isGlobal  = device.source === "global";
+    const sourceBadge = isGlobal
+      ? `<span class="badge badge-blue" title="Globally certified by superadmin — applies to all tenants">🌐 global</span>`
+      : `<span class="badge badge-grey" title="Certified by tenant admin">tenant</span>`;
+    const removeBtn = isGlobal
+      ? ""
+      : `<button type="button" class="btn btn-danger btn-small" style="margin-left:4px;"
+               data-hvmusb-action="decertify" data-vidpid="${escHtml(device.vidpid || '')}"
+               title="Remove from tenant certified list">Remove</button>`;
+
     return `<tr>
       <td>${escHtml(device.label || device.vidpid || "—")}</td>
       <td>${vidHtml}</td>
@@ -11813,6 +11824,7 @@ function renderHubVmServerUsbPanel(host) {
       <td>${missingHtml}</td>
       <td>${available > 0 ? `<span class="badge badge-green">${available}</span>` : '<span class="muted">—</span>'}</td>
       <td>${total}</td>
+      <td>${sourceBadge}${removeBtn}</td>
     </tr>`;
   }).join("");
 
@@ -11927,15 +11939,17 @@ function renderHubVmServerUsbPanel(host) {
                 <col style="width:200px"><!-- Missing -->
                 <col style="width:90px"><!-- Available -->
                 <col style="width:65px"><!-- Count -->
+                <col style="width:130px"><!-- Source/Actions -->
               </colgroup>
               <thead>
                 <tr>
                   <th>Device</th><th>VID:PID</th><th>Type</th>
                   <th title="VMs with this USB device actively assigned">Active VMs</th>
                   <th>Missing Dongle</th><th>Available</th><th>Count</th>
+                  <th>Source</th>
                 </tr>
               </thead>
-              <tbody>${certRows || '<tr><td colspan="7" class="empty-state">No certified devices configured.</td></tr>'}</tbody>
+              <tbody>${certRows || '<tr><td colspan="8" class="empty-state">No certified devices configured.</td></tr>'}</tbody>
             </table>
            </div>`}
     </div>
@@ -11953,12 +11967,75 @@ function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
     try { const p = JSON.parse(val || '[]'); return Array.isArray(p) ? p : []; } catch { return []; }
   }
 
-  // ── Certify / Ignore buttons on unknown USB devices ─────────────────────────
-  // "Certify" fetches the current tenant hub-config, appends the new VID:PID to
-  // usb_vidpids, then PUTs the updated config back — the hub queues a push to all
-  // spokes automatically.
-  // "Ignore" adds the VID:PID only to this spoke's usb_ignored_vidpids list via
-  // the per-spoke config-push API (POST /{tenant_id}/spokes/{spoke_id}/config).
+  // ── Fetch annotated certified list (includes source='global'/'tenant') ───────
+  // The spoke_config only carries the merged list without source annotations.
+  // We fetch from the tenant endpoint on mount so source badges are accurate.
+  (async () => {
+    try {
+      const res  = await apiFetch(`/api/${encodeURIComponent(tenantId)}/usb-vidpids`);
+      if (!res?.ok) return;
+      const data = await readJson(res);
+      const annotated = Array.isArray(data?.usb_vidpids) ? data.usb_vidpids : [];
+      // Re-render just the certified devices tbody rows using the annotated list.
+      const tbody = panel.querySelector("table tbody");
+      if (!tbody || !annotated.length) return;
+      // Re-render rows in place — the original render already laid out the structure.
+      const cfg = host.spoke_config || {};
+      const usbState    = Array.isArray((host.proxmox || {}).usb_state) ? (host.proxmox || {}).usb_state : [];
+      const presentUsb  = Array.isArray((host.proxmox || {}).present_usb) ? (host.proxmox || {}).present_usb : [];
+      const allVms      = Array.isArray((host.proxmox || {}).vms) ? (host.proxmox || {}).vms : [];
+      const vmMap       = new Map(allVms.map(v => [Number(v.vmid), v]));
+      const presentBusSet   = new Set(presentUsb.map(p => String(p?.bus_path || "").trim()).filter(Boolean));
+      const missingVmids    = new Set(usbState.filter(i => i.missing_since && !presentBusSet.has(String(i?.bus_path || "").trim())).map(i => Number(i.vmid)).filter(Boolean));
+      const missingTimeout  = (parseInt(cfg.usb_missing_timeout || "60", 10) || 60) * 60;
+
+      tbody.innerHTML = annotated.map(device => {
+        const vidLower = String(device.vidpid || "").toLowerCase();
+        const entries        = usbState.filter(i => (i.vidpid || "").toLowerCase() === vidLower);
+        const missingEntries = entries.filter(i => i.missing_since && !presentBusSet.has(String(i?.bus_path || "").trim()));
+        const activeEntries  = entries.filter(i => !missingEntries.includes(i));
+        const total          = presentUsb.filter(p => (p.vidpid || "").toLowerCase() === vidLower).length;
+        const available      = Math.max(0, total - activeEntries.length);
+        const hwName         = entries.find(e => e.name)?.name || presentUsb.find(p => (p.vidpid || "").toLowerCase() === vidLower)?.name || "";
+        const vidHtml        = hwName
+          ? `${escHtml(device.vidpid || "—")}<div class="muted" style="font-size:0.78rem;margin-top:2px;">${escHtml(hwName)}</div>`
+          : escHtml(device.vidpid || "—");
+        const activeVmHtml = activeEntries.length === 0 ? "—"
+          : activeEntries.map(e => {
+              const vm = vmMap.get(Number(e.vmid));
+              return `<div style="white-space:nowrap">${vm?.status === "running" ? "🟢" : "⚫"} ${escHtml(vm?.name || `VM ${e.vmid}`)}</div>`;
+            }).join("");
+        const missingHtml = missingEntries.length === 0 ? "—"
+          : `<div class="usb-missing-list">${missingEntries.map(i => {
+                const mvm = vmMap.get(Number(i.vmid));
+                return `<div class="usb-missing-item">🔴 ${escHtml(mvm?.name || `VM ${i.vmid}`)} · <span data-missing-until="${Number(i.missing_since) + missingTimeout}"></span></div>`;
+              }).join("")}</div>`;
+        const isGlobal    = device.source === "global";
+        const sourceBadge = isGlobal
+          ? `<span class="badge badge-blue" title="Globally certified by superadmin">🌐 global</span>`
+          : `<span class="badge badge-grey" title="Certified by tenant admin">tenant</span>`;
+        const removeBtn = isGlobal ? ""
+          : `<button type="button" class="btn btn-danger btn-small" style="margin-left:4px;"
+                     data-hvmusb-action="decertify" data-vidpid="${escHtml(device.vidpid || '')}"
+                     title="Remove from tenant certified list">Remove</button>`;
+        return `<tr>
+          <td>${escHtml(device.label || device.vidpid || "—")}</td>
+          <td>${vidHtml}</td>
+          <td class="usb-type-${device.type || "wireless"}">${escHtml(device.type || "wireless")}</td>
+          <td>${activeVmHtml}</td>
+          <td>${missingHtml}</td>
+          <td>${available > 0 ? `<span class="badge badge-green">${available}</span>` : '<span class="muted">—</span>'}</td>
+          <td>${total}</td>
+          <td>${sourceBadge}${removeBtn}</td>
+        </tr>`;
+      }).join("") || `<tr><td colspan="8" class="empty-state">No certified devices configured.</td></tr>`;
+    } catch (_) { /* non-fatal: original render already shows unadorned rows */ }
+  })();
+
+  // ── Certify / Ignore / Decertify buttons ─────────────────────────────────────
+  // "Certify"   — POST /{tenant_id}/usb-vidpids  (tenant admin, no superadmin required)
+  // "Ignore"    — POST /{tenant_id}/spokes/{spoke_id}/config (spoke-local ignore list)
+  // "Decertify" — DELETE /{tenant_id}/usb-vidpids/{vidpid} (tenant admin)
   panel.addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-hvmusb-action]");
     if (!btn) return;
@@ -11973,26 +12050,18 @@ function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
 
     try {
       if (action === "certify") {
-        // Fetch current hub config so we can append to usb_vidpids without clobbering other fields.
-        const cfgRes  = await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/hub-config`);
-        const cfgData = await readJson(cfgRes);
-        if (!cfgRes?.ok) throw new Error(cfgData?.detail || "Could not read hub config");
-
-        const hubCfg  = cfgData.hub_config || {};
-        // Parse the existing certified list (may be array or JSON string).
-        const devices = _parseList(hubCfg.usb_vidpids || "[]").filter(
-          d => String(d?.vidpid || "").toLowerCase() !== String(vidpid || "").toLowerCase()
-        );
-        devices.push({ vidpid: vidpid.toLowerCase(), type: "wireless", label: name || vidpid });
-        devices.sort((a, b) => String(a.vidpid).localeCompare(String(b.vidpid)));
-
-        const putRes = await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/hub-config`, {
-          method: "PUT",
-          body: { hub_config_enabled: Boolean(cfgData.hub_config_enabled), hub_config: { ...hubCfg, usb_vidpids: devices } },
+        // POST to the tenant-level USB endpoint — does NOT require superadmin.
+        const res  = await apiFetch(`/api/${encodeURIComponent(tenantId)}/usb-vidpids`, {
+          method: "POST",
+          body: { vidpid: vidpid.toLowerCase(), type: "wireless", label: name || vidpid },
         });
-        const putData = await readJson(putRes);
-        if (!putRes?.ok) throw new Error(putData?.detail || "Could not update hub config");
-        showToast(`${name || vidpid} added to certified list and queued for all spokes`, "ok");
+        const data = await readJson(res);
+        if (!res?.ok) throw new Error(data?.detail || "Could not add to certified list");
+        if (data.status === "already_global") {
+          showToast(`${name || vidpid} is already globally certified`, "ok");
+        } else {
+          showToast(`${name || vidpid} added to certified list and queued for all spokes`, "ok");
+        }
       } else if (action === "ignore") {
         // Add to this spoke's ignored list only.
         const cfg     = host.spoke_config || {};
@@ -12007,6 +12076,15 @@ function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
         const data = await readJson(res);
         if (!res?.ok) throw new Error(data?.detail || "Could not update spoke config");
         showToast(`${vidpid} added to ignore list for this spoke`, "ok");
+      } else if (action === "decertify") {
+        // Remove from tenant certified list — does NOT require superadmin.
+        const encoded = encodeURIComponent(vidpid);
+        const res  = await apiFetch(`/api/${encodeURIComponent(tenantId)}/usb-vidpids/${encoded}`, {
+          method: "DELETE",
+        });
+        const data = await readJson(res);
+        if (!res?.ok) throw new Error(data?.detail || "Could not remove from certified list");
+        showToast(`${vidpid} removed from certified list and queued for all spokes`, "ok");
       }
       // Remove the row from the DOM so the change is immediately visible.
       btn.closest("tr")?.remove();

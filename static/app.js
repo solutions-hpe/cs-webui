@@ -14848,18 +14848,24 @@ let _globalDiscovered = [];
 
 async function loadGlobalUsbVidpids() {
   const tbody = $("#sa-global-usb-tbody");
+  const discSection = $("#sa-global-usb-discovered");
   if (!tbody) return;
   tbody.innerHTML = '<tr><td colspan="4" class="empty-state">Loading…</td></tr>';
-  // Fetch certified list and discovered list in parallel
-  const [certRes, discRes] = await Promise.all([
-    apiFetch("/api/superadmin/global-usb-vidpids"),
-    apiFetch("/api/superadmin/discovered-usb-vidpids"),
-  ]);
-  const certData = certRes?.ok ? await readJson(certRes) : null;
-  const discData = discRes?.ok ? await readJson(discRes) : null;
-  const certified   = Array.isArray(certData?.usb_vidpids) ? certData.usb_vidpids : [];
-  _globalDiscovered = Array.isArray(discData?.devices) ? discData.devices : [];
-  renderGlobalUsbVidpids(certified, _globalDiscovered);
+  if (discSection) discSection.innerHTML = '<p class="empty-state" style="padding:8px 0;">Loading…</p>';
+  try {
+    // Fetch certified list and discovered list in parallel
+    const [certRes, discRes] = await Promise.all([
+      apiFetch("/api/superadmin/global-usb-vidpids"),
+      apiFetch("/api/superadmin/discovered-usb-vidpids"),
+    ]);
+    const certData = certRes?.ok ? await readJson(certRes) : null;
+    const discData = discRes?.ok ? await readJson(discRes) : null;
+    const certified   = Array.isArray(certData?.usb_vidpids) ? certData.usb_vidpids : [];
+    _globalDiscovered = Array.isArray(discData?.devices) ? discData.devices : [];
+    renderGlobalUsbVidpids(certified, _globalDiscovered);
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="4" class="empty-state" style="color:var(--danger)">Error loading USB data: ${escHtml(String(err))}</td></tr>`;
+  }
 }
 
 function renderGlobalUsbVidpids(devices, discovered) {
@@ -15771,6 +15777,7 @@ function bindEvents() {
         document.getElementById(panelId)?.classList.toggle("hidden", panelId !== subtab);
       });
       if (subtab === "sa-security") loadHubAuthConfig().catch(() => {});
+      if (subtab === "sa-global-usb") loadGlobalUsbVidpids().catch(() => {});
       return;
     }
 

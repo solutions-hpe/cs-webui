@@ -12075,6 +12075,89 @@ function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
           unknownTbody.closest(".setup-card")?.remove();
         }
       }
+
+      // ── Show present_usb devices not in the hub's certified list ──────────────
+      // When hub_config_enabled=false the spoke manages its own local cert list.
+      // Devices certified only on the spoke (not the hub) never appear in unknown_usb,
+      // so the hub panel would silently omit them. Compute the gap from present_usb.
+      const spokeCfg    = host.spoke_config || {};
+      const ignoredSet  = new Set(
+        _parseList(spokeCfg.usb_ignored_vidpids || "[]")
+          .map(v => String(v || "").trim().toLowerCase())
+          .filter(Boolean)
+      );
+      const presentUsb2 = Array.isArray((host.proxmox || {}).present_usb)
+        ? (host.proxmox || {}).present_usb : [];
+
+      // Group by vidpid; skip if already hub-certified or ignored.
+      const hubUncertifiedMap = new Map();
+      for (const p of presentUsb2) {
+        const vp = String(p?.vidpid || "").trim().toLowerCase();
+        if (!vp || certifiedSet.has(vp) || ignoredSet.has(vp)) continue;
+        if (!hubUncertifiedMap.has(vp)) {
+          hubUncertifiedMap.set(vp, { vidpid: vp, name: p.name || "", count: 0 });
+        }
+        hubUncertifiedMap.get(vp).count++;
+      }
+
+      if (hubUncertifiedMap.size > 0) {
+        // Re-find or create the uncertified card (it may have been removed above).
+        let unknownTbody2 = panel.querySelector("#hub-usb-unknown-tbody");
+        if (!unknownTbody2) {
+          const newSection = document.createElement("div");
+          newSection.className = "setup-card setup-section-gap";
+          newSection.style.marginTop = "12px";
+          newSection.innerHTML = `
+            <div class="setup-card-header" style="padding:0 0 8px;">
+              <h3>⚠️ Uncertified Devices Detected</h3>
+              <p>These USB devices are connected on this spoke but not in the hub's certified list.
+                 Adding to certified updates the tenant-wide list and queues a push to all spokes.</p>
+            </div>
+            <table class="data-table">
+              <colgroup><col><col style="width:105px"><col style="width:300px"></colgroup>
+              <thead><tr><th>Device</th><th>VID:PID</th><th>Actions</th></tr></thead>
+              <tbody id="hub-usb-unknown-tbody"></tbody>
+            </table>`;
+          // Insert after the first setup-card (the certified table).
+          const certCard = panel.querySelector(".setup-card");
+          if (certCard?.nextSibling) {
+            certCard.parentNode.insertBefore(newSection, certCard.nextSibling);
+          } else {
+            panel.appendChild(newSection);
+          }
+          unknownTbody2 = newSection.querySelector("#hub-usb-unknown-tbody");
+        }
+        // Don't duplicate rows already rendered (e.g. from the initial unknown_usb pass).
+        const existingVidpids = new Set(
+          Array.from(unknownTbody2.querySelectorAll("[data-vidpid]"))
+            .map(el => String(el.dataset.vidpid || "").trim().toLowerCase())
+            .filter(Boolean)
+        );
+        for (const [, info] of hubUncertifiedMap) {
+          const vp = info.vidpid.toLowerCase();
+          if (existingVidpids.has(vp)) continue;
+          const vid       = escHtml(info.vidpid);
+          const nameLabel = escHtml(info.name || info.vidpid);
+          const countBadge = info.count > 1
+            ? ` <span class="badge badge-grey">${info.count}×</span>` : "";
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${nameLabel}${countBadge}
+              <span class="muted" style="font-size:0.78rem;margin-left:4px;">(locally certified on spoke)</span></td>
+            <td data-vidpid="${vid}">${vid}</td>
+            <td class="usb-actions">
+              <button type="button" class="btn btn-primary btn-small"
+                      data-hvmusb-action="certify" data-vidpid="${vid}" data-name="${nameLabel}">
+                Add to certified
+              </button>
+              <button type="button" class="btn btn-secondary btn-small"
+                      data-hvmusb-action="ignore" data-vidpid="${vid}">
+                Ignore
+              </button>
+            </td>`;
+          unknownTbody2.appendChild(row);
+        }
+      }
     } catch (_) { /* non-fatal: original render already shows unadorned rows */ }
   })();
 

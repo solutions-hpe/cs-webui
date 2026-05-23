@@ -7762,6 +7762,8 @@ let autoRefreshSecondsLeft = 10;
 let refreshPaused = false;
 let tenantContextActive = false;
 const autoRefreshActiveTabs = new Set(["dashboard", "simulations", "clients", "central", "vm-server", "spokes"]);
+const autoRefreshActiveSuperadminTabs = new Set(["sa-gkill"]);
+let superadminActiveSubtab = "sa-pending";
 let tenantDetailState = { open: false, tenantId: null, activeTab: "dashboard", data: {} };
 const hubAdminTabIds = new Set(["dashboard", "spokes", "setup", "superadmin"]);
 let tenantUserCounts = {};
@@ -7787,6 +7789,7 @@ let hubHwOpenCheckId = null;
 let hubCcOpenWsite = null;
 const hubClientUiState = { search: "", status: "all", expandedByTenant: {}, seenSitesByTenant: {} };
 let hubVmServerSelectedSpoke = null;
+let gkillState = null;
 let hubVmServerFleetPollTimer = null;
 let hubVmServerFleetConcurrencyDraft = 3;
 let hubVmServerFleetConcurrencyTenant = null;
@@ -10142,7 +10145,7 @@ function logout(showMessage = true) {
   resetTenantDetail();
   // Clear all per-tenant localStorage caches on logout
   try {
-    Object.keys(localStorage).filter(k => k.startsWith("hub_central_") || k.startsWith("hub_clients_") || k.startsWith("hub_sites_") || k.startsWith("hub_vmserver_"))
+    Object.keys(localStorage).filter(k => k.startsWith("hub_central_") || k.startsWith("hub_clients_") || k.startsWith("hub_sites_") || k.startsWith("hub_vmserver_") || k.startsWith("hub_superadmin_"))
       .forEach(k => localStorage.removeItem(k));
   } catch (_) {}
   sessionStorage.removeItem("hub_token");
@@ -15239,14 +15242,51 @@ function renderSuperadminUsers(users) {
   `).join("") : '<tr><td colspan="4" class="empty-state">No users found.</td></tr>';
 }
 
-async function loadGkillState() {
+function hubGkillCacheKey() { return "hub_superadmin_gkill"; }
+
+function saveHubGkillCache(data) {
+  try { localStorage.setItem(hubGkillCacheKey(), JSON.stringify(data)); } catch (_) {}
+}
+
+function loadHubGkillCache() {
+  try { const s = localStorage.getItem(hubGkillCacheKey()); return s ? JSON.parse(s) : null; }
+  catch (_) { return null; }
+}
+
+function renderGkillState(data) {
+  const value = data && Object.prototype.hasOwnProperty.call(data, "value") ? data.value : null;
+  const lastFetched = Number(data?.last_fetched);
+  $("#sa-gkill-value") && ($("#sa-gkill-value").textContent = value == null ? "—" : String(value));
+  $("#sa-gkill-fetched") && ($("#sa-gkill-fetched").textContent = Number.isFinite(lastFetched) && lastFetched > 0 ? fmtDate(new Date(lastFetched * 1000).toISOString()) : "—");
+  $("#sa-gkill-error") && ($("#sa-gkill-error").textContent = data?.error || "—");
+  updateGkillBadge(value);
+}
+
+async function fetchGkillState() {
   const res = await apiFetch("/api/superadmin/gkill-state");
-  if (!res || !res.ok) return;
+  if (!res || !res.ok) return null;
   const data = await res.json();
-  $("#sa-gkill-value") && ($("#sa-gkill-value").textContent = String(data.value || "—"));
-  $("#sa-gkill-fetched") && ($("#sa-gkill-fetched").textContent = data.last_fetched ? fmtDate(new Date(data.last_fetched * 1000).toISOString()) : "—");
-  $("#sa-gkill-error") && ($("#sa-gkill-error").textContent = data.error || "—");
-  updateGkillBadge(data.value);
+  gkillState = data;
+  renderGkillState(data);
+  saveHubGkillCache(data);
+  return data;
+}
+
+async function loadGkillState(force = false) {
+  if (!currentUser?.is_superadmin) return null;
+  if (!force && gkillState) {
+    renderGkillState(gkillState);
+    fetchGkillState().catch(() => {});
+    return gkillState;
+  }
+  const cached = !force ? loadHubGkillCache() : null;
+  if (cached) {
+    gkillState = cached;
+    renderGkillState(cached);
+    fetchGkillState().catch(() => {});
+    return cached;
+  }
+  return fetchGkillState();
 }
 
 async function approvePendingSpoke(id) {
@@ -15415,6 +15455,9 @@ function updateAutoRefreshCountdownDisplay(text, paused = false) {
 
 function computeHubRefreshPaused() {
   if (!currentUser) return true;
+  if (activeTab === "superadmin") {
+    return !autoRefreshActiveSuperadminTabs.has(superadminActiveSubtab);
+  }
   if (activeTab !== "dashboard") {
     return !autoRefreshActiveTabs.has(activeTab);
   }
@@ -15758,12 +15801,20 @@ function bindEvents() {
     const saButton = event.target.closest(".sa-subtab");
     if (saButton) {
       const subtab = saButton.dataset.subtab;
+      superadminActiveSubtab = subtab;
       $$(".sa-subtab").forEach(button => button.classList.toggle("active", button.dataset.subtab === subtab));
       ["sa-pending", "sa-tenants", "sa-users", "sa-security", "sa-gkill", "sa-global-usb"].forEach(panelId => {
         document.getElementById(panelId)?.classList.toggle("hidden", panelId !== subtab);
       });
+      const wasPaused = refreshPaused;
+      refreshPaused = computeHubRefreshPaused();
+      syncAutoRefreshState();
       if (subtab === "sa-security") loadHubAuthConfig().catch(() => {});
+      if (subtab === "sa-gkill") loadGkillState(false).catch(() => {});
       if (subtab === "sa-global-usb") loadGlobalUsbVidpids().catch(() => {});
+      if (wasPaused && !refreshPaused && subtab !== "sa-gkill") {
+        refreshCurrentView(true).catch(() => {});
+      }
       return;
     }
 
@@ -15910,7 +15961,7 @@ function bindEvents() {
   $("#hub-config-enabled-toggle")?.addEventListener("change", function () {
     document.getElementById("hub-config-fields")?.classList.toggle("hidden", !this.checked);
   });
-  $("#sa-gkill-refresh-btn")?.addEventListener("click", loadGkillState);
+  $("#sa-gkill-refresh-btn")?.addEventListener("click", () => loadGkillState(true));
   hubAuthEl("sa-auth-provider")?.addEventListener("change", () => updateHubAuthProviderVisibility(hubAuthEl("sa-auth-provider")?.value));
   $("#sa-auth-test-btn")?.addEventListener("click", testHubAuthConnection);
   $("#sa-auth-save-btn")?.addEventListener("click", saveHubAuthConfig);

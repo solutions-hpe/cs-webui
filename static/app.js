@@ -1112,6 +1112,7 @@ function applySpokeViewerMode() {
   }
   topbarUpdateAllBtn?.classList.toggle('hidden', isViewer);
   document.getElementById('reclone-now-btn')?.classList.toggle('hidden', isViewer);
+  document.getElementById('reclone-clear-btn')?.classList.toggle('hidden', isViewer);
   document.getElementById('autoprov-reset-btn')?.classList.toggle('hidden', isViewer);
   document.getElementById('vm-bulk-bar')?.classList.toggle('hidden', isViewer || activeVmCat === 'templates');
   document.querySelectorAll('.vm-action-btn').forEach((button) => {
@@ -3131,6 +3132,20 @@ async function triggerRecloneAll() {
 }
 window.triggerRecloneAll = triggerRecloneAll;
 
+async function clearRecloneState() {
+  const btn = document.getElementById('reclone-clear-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Clearing…'; }
+  try {
+    await requestJson('/api/proxmox/reclone-state/clear', { method: 'POST' });
+    showNotification('Reclone error state cleared.', 'info');
+  } catch (error) {
+    showNotification(`Clear error: ${error.message}`, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✕ Clear Error'; }
+  }
+}
+window.clearRecloneState = clearRecloneState;
+
 async function resetAutoprovStatus() {
   if (!confirm('Clear the auto-provisioning status panel?')) return;
   await fetch('/api/proxmox/autoprov/reset', { method: 'POST' });
@@ -3182,6 +3197,9 @@ function renderRecloneStatus(recloneState = latestRecloneState || {}) {
         ? 'badge-red'
         : 'badge-grey';
   recloneStatusBadge.className = `badge ${badgeClass}`;
+  // Show "Clear Error" button only when in a stale terminal state (not idle, not running)
+  const recloneClearBtn = document.getElementById('reclone-clear-btn');
+  if (recloneClearBtn) recloneClearBtn.classList.toggle('hidden', status === 'idle' || status === 'running');
   if (isCloning) {
     const phaseMap = { stopping: 'Stopping', cloning: 'Cloning', starting: 'Starting' };
     const phaseLabel = phaseMap[state.phase] || 'Cloning';
@@ -11270,6 +11288,7 @@ function renderHubVmServer() {
             <input id="hub-fleet-reclone-concurrency" class="form-input" type="number" min="1" max="10" value="${escHtml(String(hubVmServerFleetConcurrencyDraft || 3))}"${canManageTenant(tenantId) ? "" : " disabled"}>
           </label>
           <button id="hub-fleet-reclone-btn" class="btn btn-primary" type="button"${disabled ? " disabled" : ""}>🔄 Reclone All Spokes</button>
+          ${fleet.failed > 0 && !fleet.any_running && canManageTenant(tenantId) ? `<button id="hub-fleet-reclone-clear-btn" class="btn btn-secondary" type="button">✕ Clear Error</button>` : ""}
         </div>
       </section>
       <section class="setup-card">
@@ -11317,6 +11336,18 @@ function renderHubVmServer() {
   });
   $("#hub-fleet-reclone-btn", container)?.addEventListener("click", () => {
     startHubFleetReclone().catch(err => showToast(err?.message || "Unable to queue fleet reclone.", "error"));
+  });
+  $("#hub-fleet-reclone-clear-btn", container)?.addEventListener("click", async () => {
+    const btn = $("#hub-fleet-reclone-clear-btn", container);
+    if (btn) { btn.disabled = true; btn.textContent = "Clearing…"; }
+    try {
+      const data = await apiFetch(`/api/${encodeURIComponent(currentTenantId)}/aggregate/fleet-reclone-clear`, { method: "POST" });
+      showToast(`Queued reclone state clear for ${data?.queued || 0} spoke(s).`, "ok");
+      setTimeout(() => loadHubVmServer(true), 3000);
+    } catch (err) {
+      showToast(err?.message || "Unable to clear reclone state.", "error");
+      if (btn) { btn.disabled = false; btn.textContent = "✕ Clear Error"; }
+    }
   });
   container.querySelectorAll(".hub-vmserver-spoke-card").forEach(card => {
     const openCard = () => {

@@ -14760,23 +14760,57 @@ async function loadSuperadmin() {
 }
 
 // ── Global USB certified devices (superadmin) ────────────────────────────────
+// Shared state so loadGlobalUsbVidpids and wireGlobalUsb stay in sync.
+let _globalDiscovered = [];
 
 async function loadGlobalUsbVidpids() {
   const tbody = $("#sa-global-usb-tbody");
   if (!tbody) return;
   tbody.innerHTML = '<tr><td colspan="4" class="empty-state">Loading…</td></tr>';
-  const res  = await apiFetch("/api/superadmin/global-usb-vidpids");
-  if (!res?.ok) {
-    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">Failed to load.</td></tr>';
-    return;
-  }
-  const data = await readJson(res);
-  renderGlobalUsbVidpids(Array.isArray(data?.usb_vidpids) ? data.usb_vidpids : []);
+  // Fetch certified list and discovered list in parallel
+  const [certRes, discRes] = await Promise.all([
+    apiFetch("/api/superadmin/global-usb-vidpids"),
+    apiFetch("/api/superadmin/discovered-usb-vidpids"),
+  ]);
+  const certData = certRes?.ok ? await readJson(certRes) : null;
+  const discData = discRes?.ok ? await readJson(discRes) : null;
+  const certified   = Array.isArray(certData?.usb_vidpids) ? certData.usb_vidpids : [];
+  _globalDiscovered = Array.isArray(discData?.devices) ? discData.devices : [];
+  renderGlobalUsbVidpids(certified, _globalDiscovered);
 }
 
-function renderGlobalUsbVidpids(devices) {
+function renderGlobalUsbVidpids(devices, discovered) {
   const tbody = $("#sa-global-usb-tbody");
   if (!tbody) return;
+
+  // ── Discovered / pending approval section ──
+  const globalSet = new Set(devices.map(d => String(d.vidpid || "").toLowerCase().trim()));
+  const pending = (discovered || []).filter(d => !globalSet.has(String(d.vidpid || "").toLowerCase().trim()));
+  const discSection = $("#sa-global-usb-discovered");
+  if (discSection) {
+    if (!pending.length) {
+      discSection.innerHTML = '<p class="empty-state" style="padding:8px 0;">No new devices seen on any spoke.</p>';
+    } else {
+      discSection.innerHTML = `
+        <table class="data-table">
+          <colgroup><col style="width:120px"><col><col><col style="width:120px"></colgroup>
+          <thead><tr><th>VID:PID</th><th>Device Name</th><th>Seen On</th><th>Action</th></tr></thead>
+          <tbody>${pending.map(d => {
+            const vid = escHtml(d.vidpid || "");
+            const name = escHtml(d.name || "—");
+            const seenOn = (d.seen_on || []).map(s => escHtml(`${s.spoke_name} (${s.tenant_name})`)).join(", ") || "—";
+            return `<tr>
+              <td><code>${vid}</code></td>
+              <td>${name}</td>
+              <td class="muted" style="font-size:0.85rem">${seenOn}</td>
+              <td><button class="btn btn-primary btn-small" data-sa-usb-approve="${vid}" type="button">Approve</button></td>
+            </tr>`;
+          }).join("")}</tbody>
+        </table>`;
+    }
+  }
+
+  // ── Globally certified section ──
   if (!devices.length) {
     tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No globally certified devices.</td></tr>';
     return;
@@ -14792,7 +14826,7 @@ function renderGlobalUsbVidpids(devices) {
     </tr>`).join("");
 }
 
-// Wire global USB add/remove — called once after DOM ready.
+// Wire global USB add/remove/approve — called once after DOM ready.
 (function wireGlobalUsb() {
   // Add button
   document.addEventListener("click", async (e) => {
@@ -14821,8 +14855,7 @@ function renderGlobalUsbVidpids(devices) {
         });
         const putData = await readJson(putRes);
         if (!putRes?.ok) throw new Error(putData?.detail || "Save failed");
-        renderGlobalUsbVidpids(updated);
-        if ($("#sa-usb-vidpid")) $("#sa-usb-vidpid").value = "";
+        renderGlobalUsbVidpids(updated, _globalDiscovered);
         if ($("#sa-usb-label")) $("#sa-usb-label").value = "";
         if (msg) { msg.textContent = `✓ ${vidpid} added (pushed to ${putData.pushed_to_spokes ?? 0} spokes)`; msg.style.color = "var(--accent-green)"; }
       } catch (err) {
@@ -14830,6 +14863,34 @@ function renderGlobalUsbVidpids(devices) {
       } finally {
         e.target.disabled = false;
         e.target.textContent = "Add to Global List";
+      }
+    }
+
+    // Approve button (promote a discovered device to global)
+    const approveVidpid = e.target.dataset?.saUsbApprove;
+    if (approveVidpid !== undefined) {
+      e.target.disabled = true;
+      e.target.textContent = "Approving…";
+      try {
+        const discEntry = _globalDiscovered.find(d => d.vidpid === approveVidpid) || {};
+        const getRes  = await apiFetch("/api/superadmin/global-usb-vidpids");
+        const getData = await readJson(getRes);
+        if (!getRes?.ok) throw new Error(getData?.detail || "Could not read global USB list");
+        const current = Array.isArray(getData.usb_vidpids) ? getData.usb_vidpids : [];
+        if (!current.find(d => d.vidpid === approveVidpid)) {
+          current.push({ vidpid: approveVidpid, label: discEntry.name || approveVidpid, type: "wireless" });
+        }
+        const putRes  = await apiFetch("/api/superadmin/global-usb-vidpids", {
+          method: "PUT", body: { usb_vidpids: current },
+        });
+        const putData = await readJson(putRes);
+        if (!putRes?.ok) throw new Error(putData?.detail || "Approve failed");
+        renderGlobalUsbVidpids(current, _globalDiscovered);
+        showToast(`${approveVidpid} approved globally (pushed to ${putData.pushed_to_spokes ?? 0} spokes)`, "ok");
+      } catch (err) {
+        showToast(`Error: ${err.message}`, "error");
+        e.target.disabled = false;
+        e.target.textContent = "Approve";
       }
     }
 
@@ -14848,8 +14909,7 @@ function renderGlobalUsbVidpids(devices) {
         });
         const putData = await readJson(putRes);
         if (!putRes?.ok) throw new Error(putData?.detail || "Remove failed");
-        renderGlobalUsbVidpids(updated);
-        showToast(`${removeVidpid} removed from global certified list`, "ok");
+        renderGlobalUsbVidpids(updated, _globalDiscovered);
       } catch (err) {
         showToast(`Error: ${err.message}`, "error");
         e.target.disabled = false;

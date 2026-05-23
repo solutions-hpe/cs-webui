@@ -11862,6 +11862,33 @@ function renderHubVmServerUsbPanel(host) {
       </table>
     </div>`;
 
+  const ignoredList = _parseList(cfg.usb_ignored_vidpids || "[]")
+    .map(v => String(v || "").trim())
+    .filter(Boolean);
+  const ignoredRows = ignoredList.map(vidpid => `<tr>
+      <td><code>${escHtml(vidpid)}</code></td>
+      <td>
+        <button type="button" class="btn btn-secondary btn-small"
+                data-hvmusb-action="unignore" data-vidpid="${escHtml(vidpid)}">
+          Unignore
+        </button>
+      </td>
+    </tr>`).join("");
+  const ignoredSection = ignoredList.length === 0 ? "" : `
+    <div class="setup-card setup-section-gap" style="margin-top:12px;">
+      <div class="setup-card-header" style="padding:0 0 8px;">
+        <h3>🚫 Ignored Devices (this spoke)</h3>
+        <p>These devices are suppressed on this spoke only. Click Unignore to move them back to the uncertified list.</p>
+      </div>
+      <table class="data-table">
+        <colgroup><col><col style="width:105px"><col style="width:100px"></colgroup>
+        <thead><tr><th>VID:PID</th><th></th></tr></thead>
+        <tbody id="hub-usb-ignored-tbody">
+          ${ignoredRows}
+        </tbody>
+      </table>
+    </div>`;
+ 
   // ── Auto-provisioning settings ──────────────────────────────────────────────
   // The spoke's USB auto-provisioning config is displayed as an editable form.
   // Changes are pushed directly to the spoke via the hub config-push API
@@ -11954,6 +11981,7 @@ function renderHubVmServerUsbPanel(host) {
            </div>`}
     </div>
     ${unknownSection}
+    ${ignoredSection}
     ${settingsSection}`;
 }
 
@@ -12076,6 +12104,25 @@ function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
         const data = await readJson(res);
         if (!res?.ok) throw new Error(data?.detail || "Could not update spoke config");
         showToast(`${vidpid} added to ignore list for this spoke`, "ok");
+      } else if (action === "unignore") {
+        // Remove vidpid from this spoke's ignored list.
+        const cfg     = host.spoke_config || {};
+        const current = _parseList(cfg.usb_ignored_vidpids || "[]");
+        const updated = current.filter(v => String(v || "").toLowerCase() !== String(vidpid || "").toLowerCase());
+        const res  = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/config`, {
+          method: "POST",
+          body: { usb_ignored_vidpids: JSON.stringify(updated) },
+        });
+        const data = await readJson(res);
+        if (!res?.ok) throw new Error(data?.detail || "Could not update spoke config");
+        showToast(`${vidpid} removed from ignore list`, "ok");
+        host.spoke_config = { ...(host.spoke_config || {}), usb_ignored_vidpids: JSON.stringify(updated) };
+        btn.closest("tr")?.remove();
+        const tbody = document.getElementById("hub-usb-ignored-tbody");
+        if (tbody && !tbody.childElementCount) {
+          tbody.closest(".setup-card")?.remove();
+        }
+        return;
       } else if (action === "decertify") {
         // Remove from tenant certified list — does NOT require superadmin.
         const encoded = encodeURIComponent(vidpid);

@@ -11294,10 +11294,15 @@ function renderHubVmServer() {
           ${fleet.failed > 0 && !fleet.any_running && canManageTenant(tenantId) ? `<button id="hub-fleet-reclone-clear-btn" class="btn btn-secondary" type="button">✕ Clear Error</button>` : ""}
         </div>
       </section>
-      <section class="setup-card">
+       <section class="setup-card">
         <div class="setup-card-header" style="display:flex;align-items:center;gap:12px;justify-content:space-between;">
           <div><h2>Auto-Provisioning</h2><p>USB provisioning capacity reported across approved spokes.</p></div>
-          <span class="badge ${usbProvisioning.auto_provision_on ? "badge-blue" : "badge-grey"}">${usbProvisioning.auto_provision_on ? "On" : "Off"}</span>
+          ${canManageTenant(tenantId) ? `
+            <label class="toggle-switch" title="${usbProvisioning.auto_provision_on ? "Disable" : "Enable"} auto-provisioning on all spokes" style="cursor:pointer;">
+              <input type="checkbox" id="hub-autoprov-toggle"${usbProvisioning.auto_provision_on ? " checked" : ""}>
+              <span class="toggle-slider"></span>
+            </label>
+          ` : `<span class="badge ${usbProvisioning.auto_provision_on ? "badge-blue" : "badge-grey"}">${usbProvisioning.auto_provision_on ? "On" : "Off"}</span>`}
         </div>
         <div style="font-weight:600;margin-bottom:6px;">${escHtml(String(usbProvisioning.used_slots || 0))} / ${escHtml(String(usbProvisioning.total_slots || 0))} slots in use</div>
         <div class="progress-bar-wrap" style="margin-bottom:8px;"><div class="progress-bar" style="width:${usbPct}%"></div></div>
@@ -11350,6 +11355,23 @@ function renderHubVmServer() {
     } catch (err) {
       showToast(err?.message || "Unable to clear reclone state.", "error");
       if (btn) { btn.disabled = false; btn.textContent = "✕ Clear Error"; }
+    }
+  });
+  $("#hub-autoprov-toggle", container)?.addEventListener("change", async (e) => {
+    const enable = e.target.checked;
+    e.target.disabled = true;
+    try {
+      const res = await apiFetch(`/api/${encodeURIComponent(currentTenantId)}/aggregate/toggle-auto-provision`, {
+        method: "POST", body: { enable },
+      });
+      const data = await readJson(res);
+      if (!res?.ok) { showToast(data?.detail || "Failed to update auto-provisioning.", "error"); e.target.checked = !enable; }
+      else { showToast(`Auto-provisioning ${enable ? "enabled" : "disabled"} on ${data?.updated_spokes ?? 0} spoke(s).`, "ok"); await loadHubVmServerAggregateStatus(); }
+    } catch (err) {
+      showToast(err?.message || "Failed to update auto-provisioning.", "error");
+      e.target.checked = !enable;
+    } finally {
+      e.target.disabled = false;
     }
   });
   container.querySelectorAll(".hub-vmserver-spoke-card").forEach(card => {

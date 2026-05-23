@@ -8253,10 +8253,33 @@ function primeHubClientExpandedSet(siteKeys = [], tenantId = currentTenantId) {
   });
 }
 
+function normalizeHubClientActiveSimulations(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((simulation) => String(simulation || "").trim())
+      .filter(Boolean);
+  }
+  const simulation = String(value || "").trim();
+  return simulation ? [simulation] : [];
+}
+
+function normalizeAggregateClientRow(row = {}) {
+  return {
+    ...row,
+    active_simulations: normalizeHubClientActiveSimulations(row.active_simulations),
+    online: typeof row.online === "boolean" ? row.online : isOnline(row.last_seen),
+  };
+}
+
 function normalizeAggregateClientRows(data) {
-  if (Array.isArray(data?.clients)) return data.clients;
-  if (Array.isArray(data?.rows)) return data.rows;
-  return Array.isArray(data) ? data : [];
+  const rows = Array.isArray(data?.clients)
+    ? data.clients
+    : Array.isArray(data?.rows)
+      ? data.rows
+      : Array.isArray(data)
+        ? data
+        : [];
+  return rows.map((row) => normalizeAggregateClientRow(row));
 }
 
 function getHubClientExpandedSet(tenantId = currentTenantId) {
@@ -8845,7 +8868,7 @@ function renderClientRowsForHub() {
       client.hw_type,
       client.simulation_id,
       client.connected_ssid,
-      ...(client.active_simulations || []),
+      ...normalizeHubClientActiveSimulations(client.active_simulations),
     ].join(" ").toLowerCase();
     return haystack.includes(search);
   });
@@ -8869,7 +8892,7 @@ function renderClientRowsForHub() {
         clients,
         onlineCount: clients.filter(client => client.online).length,
         errorCount: clients.reduce((sum, client) => sum + Number(client.error_count || 0), 0),
-        activeSimulations: [...new Set(clients.flatMap(client => client.active_simulations || []).filter(Boolean))].sort((left, right) => left.localeCompare(right)),
+        activeSimulations: [...new Set(clients.flatMap(client => normalizeHubClientActiveSimulations(client.active_simulations)).filter(Boolean))].sort((left, right) => left.localeCompare(right)),
         // T3: take the node-level t3_pci_count from the first client with the field set.
         // All clients on the same spoke share the same Proxmox node value.
         t3PciCount: clients.reduce((max, c) => Math.max(max, Number(c.t3_pci_count || 0)), 0),
@@ -8912,7 +8935,7 @@ function renderClientRowsForHub() {
                       <td class="hostname-cell">${escHtml(client.hostname || "—")}</td>
                       <td>${escHtml(client.platform || client.hw_type || "—")}</td>
                       <td>${escHtml(client.connected_ssid || "—")}</td>
-                      <td>${renderHubSimulationBadges(client.active_simulations || [])}</td>
+                      <td>${renderHubSimulationBadges(normalizeHubClientActiveSimulations(client.active_simulations))}</td>
                       <td class="nowrap-cell"><span title="${escHtml(fmtDate(client.last_seen))}">${escHtml(relativeTime(client.last_seen))}</span></td>
                       <td>${Number(client.error_count || 0)}</td>
                     </tr>
@@ -11156,7 +11179,7 @@ async function loadClients(force = false) {
   }
 
   // Show localStorage cache immediately while fetching fresh data.
-  const cached = loadHubClientsCache();
+  const cached = normalizeAggregateClientRows(loadHubClientsCache());
   if (cached && cached.length) {
     aggregateClientRows = cached;
     primeHubClientExpandedSet([...new Set(aggregateClientRows.map(hubClientSiteKey))]);

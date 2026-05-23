@@ -12057,6 +12057,24 @@ function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
           <td>${sourceBadge}${removeBtn}</td>
         </tr>`;
       }).join("") || `<tr><td colspan="8" class="empty-state">No certified devices configured.</td></tr>`;
+
+      const certifiedSet = new Set(
+        annotated
+          .map(device => String(device?.vidpid || "").trim().toLowerCase())
+          .filter(Boolean)
+      );
+      const unknownTbody = panel.querySelector("#hub-usb-unknown-tbody");
+      if (unknownTbody) {
+        Array.from(unknownTbody.querySelectorAll("tr")).forEach(row => {
+          const rowVidpid = String(row.querySelector("[data-vidpid]")?.dataset.vidpid || "").trim().toLowerCase();
+          if (rowVidpid && certifiedSet.has(rowVidpid)) {
+            row.remove();
+          }
+        });
+        if (!unknownTbody.querySelector("tr")) {
+          unknownTbody.closest(".setup-card")?.remove();
+        }
+      }
     } catch (_) { /* non-fatal: original render already shows unadorned rows */ }
   })();
 

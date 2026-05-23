@@ -3152,6 +3152,26 @@ async function resetAutoprovStatus() {
 }
 window.resetAutoprovStatus = resetAutoprovStatus;
 
+async function unlockTemplate() {
+  const btn = document.getElementById('template-unlock-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Unlocking…';
+  }
+  try {
+    await requestJson('/api/proxmox/unlock-template', { method: 'POST' });
+    showToast('Template unlock queued.', 'ok');
+  } catch (error) {
+    showToast(`Template unlock failed: ${error.message}`, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '🔓 Unlock Template';
+    }
+  }
+}
+window.unlockTemplate = unlockTemplate;
+
 function recloneLogStatusMeta(status) {
   switch (String(status || '').toLowerCase()) {
     case 'completed':
@@ -3468,7 +3488,20 @@ function renderAutoProvisionStatus() {
   const livePanel = document.getElementById('autoprov-live-panel');
   const liveSummary = document.getElementById('autoprov-live-summary');
   const logEl = document.getElementById('auto-prov-log');
+  const lockBanner = document.getElementById('template-lock-banner');
+  const lockReason = document.getElementById('template-lock-reason');
+  const unlockBtn = document.getElementById('template-unlock-btn');
   if (!livePanel || !liveSummary || !logEl) return;
+
+  const templateLock = String(latestProxmoxData?.template_lock || '').trim();
+  if (lockBanner && lockReason) {
+    lockReason.textContent = templateLock ? `(${templateLock})` : '';
+    lockBanner.classList.toggle('hidden', !templateLock);
+  }
+  if (unlockBtn && !unlockBtn._boundTemplateUnlock) {
+    unlockBtn._boundTemplateUnlock = true;
+    unlockBtn.addEventListener('click', unlockTemplate);
+  }
 
   // Panel is always visible — show idle/off state when not provisioning
   livePanel.classList.remove('hidden');
@@ -11385,6 +11418,8 @@ function renderHubVmServerDetail(container, host) {
   const spokeName = escHtml(spokeDisplayName(host, "Spoke"));
   // Prefer the richer proxmox.vms (expanded summary) over proxmox_vms for CPU/RAM
   const px = host.proxmox || {};
+  const templateLock = String(px.template_lock || '').trim();
+  const canUnlockTemplate = canManageTenant(tenantId);
   const vms = (Array.isArray(px.vms) && px.vms.length ? px.vms : null)
     || (Array.isArray(host.proxmox_vms) ? host.proxmox_vms : []);
   const usb = Array.isArray(host.usb_devices) ? host.usb_devices : [];
@@ -11425,6 +11460,11 @@ function renderHubVmServerDetail(container, host) {
         <span class="stat-pill">${escHtml(String(host.vm_count || 0))} VMs</span>
         <span class="stat-pill">${escHtml(String(host.usb_count || 0))} USB</span>
       </div>
+      ${templateLock ? `
+        <div class="setup-card setup-section-gap" style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid #f59e0b;background:rgba(245,158,11,.12);">
+          <div style="font-weight:600;">🔓 Template Locked: ${escHtml(templateLock)}</div>
+          ${canUnlockTemplate ? '<button id="hub-vmserver-unlock-template-btn" class="btn btn-warning btn-small" type="button">Unlock</button>' : ''}
+        </div>` : ''}
       <nav class="setup-subnav" role="tablist" id="hub-vmserver-subnav">
         ${subtabs.map(t => `
           <button class="setup-subtab hub-vmserver-subtab ${t.id === hubVmServerActiveSubtab ? "active" : ""}"
@@ -11436,6 +11476,19 @@ function renderHubVmServerDetail(container, host) {
   document.getElementById("hub-vmserver-back-btn").addEventListener("click", () => {
     hubVmServerSelectedSpoke = null;
     renderHubVmServer();
+  });
+  document.getElementById("hub-vmserver-unlock-template-btn")?.addEventListener("click", async (event) => {
+    const btn = event.currentTarget;
+    btn.disabled = true;
+    btn.textContent = "Unlocking…";
+    try {
+      await queueHubTemplateUnlock(tenantId, spokeId);
+    } catch (error) {
+      showToast(error?.message || "Unable to queue template unlock.", "error");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Unlock";
+    }
   });
 
   const ctx = { tenantId, spokeId, simVms, otherVms, containerVms, templateVms, usb, reclone, px, host };
@@ -12717,6 +12770,18 @@ async function sendHubProxmoxCommand(tenantId, spokeId, action, args = {}) {
   } catch (err) {
     showToast(`Command failed: ${err.message}`, "error");
   }
+}
+
+async function queueHubTemplateUnlock(tenantId, spokeId) {
+  const resp = await apiFetch(
+    `/api/${encodeURIComponent(tenantId)}/aggregate/unlock-template`,
+    { method: "POST", body: { spoke_id: spokeId } }
+  );
+  if (!resp?.ok) throw new Error(`HTTP ${resp?.status ?? "?"}`);
+  const data = await resp.json().catch(() => ({}));
+  showToast(`Queued template unlock for ${data?.queued || 0} spoke(s).`, "ok");
+  setTimeout(() => loadHubVmServer(true), 3000);
+  return data;
 }
 
 

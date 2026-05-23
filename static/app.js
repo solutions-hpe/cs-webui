@@ -14234,11 +14234,6 @@ window.sendSpokeCommand = sendSpokeCommand;
 
 async function loadHubSettings() {
   if (!currentTenantId) return;
-  const apiBase = `${window.location.origin}/api/${currentTenantId}/spokes/{id}`;
-  $("#api-register-url") && ($("#api-register-url").textContent = `${window.location.origin}/api/spokes/register`);
-  $("#api-telemetry-url") && ($("#api-telemetry-url").textContent = `POST ${apiBase}/telemetry`);
-  $("#api-inbox-url") && ($("#api-inbox-url").textContent = `GET ${apiBase}/inbox`);
-  $("#api-ack-url") && ($("#api-ack-url").textContent = `POST ${apiBase}/ack`);
   const disabled = !canManageTenant();
   ["notif-save-btn", "acme-request-btn"].forEach(id => { const btn = document.getElementById(id); if (btn) btn.disabled = disabled; });
   // Load tenant admin pending spokes whenever settings tab opens
@@ -15791,7 +15786,7 @@ function bindEvents() {
     if (setupButton) {
       const subtab = setupButton.dataset.subtab;
       $$(".settings-subtab").forEach(button => button.classList.toggle("active", button.dataset.subtab === subtab));
-      ["settings-account", "settings-notifications", "settings-api", "settings-tls", "settings-pending-spokes"].forEach(panelId => {
+      ["settings-account", "settings-notifications", "settings-tls", "settings-pending-spokes"].forEach(panelId => {
         document.getElementById(panelId)?.classList.toggle("hidden", panelId !== subtab);
       });
       if (subtab === "settings-tls") loadAcmeSettings().catch(() => {});

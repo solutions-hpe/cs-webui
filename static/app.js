@@ -222,7 +222,7 @@ let refreshCountdownTimer = null;
 let refreshSecondsLeft = 10;
 let refreshIntervalSeconds = 10;
 const SECRET_CONFIGURED_PLACEHOLDER = '**********';
-const refreshActiveTabs = new Set(['dashboard', 'api-server']);
+const refreshActiveTabs = new Set(['dashboard']);
 let clientTypeFilter = 'all';
 
 function getSecretInputDefaultPlaceholder(input) {
@@ -311,7 +311,6 @@ spokeNavTabs.forEach((tab) => {
     document.getElementById(`tab-${tab.dataset.tab}`)?.classList.remove('hidden');
     if (tab.dataset.tab === 'setup') activateSetupSubtab('setup-github');
     if (tab.dataset.tab === 'server') { activateServerSubtab('server-vms'); loadProxmoxApproved().catch(() => {}); }
-    if (tab.dataset.tab === 'api-server') { renderServiceStatus().catch(() => {}); }
     if (tab.dataset.tab === 'central') { activateCentralSubtab('central-sites-panel'); }
     if (tab.dataset.tab === 'simulations') { activateSimTopTab('simtop-checks'); }
     resetTabDrilldowns(tab.dataset.tab);
@@ -5259,10 +5258,6 @@ async function renderServiceStatus() {
 }
 
 function handleMessage(message) {
-  if (document.getElementById('tab-api-server')?.classList.contains('active')) {
-    renderServiceStatus().catch(() => {});
-  }
-
   if (message.type === 'full_state') {
     (message.clients || []).forEach((client) => upsertClient(client));
     updateCmdTargetDropdown(message.clients || []);
@@ -7748,7 +7743,7 @@ let autoRefreshCountdownTimer = null;
 let autoRefreshSecondsLeft = 10;
 let refreshPaused = false;
 let tenantContextActive = false;
-const autoRefreshActiveTabs = new Set(["dashboard", "simulations", "clients", "central", "vm-server", "api-server", "spokes"]);
+const autoRefreshActiveTabs = new Set(["dashboard", "simulations", "clients", "central", "vm-server", "spokes"]);
 let tenantDetailState = { open: false, tenantId: null, activeTab: "dashboard", data: {} };
 const hubAdminTabIds = new Set(["dashboard", "spokes", "setup", "superadmin"]);
 let tenantUserCounts = {};
@@ -7758,7 +7753,6 @@ let aggregateClientRows = [];
 let aggregateProxmoxHosts = [];
 let aggregateFleetRecloneStatus = null;
 let aggregateUsbProvisioningStatus = null;
-let aggregateApiServerRows = [];
 let aggregateCentralData = null;
 let hubCentralData = null;
 let hubCentralActiveSubtab = "hcs-sites";
@@ -9004,7 +8998,6 @@ async function refreshAfterSpokeApproval(tenantId = currentTenantId) {
       await loadHubSimulations(true);
       await loadClients(true);
       await loadVmServer(true);
-      await loadApiServer(true);
       await loadCentral(true);
       await loadSpokes(true);
       await loadTenantSetup(true);
@@ -10009,7 +10002,6 @@ function applyAuthUI() {
     hubCcOpenWsite = null;
     aggregateClientRows = [];
     aggregateProxmoxHosts = [];
-    aggregateApiServerRows = [];
     aggregateCentralData = null;
     hubConfigDraft = "";
     resetHubSimulationConfState(null);
@@ -10123,7 +10115,6 @@ function logout(showMessage = true) {
   hubCcOpenWsite = null;
   aggregateClientRows = [];
   aggregateProxmoxHosts = [];
-  aggregateApiServerRows = [];
   aggregateCentralData = null;
   hubConfigDraft = "";
   resetHubSimulationConfState(currentTenantId);
@@ -10152,7 +10143,6 @@ async function setCurrentTenant(tenantId, reload = true) {
   hubCcOpenWsite = null;
   aggregateClientRows = [];
   aggregateProxmoxHosts = [];
-  aggregateApiServerRows = [];
   aggregateCentralData = null;
   hubConfigDraft = "";
   resetHubSimulationConfState(tenantId);
@@ -10163,12 +10153,12 @@ async function setCurrentTenant(tenantId, reload = true) {
   syncTenantContextChrome();
   syncHubPermissionUI();
   populateCommandSpokeSelect();
-  if (reload && ["simulations", "clients", "vm-server", "api-server", "central", "spokes", "reseed", "setup", "tenant-setup", "config", "commands"].includes(activeTab)) await refreshCurrentView(true);
+  if (reload && ["simulations", "clients", "vm-server", "central", "spokes", "reseed", "setup", "tenant-setup", "config", "commands"].includes(activeTab)) await refreshCurrentView(true);
 }
 
 function showTab(rawTabId, opts = {}) {
   const tabId = rawTabId.startsWith('hub-') ? rawTabId.slice(4) : rawTabId;
-  if (["simulations", "clients", "vm-server", "api-server", "central", "spokes", "reseed", "setup", "tenant-setup", "config", "commands", "superadmin"].includes(tabId) && !currentUser) {
+  if (["simulations", "clients", "vm-server", "central", "spokes", "reseed", "setup", "tenant-setup", "config", "commands", "superadmin"].includes(tabId) && !currentUser) {
     openLoginModal();
     return;
   }
@@ -10223,8 +10213,6 @@ async function refreshCurrentView(force = false) {
     await loadClients(force);
   } else if (activeTab === "vm-server") {
     await loadVmServer(force);
-  } else if (activeTab === "api-server") {
-    await loadApiServer(force);
   } else if (activeTab === "central") {
     await loadHubCentralData(force);
   } else if (activeTab === "spokes") {
@@ -12684,48 +12672,6 @@ async function sendHubProxmoxCommand(tenantId, spokeId, action, args = {}) {
   }
 }
 
-function renderHubApiServer() {
-  const container = $("#hub-api-server-content");
-  if (!container) return;
-  const rows = aggregateApiServerRows || [];
-  const healthyCount = rows.filter(row => String(row.api_server?.health?.status || row.api_server?.status || "").toLowerCase() === "ok").length;
-  const versions = uniqueValues(rows.map(row => row.api_server?.health?.version || row.api_server?.version).filter(Boolean));
-  $("#hub-api-spokes-pill") && ($("#hub-api-spokes-pill").textContent = `${rows.length} spokes`);
-  $("#hub-api-online-pill") && ($("#hub-api-online-pill").textContent = `${healthyCount} healthy`);
-  $("#hub-api-version-pill") && ($("#hub-api-version-pill").textContent = versions.length ? versions.join(" • ") : "— versions");
-  if (!rows.length) {
-    container.innerHTML = '<div class="empty-state">No API server telemetry reported for this tenant.</div>';
-    return;
-  }
-  container.innerHTML = `
-    <div class="tenant-detail-grid">
-      ${rows.map(row => {
-        const health = row.api_server?.health || row.api_server || {};
-        const services = row.api_server?.services || {};
-        const serviceCount = Object.keys(services).length;
-        const state = String(health.status || row.spoke_online && "ok" || "offline").toLowerCase();
-        const pillClass = state === "ok" ? "online" : state === "offline" ? "offline" : "pending";
-        return `
-          <details class="setup-card"${row.spoke_online ? " open" : ""}>
-            <summary class="panel-header">
-              <span class="server-node-name">${escHtml(spokeDisplayName(row, "Spoke"))}</span>
-              <span class="site-status-pill ${pillClass}">${escHtml(state || "unknown")}</span>
-              <span class="stat-pill">${escHtml(health.version || "—")}</span>
-              <span class="stat-pill">${serviceCount} services</span>
-            </summary>
-            <div class="setup-status-grid setup-section-gap">
-              <div class="setup-status-item"><span class="setup-status-label">Spoke Status</span><span class="setup-status-value">${row.spoke_online ? "Online" : "Offline"}</span></div>
-              <div class="setup-status-item"><span class="setup-status-label">API Version</span><span class="setup-status-value">${escHtml(health.version || "—")}</span></div>
-              <div class="setup-status-item"><span class="setup-status-label">Clients</span><span class="setup-status-value">${escHtml(String(health.clients ?? "—"))}</span></div>
-              <div class="setup-status-item"><span class="setup-status-label">Repo Sync</span><span class="setup-status-value">${escHtml(health.repo_synced ? "Synced" : health.repo_error || "Unknown")}</span></div>
-            </div>
-            <pre class="setup-section-gap" style="margin:0;max-height:280px;overflow:auto;background:#0f172a;color:#e2e8f0;border-radius:10px;padding:12px;font-size:12px;line-height:1.45;">${escHtml(JSON.stringify(row.api_server || {}, null, 2))}</pre>
-          </details>
-        `;
-      }).join("")}
-    </div>
-  `;
-}
 
 function renderHubCentral() {
   const container = $("#hub-central-content");
@@ -12910,19 +12856,6 @@ async function loadVmServer(force = false) {
   }
 }
 
-async function loadApiServer(force = false) {
-  const container = $("#hub-api-server-content");
-  if (!container) return;
-  if (!currentTenantId || !currentUser) {
-    aggregateApiServerRows = [];
-    renderHubApiServer();
-    return;
-  }
-  container.innerHTML = '<div class="empty-state">Loading…</div>';
-  const data = force || !aggregateApiServerRows.length ? await loadAggregateData("api-server") : { spokes: aggregateApiServerRows };
-  aggregateApiServerRows = data?.spokes || [];
-  renderHubApiServer();
-}
 
 async function loadCentral(force = false) {
   const container = $("#hub-central-content");
@@ -15531,7 +15464,6 @@ function connectHubWebSocket() {
       if (activeTab === "simulations") scheduleReload("ws-simulations", () => loadHubSimulations(true));
       if (activeTab === "clients") scheduleReload("ws-clients", () => loadClients(true));
       if (activeTab === "vm-server") scheduleReload("ws-vm-server", () => loadVmServer(true));
-      if (activeTab === "api-server") scheduleReload("ws-api-server", () => loadApiServer(true));
       if (activeTab === "central") scheduleReload("ws-hub-central", () => loadHubCentralData(true));
       if (activeTab === "spokes") scheduleReload("ws-spokes", () => loadSpokes(true));
       if (activeTab === "reseed") scheduleReload("ws-reseed", () => ensureSpokes(true).then(() => renderHubReseedPanel()));
@@ -15907,7 +15839,6 @@ function bindEvents() {
   $("#refresh-clients-btn")?.addEventListener("click", () => loadClients(true));
   $("#refresh-hub-central-btn")?.addEventListener("click", () => loadHubCentralData(true));
   $("#refresh-vm-server-btn")?.addEventListener("click", () => loadVmServer(true));
-  $("#refresh-api-server-btn")?.addEventListener("click", () => loadApiServer(true));
   $("#refresh-spokes-btn")?.addEventListener("click", () => loadSpokes(true));
   $("#refresh-commands-btn")?.addEventListener("click", loadCommands);
   $("#refresh-config-btn")?.addEventListener("click", () => loadConfig(true));

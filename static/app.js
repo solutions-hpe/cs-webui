@@ -14695,6 +14695,10 @@ function updateHubAuthProviderVisibility(provider = hubAuthConfig.auth_provider 
 }
 
 function applyHubAuthConfigToUi(config = hubAuthConfig) {
+  // setInputValueIfIdle is defined in the spoke IIFE and not in scope here.
+  function setInputValueIfIdle(input, value) {
+    if (input && !input.matches(":focus")) input.value = value || "";
+  }
   const next = normalizeHubAuthConfig(config);
   hubAuthConfig = next;
   renderHubAuthTenantOptions(next.auth_ldap_tenant_id || "");

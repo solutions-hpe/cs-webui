@@ -8081,14 +8081,14 @@ async function loadAggregateData(path) {
   if (!currentUser || !getActiveTenantId()) return null;
   const res = await apiFetch(aggregateEndpoint(path));
   if (!res || !res.ok) return null;
-  return res.json();
+  return res.json().catch(() => null);
 }
 
 async function loadAggregateDataForTenant(tenantId, path) {
   if (!currentUser || !tenantId) return null;
   const res = await apiFetch(`/api/aggregate/${path}?tenant_id=${encodeURIComponent(tenantId)}`);
   if (!res || !res.ok) return null;
-  return res.json();
+  return res.json().catch(() => null);
 }
 
 function summarizeTenantAlerts(summary, aggregate) {

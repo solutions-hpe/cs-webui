@@ -1059,6 +1059,7 @@
           <button class="setup-subtab sa-subtab" data-subtab="sa-users" type="button">Users</button>
           <button class="setup-subtab sa-subtab" data-subtab="sa-security" type="button">Security</button>
           <button class="setup-subtab sa-subtab" data-subtab="sa-gkill" type="button">GKill</button>
+          <button class="setup-subtab sa-subtab" data-subtab="sa-global-usb" type="button">Global USB</button>
         </nav>
 
         <div id="sa-pending" class="setup-subpanel" style="margin-top:16px;">
@@ -1184,6 +1185,44 @@
               <button id="sa-auth-save-btn" class="btn btn-primary" type="button">Save</button>
             </div>
             <div id="sa-auth-msg" class="settings-message hidden"></div>
+          </div>
+        </div>
+
+        <div id="sa-global-usb" class="setup-subpanel hidden" style="margin-top:16px;">
+          <div class="setup-card">
+            <div class="setup-card-header">
+              <h2>Global Certified USB Devices 🌐</h2>
+              <p>Devices certified here apply to <strong>all tenants</strong> automatically — they are merged
+                 into every tenant's certified list and pushed to all connected spokes.
+                 Tenant admins can see these devices (shown with a 🌐 global badge) but cannot remove them.</p>
+            </div>
+            <table class="data-table" id="sa-global-usb-table">
+              <thead><tr><th>Label</th><th>VID:PID</th><th>Type</th><th></th></tr></thead>
+              <tbody id="sa-global-usb-tbody"><tr><td colspan="4" class="empty-state">Loading…</td></tr></tbody>
+            </table>
+            <div class="setup-form" style="max-width:500px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+              <div class="setup-card-header"><h3>Add Global Device</h3></div>
+              <div class="form-group">
+                <label class="form-label" for="sa-usb-vidpid">VID:PID</label>
+                <input id="sa-usb-vidpid" type="text" class="form-input" placeholder="e.g. 0bda:8153" maxlength="9">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="sa-usb-label">Label</label>
+                <input id="sa-usb-label" type="text" class="form-input" placeholder="e.g. Realtek USB Dongle">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="sa-usb-type">Type</label>
+                <select id="sa-usb-type" class="form-input">
+                  <option value="wireless">wireless</option>
+                  <option value="ethernet">ethernet</option>
+                  <option value="any">any</option>
+                </select>
+              </div>
+              <div class="form-actions">
+                <button id="sa-usb-add-btn" class="btn btn-primary" type="button">Add to Global List</button>
+                <span id="sa-usb-msg" class="form-msg"></span>
+              </div>
+            </div>
           </div>
         </div>
 

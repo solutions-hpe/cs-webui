@@ -10832,15 +10832,6 @@ function renderTenantSetupPanel(data) {
         </div>
       </section>
       <section class="setup-card">
-        <div class="setup-card-header"><h2>Relay API</h2><p>Endpoints used by spokes in this tenant.</p></div>
-        <div class="setup-status-grid">
-          <div class="setup-status-item"><span class="setup-status-label">Registration</span><span class="setup-status-value">${escHtml(`${window.location.origin}/api/spokes/register`)}</span></div>
-          <div class="setup-status-item"><span class="setup-status-label">Telemetry</span><span class="setup-status-value">${escHtml(`POST ${apiBase}/telemetry`)}</span></div>
-          <div class="setup-status-item"><span class="setup-status-label">Inbox</span><span class="setup-status-value">${escHtml(`GET ${apiBase}/inbox`)}</span></div>
-          <div class="setup-status-item"><span class="setup-status-label">Ack</span><span class="setup-status-value">${escHtml(`POST ${apiBase}/ack`)}</span></div>
-        </div>
-      </section>
-      <section class="setup-card">
         <div class="setup-card-header"><h2>GitHub / Repo</h2><p>Credentials and source repo used for simulation.conf editing.</p></div>
         <div class="setup-form">
           <div class="form-group"><label class="form-label" for="tenant-sim-repo-url">Simulation Repo URL</label><input id="tenant-sim-repo-url" type="url" class="form-input" value="${escHtml(github.sim_repo_url || "")}" placeholder="https://github.com/owner/repo.git"${disabled}></div>

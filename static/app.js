@@ -7895,6 +7895,22 @@ function showToast(message, level = "ok") {
   setTimeout(() => toast.remove(), 5000);
 }
 
+// Hub-IIFE local copy — showInlineMessage is defined in the spoke IIFE and not in scope here.
+function showInlineMessage(element, text, isError, timeout = 5000) {
+  if (!element) return;
+  clearTimeout(element._timer);
+  if (!text) {
+    element.textContent = "";
+    element.className = "settings-message hidden";
+    return;
+  }
+  element.textContent = text;
+  element.className = `settings-message ${isError ? "error" : "success"}`;
+  if (timeout > 0) {
+    element._timer = setTimeout(() => { element.className = "settings-message hidden"; }, timeout);
+  }
+}
+
 function isOnline(lastSeenIso) {
   if (!lastSeenIso) return false;
   const ts = new Date(lastSeenIso).getTime();
@@ -13334,7 +13350,7 @@ async function initTsProxmoxTab(tenantId) {
 
   // Push to ALL spokes
   saveBtn.onclick = async () => {
-    if (!spokes.length) { showInlineMessage(msg, "No spokes available.", true); return; }
+    if (!spokes.length) { showToast("No spokes available.", "error"); return; }
     const config = {
       usb_auto_provision: $("#ts-usb-auto-provision")?.checked ? "on" : "off",
       usb_missing_timeout: parseInt($("#ts-usb-missing-timeout")?.value || "60", 10) || 60,
@@ -13344,11 +13360,14 @@ async function initTsProxmoxTab(tenantId) {
       vm_image_1_pct: parseInt($("#ts-vm-image-1-pct")?.value || "50", 10) || 50,
       reclone_concurrency: parseInt($("#ts-reclone-concurrency")?.value || "1", 10) || 1,
     };
+    saveBtn.disabled = true;
     try {
       await Promise.all(spokes.map((s) => pushSpokeConfig(tenantId, s.id, config)));
-      showInlineMessage(msg, `Pushed to ${spokes.length} spoke${spokes.length !== 1 ? "s" : ""} ✓`, false);
+      showToast(`Proxmox config queued for ${spokes.length} spoke${spokes.length !== 1 ? "s" : ""}`, "success");
     } catch (error) {
-      showInlineMessage(msg, error.message || "Failed to push settings.", true);
+      showToast(error.message || "Failed to push Proxmox settings.", "error");
+    } finally {
+      saveBtn.disabled = false;
     }
   };
 

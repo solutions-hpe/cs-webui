@@ -13017,7 +13017,9 @@ function renderHubCentral() {
           ${renderClusterUrlField(config, disabled)}
           <div class="form-group"><label class="form-label" for="hub-central-client-id">Client ID</label><input id="hub-central-client-id" type="text" class="form-input" value="${escHtml(config.client_id || "")}"${disabled}></div>
           <div class="form-group"><label class="form-label" for="hub-central-client-secret">Client Secret</label><input id="hub-central-client-secret" type="password" class="form-input" placeholder="Leave blank to keep existing"${disabled}></div>
+          <div class="form-group"><label class="form-label" for="hub-central-workspace-id">GLP Workspace ID (optional)</label><input id="hub-central-workspace-id" type="text" class="form-input" value="${escHtml(config.workspace_id || "")}"${disabled}></div>
           <div class="form-group"><label class="form-label" for="hub-central-customer-id">Customer ID</label><input id="hub-central-customer-id" type="text" class="form-input" value="${escHtml(config.customer_id || "")}"${disabled}></div>
+          <div class="tenant-detail-note"><strong>New Central setup:</strong> <code>cluster_url</code> is the API base URL from Central → Menu → API Gateway → REST API (for example <code>https://us5.api.central.arubanetworks.com</code>). <code>client_id</code> and <code>client_secret</code> come from GreenLake → Manage Workspace → Personal API Clients. <code>workspace_id</code> is optional and only needed for GLP-scoped credentials.</div>
           <div class="form-actions">
             <button id="save-central-btn" class="btn btn-primary" type="button"${disabled}>Save Central Settings</button>
             <button id="test-central-btn" class="btn btn-secondary" type="button">Test Connection</button>
@@ -13957,6 +13959,7 @@ async function saveCentralSettings() {
       })(),
       client_id: $("#hub-central-client-id")?.value.trim() || "",
       client_secret: $("#hub-central-client-secret")?.value || "",
+      workspace_id: $("#hub-central-workspace-id")?.value.trim() || "",
       customer_id: $("#hub-central-customer-id")?.value.trim() || "",
     },
   };

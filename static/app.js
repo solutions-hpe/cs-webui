@@ -13044,6 +13044,9 @@ function renderHubCentral() {
   if (!container) return;
   const data = aggregateCentralData || { spokes: [], hub_central_config: {}, mode: "distributed" };
   const spokes = data.spokes || [];
+  const sortedSpokes = spokes.slice().sort((left, right) => (
+    spokeDisplayName(left, "Spoke").localeCompare(spokeDisplayName(right, "Spoke"), undefined, { numeric: true, sensitivity: "base" })
+  ));
   const connectedCount = spokes.filter(item => item.central_status?.token_valid).length;
   const config = data.hub_central_config || {};
   const webhook = centralWebhookStatus || defaultCentralWebhookStatus();
@@ -13053,7 +13056,7 @@ function renderHubCentral() {
   $("#hub-central-mode-pill") && ($("#hub-central-mode-pill").textContent = `${data.mode || "distributed"} mode`);
   $("#hub-central-spokes-pill") && ($("#hub-central-spokes-pill").textContent = `${spokes.length} spokes`);
   $("#hub-central-connected-pill") && ($("#hub-central-connected-pill").textContent = `${connectedCount} connected`);
-  const spokeRows = spokes.map(item => {
+  const spokeRows = sortedSpokes.map(item => {
     const central = item.central_status || {};
     const state = central.token_state?.state || (central.token_valid ? "connected" : (item.spoke_online ? "unknown" : "offline"));
     const siteCount = Object.keys(central.status || {}).length;

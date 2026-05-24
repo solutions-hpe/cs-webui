@@ -12144,6 +12144,12 @@ function renderHubVmServerUsbPanel(host) {
                      value="${escHtml(cfg.reclone_concurrency || "1")}" min="1" max="20" placeholder="1">
               <span class="form-hint">VMs to reclone or provision simultaneously.</span>
             </div>
+            <div class="form-group">
+              <label class="form-label" for="hvmusb-protected-vmids">Protected VMIDs</label>
+              <input id="hvmusb-protected-vmids" class="form-input" type="text"
+                     value="${escHtml(cfg.protected_vmids || "")}" placeholder="e.g. 101, 102, 200">
+              <span class="form-hint">Comma-separated VMIDs that cannot be started, stopped, recloned, or deleted from this UI. VM 1001 is always protected.</span>
+            </div>
           </div>
         </div>
         <div style="margin-top:8px;">
@@ -12469,6 +12475,7 @@ function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
         const missingTimeout = String(parseInt(panel.querySelector("#hvmusb-missing-timeout")?.value || "60", 10) || 60);
         const maxSlots       = String(parseInt(panel.querySelector("#hvmusb-max-slots")?.value || "24", 10) || 24);
         const concurrency    = String(parseInt(panel.querySelector("#hvmusb-concurrency")?.value || "1", 10) || 1);
+        const protectedVmids = String(panel.querySelector("#hvmusb-protected-vmids")?.value || "").trim();
 
         // apiFetch automatically adds the Authorization header and JSON-encodes plain objects.
         const res  = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/config`, {
@@ -12479,6 +12486,7 @@ function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
             usb_missing_timeout: missingTimeout,
             usb_max_slots:       maxSlots,
             reclone_concurrency: concurrency,
+            protected_vmids:     protectedVmids,
           },
         });
         const data = await readJson(res);

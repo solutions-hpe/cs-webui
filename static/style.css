@@ -1993,6 +1993,7 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   padding: 3px 10px;
   font-size: 0.78rem;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .site-status-pill.approved  { background: var(--hpe-green-light); color: var(--hpe-green-dark); }

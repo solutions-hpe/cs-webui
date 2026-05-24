@@ -12932,11 +12932,11 @@ function renderHubCentral() {
     const pillClass = state === "connected" ? "online" : state === "offline" ? "offline" : "pending";
     return `
       <tr>
-        <td><strong>${escHtml(spokeDisplayName(item, "Spoke"))}</strong></td>
-        <td><span class="site-status-pill ${pillClass}">${escHtml(state)}</span></td>
+        <td style="white-space: nowrap;"><strong>${escHtml(spokeDisplayName(item, "Spoke"))}</strong></td>
+        <td style="white-space: nowrap;"><span class="site-status-pill ${pillClass}">${escHtml(state)}</span></td>
         <td>${siteCount}</td>
-        <td>${escHtml(item.spoke_online ? "Online" : "Offline")}</td>
-        <td>${escHtml(item.last_seen ? relativeTime(item.last_seen) : "—")}</td>
+        <td style="white-space: nowrap;">${escHtml(item.spoke_online ? "Online" : "Offline")}</td>
+        <td style="white-space: nowrap;">${escHtml(item.last_seen ? relativeTime(item.last_seen) : "—")}</td>
       </tr>
     `;
   }).join("");
@@ -12974,7 +12974,7 @@ function renderHubCentral() {
         <div class="setup-card-header"><h2>Spoke Central Status</h2><p>Last known Central API status reported by each spoke.</p></div>
         <div class="table-scroll">
           <table class="data-table">
-            <thead><tr><th>Spoke</th><th>Central Status</th><th>Mapped Sites</th><th>Spoke</th><th>Last Seen</th></tr></thead>
+            <thead><tr><th>Spoke</th><th>Central Status</th><th>Mapped Sites</th><th>Online</th><th>Last Seen</th></tr></thead>
             <tbody>${spokeRows || '<tr><td colspan="5" class="empty-state">No spoke Central telemetry reported.</td></tr>'}</tbody>
           </table>
         </div>

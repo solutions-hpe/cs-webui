@@ -7851,6 +7851,7 @@ let aggregateProxmoxHosts = [];
 let aggregateFleetRecloneStatus = null;
 let aggregateUsbProvisioningStatus = null;
 let aggregateCentralData = null;
+let centralWebhookStatus = null;
 let hubCentralData = null;
 let hubCentralActiveSubtab = "hcs-sites";
 let hubTenantSetupActiveSubtab = "ts-setup";
@@ -12967,18 +12968,91 @@ function onClusterSelectChange(sel) {
   }
 }
 
+function defaultCentralWebhookStatus() {
+  const tenantId = getActiveTenantId();
+  return {
+    registered: false,
+    webhook_id: "",
+    endpoint_url: tenantId
+      ? `https://cs-hub.westus3.azurecontainer.io:8443/api/${tenantId}/webhook/central`
+      : "https://cs-hub.westus3.azurecontainer.io:8443/api/{tenant_id}/webhook/central",
+  };
+}
+
+function centralWebhookEndpoint() {
+  const tenantId = getActiveTenantId();
+  return tenantId ? `/api/${encodeURIComponent(tenantId)}/aggregate/register-central-webhook` : "";
+}
+
+async function loadCentralWebhookStatus() {
+  if (!currentUser || !getActiveTenantId()) {
+    centralWebhookStatus = defaultCentralWebhookStatus();
+    return centralWebhookStatus;
+  }
+  const res = await apiFetch(centralWebhookEndpoint());
+  const data = await readJson(res);
+  centralWebhookStatus = res?.ok ? { ...defaultCentralWebhookStatus(), ...(data || {}) } : defaultCentralWebhookStatus();
+  return centralWebhookStatus;
+}
+
+async function registerCentralWebhook() {
+  if (!canManageTenant()) {
+    setFormMessage("hub-central-webhook-msg", "Tenant Viewer access is read-only.", false);
+    return;
+  }
+  const btn = $("#register-central-webhook-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "Registering…"; }
+  setFormMessage("hub-central-webhook-msg", "", true);
+  try {
+    const res = await apiFetch(centralWebhookEndpoint(), { method: "POST" });
+    const data = await readJson(res);
+    if (!res?.ok || !data?.ok) throw new Error(data?.detail || "Unable to register Central webhook.");
+    setFormMessage("hub-central-webhook-msg", "Webhook registered.", true);
+    showToast("Central webhook registered.", "ok");
+    await loadCentral(true);
+  } catch (error) {
+    setFormMessage("hub-central-webhook-msg", error.message || "Unable to register Central webhook.", false);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Register"; }
+  }
+}
+
+async function deregisterCentralWebhook() {
+  if (!canManageTenant()) {
+    setFormMessage("hub-central-webhook-msg", "Tenant Viewer access is read-only.", false);
+    return;
+  }
+  const btn = $("#deregister-central-webhook-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "Deregistering…"; }
+  setFormMessage("hub-central-webhook-msg", "", true);
+  try {
+    const res = await apiFetch(centralWebhookEndpoint(), { method: "DELETE" });
+    const data = await readJson(res);
+    if (!res?.ok || !data?.ok) throw new Error(data?.detail || "Unable to deregister Central webhook.");
+    setFormMessage("hub-central-webhook-msg", "Webhook removed.", true);
+    showToast("Central webhook removed.", "ok");
+    await loadCentral(true);
+  } catch (error) {
+    setFormMessage("hub-central-webhook-msg", error.message || "Unable to deregister Central webhook.", false);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Deregister"; }
+  }
+}
+
 function renderHubCentral() {
   const container = $("#hub-central-content");
   if (!container) return;
   const data = aggregateCentralData || { spokes: [], hub_central_config: {}, mode: "distributed" };
   const spokes = data.spokes || [];
   const connectedCount = spokes.filter(item => item.central_status?.token_valid).length;
+  const config = data.hub_central_config || {};
+  const webhook = centralWebhookStatus || defaultCentralWebhookStatus();
+  const webhookRegistered = Boolean(webhook.registered);
+  const disabled = canManageTenant() ? "" : " disabled";
+  const note = canManageTenant() ? "" : '<div class="tenant-detail-note">Tenant Viewer access: Central settings are read-only.</div>';
   $("#hub-central-mode-pill") && ($("#hub-central-mode-pill").textContent = `${data.mode || "distributed"} mode`);
   $("#hub-central-spokes-pill") && ($("#hub-central-spokes-pill").textContent = `${spokes.length} spokes`);
   $("#hub-central-connected-pill") && ($("#hub-central-connected-pill").textContent = `${connectedCount} connected`);
-  const config = data.hub_central_config || {};
-  const disabled = canManageTenant() ? "" : " disabled";
-  const note = canManageTenant() ? "" : '<div class="tenant-detail-note">Tenant Viewer access: Central settings are read-only.</div>';
   const spokeRows = spokes.map(item => {
     const central = item.central_status || {};
     const state = central.token_state?.state || (central.token_valid ? "connected" : (item.spoke_online ? "unknown" : "offline"));
@@ -13037,6 +13111,22 @@ function renderHubCentral() {
         </div>
       </section>
     </div>
+    <section class="setup-card" style="margin-top:16px;">
+      <div class="setup-card-header">
+        <h2>Real-Time Alerts (Webhook)</h2>
+        <p>Register the hub as a Central webhook receiver for real-time alert delivery instead of polling-only.</p>
+      </div>
+      <div class="setup-form">
+        <div class="tenant-detail-note"><strong>Status:</strong> ${webhookRegistered ? "Registered" : "Not registered"}</div>
+        <div class="tenant-detail-note"><strong>Webhook endpoint:</strong> <code>${escHtml(webhook.endpoint_url || defaultCentralWebhookStatus().endpoint_url)}</code></div>
+        ${webhook.webhook_id ? `<div class="tenant-detail-note"><strong>Webhook ID:</strong> <code>${escHtml(webhook.webhook_id)}</code></div>` : ""}
+        <div class="form-actions">
+          <button id="register-central-webhook-btn" class="btn btn-primary" type="button"${disabled}${webhookRegistered ? " disabled" : ""}>Register</button>
+          <button id="deregister-central-webhook-btn" class="btn btn-secondary" type="button"${disabled}${webhookRegistered ? "" : " disabled"}>Deregister</button>
+          <span id="hub-central-webhook-msg" class="form-msg"></span>
+        </div>
+      </div>
+    </section>
   `;
 }
 
@@ -13159,12 +13249,17 @@ async function loadCentral(force = false) {
   if (!container) return;
   if (!currentTenantId || !currentUser) {
     aggregateCentralData = { mode: "distributed", hub_central_config: {}, spokes: [] };
+    centralWebhookStatus = defaultCentralWebhookStatus();
     renderHubCentral();
     return;
   }
   container.innerHTML = '<div class="empty-state">Loading…</div>';
-  const data = force || !aggregateCentralData ? await loadAggregateData("central") : aggregateCentralData;
+  const [data, webhook] = await Promise.all([
+    force || !aggregateCentralData ? loadAggregateData("central") : Promise.resolve(aggregateCentralData),
+    loadCentralWebhookStatus(),
+  ]);
   aggregateCentralData = data || { mode: "distributed", hub_central_config: {}, spokes: [] };
+  centralWebhookStatus = webhook || defaultCentralWebhookStatus();
   renderHubCentral();
 }
 
@@ -16152,6 +16247,14 @@ function bindEvents() {
     }
     if (event.target.closest("#test-central-btn")) {
       testCentralConnection();
+      return;
+    }
+    if (event.target.closest("#register-central-webhook-btn")) {
+      registerCentralWebhook();
+      return;
+    }
+    if (event.target.closest("#deregister-central-webhook-btn")) {
+      deregisterCentralWebhook();
       return;
     }
     if (event.target.closest("#save-config-push-btn")) {

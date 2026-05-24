@@ -7831,6 +7831,7 @@ let spokeCache = {};
 let activeSpokeModal = null;
 let ws = null;
 let wsReconnectTimer = null;
+let wsOfflineTimer = null;
 let activeTab = "dashboard";
 let autoRefreshTimer = null;
 let autoRefreshCountdownTimer = null;
@@ -9162,7 +9163,6 @@ async function apiFetch(url, options = {}) {
   }
   const response = await fetch(url, init).catch(() => null);
   if (!response) {
-    updateApiStatus(false, "Disconnected");
     return null;
   }
   updateApiStatus(true, "Connected");
@@ -10219,6 +10219,10 @@ function disconnectWebSocket() {
   if (wsReconnectTimer) {
     clearTimeout(wsReconnectTimer);
     wsReconnectTimer = null;
+  }
+  if (wsOfflineTimer) {
+    clearTimeout(wsOfflineTimer);
+    wsOfflineTimer = null;
   }
   if (ws) {
     const socket = ws;
@@ -15727,7 +15731,10 @@ function connectHubWebSocket() {
   }
   const proto = window.location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${proto}://${window.location.host}/ws`);
-  ws.onopen = () => updateApiStatus(true, "Connected");
+  ws.onopen = () => {
+    if (wsOfflineTimer) { clearTimeout(wsOfflineTimer); wsOfflineTimer = null; }
+    updateApiStatus(true, "Connected");
+  };
   ws.onmessage = event => {
     const data = JSON.parse(event.data);
     if (data.type === "telemetry") {
@@ -15775,10 +15782,14 @@ function connectHubWebSocket() {
     }
   };
   ws.onclose = () => {
-    updateApiStatus(false, "Disconnected");
     ws = null;
-    if (!authToken) return;
+    if (!authToken) {
+      updateApiStatus(false, "Disconnected");
+      return;
+    }
     wsReconnectTimer = window.setTimeout(connectHubWebSocket, 3000);
+    // Delay showing red until after the reconnect window — transient drops won't flash the indicator
+    wsOfflineTimer = window.setTimeout(() => updateApiStatus(false, "Disconnected"), 4000);
   };
   ws.onerror = () => {
     if (ws && ws.readyState !== WebSocket.CLOSED) ws.close();

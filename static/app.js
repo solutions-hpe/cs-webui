@@ -13003,6 +13003,7 @@ const NEW_CENTRAL_CLUSTERS = [
   { label: "APAC-SOUTH1  (au1.api.central.arubanetworks.com)", url: "https://au1.api.central.arubanetworks.com" },
   { label: "UAE  (ae1.api.central.arubanetworks.com)",       url: "https://ae1.api.central.arubanetworks.com" },
   { label: "China  (cn1.api.central.arubanetworks.com.cn)",  url: "https://cn1.api.central.arubanetworks.com.cn" },
+  { label: "Internal  (internal.api.central.arubanetworks.com)", url: "https://internal.api.central.arubanetworks.com" },
 ];
 
 function renderClusterUrlField(config, disabled) {

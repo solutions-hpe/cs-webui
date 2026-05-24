@@ -8908,46 +8908,55 @@ function renderClientRowsForHub() {
   }
   primeHubClientExpandedSet(sites.map(site => site.siteKey));
   const expanded = getHubClientExpandedSet();
-  container.innerHTML = sites.map(site => {
-    const isExpanded = expanded.has(site.siteKey);
-    const encodedSiteKey = encodeURIComponent(site.siteKey);
-    return `
-      <section class="hub-client-site-group">
-        <button class="hub-client-site-header" type="button" onclick="toggleHubSiteExpand(decodeURIComponent('${encodedSiteKey}'))" aria-expanded="${isExpanded ? "true" : "false"}">
-          <span class="hub-client-site-name">${escHtml(site.name)}</span>
-          <span class="badge badge-grey">${site.clients.length} clients</span>
-          <span class="badge badge-green">${site.onlineCount} online</span>
-          ${site.errorCount > 0 ? `<span class="badge badge-red">${site.errorCount} errors</span>` : ""}
-          ${site.t3PciCount > 0 ? `<span class="badge badge-purple" title="T3 IoT PCI devices on this node">📡 ${site.t3PciCount} T3</span>` : ""}
-          <span class="hub-client-site-simulations">${renderHubSimulationBadges(site.activeSimulations, "")}</span>
-          <span class="hub-client-site-chevron" aria-hidden="true">${isExpanded ? "▼" : "▶"}</span>
-        </button>
-        ${isExpanded ? `
-          <div class="hub-client-site-rows">
-            ${hubClientTypeFilter === 't3' ? renderHubT3PciSection(site) : ""}
-            <div class="table-scroll">
-              <table class="data-table hub-client-site-table">
-                <thead><tr><th>Status</th><th>Hostname</th><th>Platform</th><th>SSID</th><th>Active Simulations</th><th style="white-space:nowrap">Last Seen</th><th>Errors</th></tr></thead>
-                <tbody>
-                  ${site.clients.map(client => `
-                    <tr>
-                      <td class="status-cell">${statusDot(Boolean(client.online))}</td>
-                      <td class="hostname-cell">${escHtml(client.hostname || "—")}</td>
-                      <td>${escHtml(client.platform || client.hw_type || "—")}</td>
-                      <td>${escHtml(client.connected_ssid || "—")}</td>
-                      <td>${renderHubSimulationBadges(normalizeHubClientActiveSimulations(client.active_simulations))}</td>
-                      <td class="nowrap-cell"><span title="${escHtml(fmtDate(client.last_seen))}">${escHtml(relativeTime(client.last_seen))}</span></td>
-                      <td>${Number(client.error_count || 0)}</td>
-                    </tr>
-                  `).join("")}
-                </tbody>
-              </table>
+  try {
+    container.innerHTML = sites.map(site => {
+      const siteKey = String(site.siteKey || "");
+      const isExpanded = expanded.has(siteKey);
+      return `
+        <section class="hub-client-site-group">
+          <button class="hub-client-site-header" type="button" data-site-key="${escHtml(siteKey)}" aria-expanded="${isExpanded ? "true" : "false"}">
+            <span class="hub-client-site-name">${escHtml(site.name)}</span>
+            <span class="badge badge-grey">${site.clients.length} clients</span>
+            <span class="badge badge-green">${site.onlineCount} online</span>
+            ${site.errorCount > 0 ? `<span class="badge badge-red">${site.errorCount} errors</span>` : ""}
+            ${site.t3PciCount > 0 ? `<span class="badge badge-purple" title="T3 IoT PCI devices on this node">📡 ${site.t3PciCount} T3</span>` : ""}
+            <span class="hub-client-site-simulations">${renderHubSimulationBadges(site.activeSimulations, "")}</span>
+            <span class="hub-client-site-chevron" aria-hidden="true">${isExpanded ? "▼" : "▶"}</span>
+          </button>
+          ${isExpanded ? `
+            <div class="hub-client-site-rows">
+              ${hubClientTypeFilter === 't3' ? renderHubT3PciSection(site) : ""}
+              <div class="table-scroll">
+                <table class="data-table hub-client-site-table">
+                  <thead><tr><th>Status</th><th>Hostname</th><th>Platform</th><th>SSID</th><th>Active Simulations</th><th style="white-space:nowrap">Last Seen</th><th>Errors</th></tr></thead>
+                  <tbody>
+                    ${site.clients.map(client => `
+                      <tr>
+                        <td class="status-cell">${statusDot(Boolean(client.online))}</td>
+                        <td class="hostname-cell">${escHtml(client.hostname || "—")}</td>
+                        <td>${escHtml(client.platform || client.hw_type || "—")}</td>
+                        <td>${escHtml(client.connected_ssid || "—")}</td>
+                        <td>${renderHubSimulationBadges(normalizeHubClientActiveSimulations(client.active_simulations))}</td>
+                        <td class="nowrap-cell"><span title="${escHtml(fmtDate(client.last_seen))}">${escHtml(relativeTime(client.last_seen))}</span></td>
+                        <td>${Number(client.error_count || 0)}</td>
+                      </tr>
+                    `).join("")}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        ` : ""}
-      </section>
-    `;
-  }).join("");
+          ` : ""}
+        </section>
+      `;
+    }).join("");
+  } catch (err) {
+    console.error("Failed to render hub client rows", err);
+    container.innerHTML = `<div class="empty-state">Unable to render client rows: ${escHtml(err?.message || "Unknown error")}</div>`;
+    return;
+  }
+  container.querySelectorAll(".hub-client-site-header[data-site-key]").forEach(button => {
+    button.addEventListener("click", () => toggleHubSiteExpand(button.dataset.siteKey || ""));
+  });
 }
 
 function buildTenantUserCounts(users = []) {

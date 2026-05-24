@@ -5125,6 +5125,11 @@ const cmdMsg       = document.getElementById('cmd-msg');
 const cmdTbody     = document.getElementById('cmd-tbody');
 const cmdEmpty     = document.getElementById('cmd-empty');
 
+// Re-render on search input
+document.getElementById('cmd-search')?.addEventListener('input', () => {
+  if (window._lastCommands) renderCommandTable(window._lastCommands);
+});
+
 const CMD_STATUS_LABELS = {
   pending:   { text: 'Pending',   cls: 'badge-yellow' },
   delivered: { text: 'Delivered', cls: 'badge-blue' },
@@ -5205,13 +5210,23 @@ function cmdTargetLabel(cmd) {
 
 function renderCommandTable(cmds) {
   if (!cmdTbody || !cmdEmpty) return;
+  const query = (document.getElementById('cmd-search')?.value || '').trim().toLowerCase();
+  const filtered = query
+    ? (cmds || []).filter(cmd =>
+        (cmdTargetLabel(cmd) || '').toLowerCase().includes(query) ||
+        (cmd.action || '').toLowerCase().includes(query) ||
+        (cmdDescription(cmd) || '').toLowerCase().includes(query) ||
+        (cmd.message || '').toLowerCase().includes(query) ||
+        (cmd.status || '').toLowerCase().includes(query)
+      )
+    : (cmds || []);
   cmdTbody.innerHTML = '';
-  if (!cmds || cmds.length === 0) {
+  if (!filtered.length) {
     cmdEmpty.style.display = '';
     return;
   }
   cmdEmpty.style.display = 'none';
-  [...cmds].reverse().forEach((cmd) => {
+  [...filtered].reverse().forEach((cmd) => {
     const info = CMD_STATUS_LABELS[cmd.status] || { text: cmd.status, cls: 'badge-grey' };
     const age = cmd.age_secs != null ? `${Math.floor(cmd.age_secs / 60)}m ${cmd.age_secs % 60}s` : '—';
     const tr = document.createElement('tr');
@@ -12701,7 +12716,11 @@ function renderHubVmServerCommandQueuePanel() {
           </select>
         </div>
         <button class="btn btn-primary"   id="hub-spoke-cmd-send-btn"  type="button">Send Command</button>
-        <button class="btn btn-secondary" id="hub-spoke-cmd-clear-btn" type="button" style="margin-left:auto;">Clear History</button>
+        <div class="form-group" style="min-width:200px;margin-left:auto;">
+          <label>Search history</label>
+          <input type="search" id="hub-spoke-cmd-search" class="form-input" placeholder="Filter by target, action, result…">
+        </div>
+        <button class="btn btn-secondary" id="hub-spoke-cmd-clear-btn" type="button">Clear History</button>
       </div>
       <div id="hub-spoke-cmd-msg" class="form-msg" style="margin-bottom:6px;"></div>
       <div class="table-scroll">
@@ -12717,11 +12736,29 @@ function renderHubVmServerCommandQueuePanel() {
 async function loadHubSpokeCommands(tenantId, spokeId) {
   const tbody = document.getElementById("hub-spoke-cmd-tbody");
   const empty = document.getElementById("hub-spoke-cmd-empty");
+  const searchInput = document.getElementById("hub-spoke-cmd-search");
   if (!tbody) return;
+
+  // Wire search input once
+  if (searchInput && !searchInput.dataset.wired) {
+    searchInput.dataset.wired = "1";
+    searchInput.addEventListener("input", () => loadHubSpokeCommands(tenantId, spokeId));
+  }
+
+  const query = (searchInput?.value || "").trim().toLowerCase();
   try {
     const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/commands?spoke_id=${encodeURIComponent(spokeId)}`);
     if (!res || !res.ok) throw new Error(`HTTP ${res?.status ?? "?"}`);
-    const commands = await res.json();
+    const allCommands = await res.json();
+    const commands = query
+      ? allCommands.filter(cmd =>
+          (cmd.target || "").toLowerCase().includes(query) ||
+          (cmd.type || "").toLowerCase().includes(query) ||
+          JSON.stringify(cmd.payload || {}).toLowerCase().includes(query) ||
+          (cmd.status || "").toLowerCase().includes(query) ||
+          (cmd.result?.detail || "").toLowerCase().includes(query)
+        )
+      : allCommands;
     if (empty) empty.style.display = commands.length ? "none" : "";
     if (!commands.length) { tbody.innerHTML = ""; return; }
     const typeLabels = {

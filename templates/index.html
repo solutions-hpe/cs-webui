@@ -1727,7 +1727,11 @@
                 </select>
               </div>
               <button class="btn btn-primary" id="cmd-send-btn" type="button">Send Command</button>
-              <button class="btn btn-secondary" id="cmd-clear-btn" type="button" style="margin-left:auto;">Clear History</button>
+              <div class="form-group" style="min-width:200px;margin-left:auto;">
+                <label>Search history</label>
+                <input type="search" id="cmd-search" class="form-input" placeholder="Filter by target, action, message…">
+              </div>
+              <button class="btn btn-secondary" id="cmd-clear-btn" type="button">Clear History</button>
             </div>
             <div id="cmd-msg" class="form-msg" style="margin-bottom:6px;"></div>
             <div class="table-scroll">

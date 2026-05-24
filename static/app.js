@@ -13143,12 +13143,11 @@ function renderHubConfigPage(data) {
     const summary = summarizeHubConfigState(spoke);
     return `
       <tr>
-        <td><strong>${escHtml(spokePrimaryLabel(spoke))}</strong></td>
-        <td><span class="site-status-pill ${summary.className}">${escHtml(summary.label)}</span></td>
+        <td style="white-space:nowrap"><strong>${escHtml(spokePrimaryLabel(spoke))}</strong></td>
+        <td style="white-space:nowrap"><span class="site-status-pill ${summary.className}">${escHtml(summary.label)}</span></td>
         <td>${escHtml(String(spoke.config_version || 0))}</td>
         <td>${escHtml(String(spoke.applied_config_version || 0))}</td>
-        <td>${escHtml(spoke.last_config_applied_at ? fmtDate(spoke.last_config_applied_at) : "—")}</td>
-        <td>${escHtml(Object.keys(spoke.config || {}).join(", ") || "—")}</td>
+        <td style="white-space:nowrap">${escHtml(spoke.last_config_applied_at ? fmtDate(spoke.last_config_applied_at) : "—")}</td>
       </tr>
     `;
   }).join("");
@@ -13159,8 +13158,7 @@ function renderHubConfigPage(data) {
       <button class="setup-subtab hub-config-subtab ${hubConfigActiveSubtab === "simulation" ? "active" : ""}" data-hub-config-subtab="simulation" type="button">Simulation Config</button>
     </nav>
     <div id="hub-config-api-panel" class="${hubConfigActiveSubtab === "api" ? "" : "hidden"}">
-      <div class="setup-section-gap">${renderTenantConfigPanel(data)}</div>
-      <div class="tenant-detail-grid setup-section-gap">
+      <div class="tenant-detail-grid setup-section-gap" style="align-items:start">
         <section class="setup-card">
           <div class="setup-card-header"><h2>Push Config to Spokes</h2><p>Save tenant config on the hub and deliver it to each spoke on its next inbox check.</p></div>
           <div class="setup-form">
@@ -13175,11 +13173,11 @@ function renderHubConfigPage(data) {
           </div>
         </section>
         <section class="setup-card">
-          <div class="setup-card-header"><h2>Per-Spoke Config State</h2><p>Desired hub config version versus last applied version on each spoke.</p></div>
+          <div class="setup-card-header"><h2>Per-Spoke Config State</h2><p>Desired hub config version vs last applied on each spoke.</p></div>
           <div class="table-scroll">
             <table class="data-table">
-              <thead><tr><th>Spoke</th><th>Status</th><th>Desired</th><th>Applied</th><th>Last Applied</th><th>Fields</th></tr></thead>
-              <tbody>${stateRows || '<tr><td colspan="6" class="empty-state">No approved spokes in this tenant.</td></tr>'}</tbody>
+              <thead><tr><th>Spoke</th><th>Status</th><th>Desired</th><th>Applied</th><th>Last Applied</th></tr></thead>
+              <tbody>${stateRows || '<tr><td colspan="5" class="empty-state">No approved spokes in this tenant.</td></tr>'}</tbody>
             </table>
           </div>
         </section>

@@ -1441,12 +1441,12 @@
           <div id="reclone-status-panel" class="setup-card vm-server-status-tile">
             <div class="autoprov-two-col">
               <div class="autoprov-left">
-                <div class="setup-card-header" style="margin-bottom:8px;">
+                <div class="setup-card-header" style="display:flex;align-items:center;gap:12px;justify-content:space-between;margin-bottom:8px;">
                   <h2 style="font-size:1rem;margin:0;">Fleet Reclone</h2>
-                </div>
-                <div class="reclone-action-stack">
-                  <button id="reclone-now-btn" class="btn btn-primary btn-small" onclick="triggerRecloneAll()">⟳ Reclone All Now</button>
                   <div id="reclone-status-badge" class="badge badge-grey">Idle</div>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+                  <button id="reclone-now-btn" class="btn btn-primary btn-small" onclick="triggerRecloneAll()">⟳ Reclone All Now</button>
                   <button id="reclone-clear-btn" class="btn btn-secondary btn-small hidden" type="button">✕ Clear Errors</button>
                 </div>
                 <div id="reclone-progress-wrap" class="hidden">

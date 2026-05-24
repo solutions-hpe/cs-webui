@@ -3498,7 +3498,7 @@ function renderAutoProvisionStatus() {
     const iconEl = document.getElementById('autoprov-status-icon');
     const textEl = document.getElementById('autoprov-status-text');
     if (iconEl) iconEl.className = 'autoprov-status-icon';
-    bar.classList.remove('hidden', 'is-active', 'is-idle', 'is-disabled');
+    bar.classList.remove('is-active', 'is-idle', 'is-disabled');
 
     if (!autoProv) {
       bar.classList.add('is-disabled');

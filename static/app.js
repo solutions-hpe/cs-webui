@@ -7447,6 +7447,7 @@ async function bootSpokeRuntime() {
     }
     const fWebui = document.getElementById('footer-cswebui-version');
     const fRepo  = document.getElementById('footer-repo-version');
+    const fHost  = document.getElementById('footer-hostname');
     if (fWebui) {
       const ver = init.app_version || init.installer_version || '—';
       fWebui.textContent = `CS-WebUI v${ver}`;
@@ -7456,6 +7457,11 @@ async function bootSpokeRuntime() {
       const rver = init.installer_version || '—';
       fRepo.textContent = `GitHub Repo v${rver}`;
       fRepo.title = `Installer/repo version: v${rver}`;
+    }
+    if (fHost && init.hostname) {
+      fHost.textContent = init.hostname;
+      fHost.title = `Spoke hostname: ${init.hostname}`;
+      fHost.style.display = '';
     }
     applySpokeViewerMode();
   } catch (_) { /* silent — WS will provide live state */ }
@@ -16547,6 +16553,7 @@ async function setFooterVersions() {
     if (!init) return;
     const fWebui = document.getElementById('footer-cswebui-version');
     const fRepo  = document.getElementById('footer-repo-version');
+    const fHost  = document.getElementById('footer-hostname');
     if (fWebui) {
       const ver = init.app_version || init.installer_version || '—';
       fWebui.textContent = `CS-WebUI v${ver}`;
@@ -16555,6 +16562,11 @@ async function setFooterVersions() {
     if (fRepo) {
       const rver = init.installer_version || '—';
       fRepo.textContent = `GitHub Repo v${rver}`;
+    }
+    if (fHost && init.hostname) {
+      fHost.textContent = init.hostname;
+      fHost.title = `Spoke hostname: ${init.hostname}`;
+      fHost.style.display = '';
     }
   } catch (_) {}
 }

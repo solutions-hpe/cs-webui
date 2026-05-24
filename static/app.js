@@ -1633,7 +1633,7 @@ function renderServerTab(data) {
       const isWebui      = webuiVmid != null && Number(vm.vmid) === webuiVmid;
       const isProvisioning = vm.prov_status === 'provisioning' || vm.pending_checkin === true;
       const baseStatusText = isDeleting
-        ? '🔴 deleting…'
+        ? '🟡 deleting…'
         : isProvisioning
         ? '🔵 provisioning'
         : `${vm.status === 'running' ? '🟢' : vm.status === 'paused' ? '🟡' : '⚫'} ${vm.status || 'unknown'}`;
@@ -11617,6 +11617,7 @@ function renderHubVmServerSubpanel({ tenantId, spokeId, simVms, iotVms, otherVms
 // ── VM status dot helper ─────────────────────────────────────────────────────
 
 function _hubVmStatusDot(vm) {
+  if (vm.status === "deleting")    return "🟡";
   if (vm.prov_status === "provisioning") return "🔵";
   if (vm.status === "running") return "🟢";
   if (vm.status === "paused") return "🟡";
@@ -11732,15 +11733,18 @@ function _hubVmFullTable(spokeId, vms, catId) {
   });
   const colId = catId === "containers" ? "CT ID" : "VM ID";
   const rows = sorted.map(vm => {
+    const isDeleting = vm.status === "deleting";
     const dot = _hubVmStatusDot(vm);
-    const statusLabel = `${dot} ${escHtml(vm.status || "unknown")}`;
-    const cpu = (vm.status === "running" && vm.cpu != null && !Number.isNaN(Number(vm.cpu)))
+    const statusLabel = isDeleting ? `🟡 deleting…` : `${dot} ${escHtml(vm.status || "unknown")}`;
+    const cpu = (!isDeleting && vm.status === "running" && vm.cpu != null && !Number.isNaN(Number(vm.cpu)))
       ? Number(vm.cpu).toFixed(1) + "%" : "—";
     const ram = (vm.mem && vm.maxmem)
       ? `${fmtSize(Number(vm.mem) * 1024 * 1024)} / ${fmtSize(Number(vm.maxmem) * 1024 * 1024)}`
       : "—";
     const vmidStr = escHtml(String(vm.vmid ?? "—"));
-    const actions = [
+    const actions = isDeleting
+      ? `<span style="font-size:0.82rem;color:var(--muted);font-style:italic;">deleting…</span>`
+      : [
       { action: "start_vm",   label: "▶", title: "Start"   },
       { action: "stop_vm",    label: "■", title: "Stop"    },
       { action: "reclone_vm", label: "↺", title: "Reclone" },
@@ -11748,9 +11752,9 @@ function _hubVmFullTable(spokeId, vms, catId) {
     ].map(a =>
       `<button class="btn-icon hub-vm-action" data-action="${a.action}" data-vmid="${vmidStr}" title="${a.title}">${a.label}</button>`
     ).join(" ");
-    const consoleBtn = vm.status === "running"
+    const consoleBtn = (!isDeleting && vm.status === "running")
       ? `<button class="btn-icon hub-vm-console-btn" data-vmid="${vmidStr}" data-vmtype="${escHtml(vm.type || 'qemu')}" title="Open Console" style="color:#4fc3f7;">⎕</button>`
-      : `<button class="btn-icon" disabled title="VM must be running to open console" style="opacity:0.3;">⎕</button>`;
+      : `<button class="btn-icon" disabled title="${isDeleting ? 'VM is being deleted' : 'VM must be running to open console'}" style="opacity:0.3;">⎕</button>`;
     return `<tr data-vmid="${vmidStr}">
       <td><input type="checkbox" class="hub-vm-check" data-vmid="${vmidStr}"></td>
       <td class="vm-status-cell">${statusLabel}</td>

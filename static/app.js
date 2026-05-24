@@ -12913,6 +12913,60 @@ async function queueHubTemplateUnlock(tenantId, spokeId) {
 }
 
 
+const NEW_CENTRAL_CLUSTERS = [
+  { label: "US-1  (us1.api.central.arubanetworks.com)",      url: "https://us1.api.central.arubanetworks.com" },
+  { label: "US-2  (us2.api.central.arubanetworks.com)",      url: "https://us2.api.central.arubanetworks.com" },
+  { label: "US-WEST-4  (us4.api.central.arubanetworks.com)", url: "https://us4.api.central.arubanetworks.com" },
+  { label: "US-WEST-5  (us5.api.central.arubanetworks.com)", url: "https://us5.api.central.arubanetworks.com" },
+  { label: "US-EAST-1  (us6.api.central.arubanetworks.com)", url: "https://us6.api.central.arubanetworks.com" },
+  { label: "EU-1  (de1.api.central.arubanetworks.com)",      url: "https://de1.api.central.arubanetworks.com" },
+  { label: "EU-Central2  (de2.api.central.arubanetworks.com)", url: "https://de2.api.central.arubanetworks.com" },
+  { label: "EU-Central3  (de3.api.central.arubanetworks.com)", url: "https://de3.api.central.arubanetworks.com" },
+  { label: "UK  (gb1.api.central.arubanetworks.com)",        url: "https://gb1.api.central.arubanetworks.com" },
+  { label: "Canada-1  (ca1.api.central.arubanetworks.com)",  url: "https://ca1.api.central.arubanetworks.com" },
+  { label: "APAC-1  (in1.api.central.arubanetworks.com)",    url: "https://in1.api.central.arubanetworks.com" },
+  { label: "APAC-EAST1  (jp1.api.central.arubanetworks.com)", url: "https://jp1.api.central.arubanetworks.com" },
+  { label: "APAC-SOUTH1  (au1.api.central.arubanetworks.com)", url: "https://au1.api.central.arubanetworks.com" },
+  { label: "UAE  (ae1.api.central.arubanetworks.com)",       url: "https://ae1.api.central.arubanetworks.com" },
+  { label: "China  (cn1.api.central.arubanetworks.com.cn)",  url: "https://cn1.api.central.arubanetworks.com.cn" },
+];
+
+function renderClusterUrlField(config, disabled) {
+  const current = (config.cluster_url || "").trim();
+  const knownUrls = NEW_CENTRAL_CLUSTERS.map(c => c.url);
+  const isKnown = knownUrls.includes(current);
+  const selectVal = isKnown ? current : (current ? "__custom__" : "");
+  const options = NEW_CENTRAL_CLUSTERS.map(c =>
+    `<option value="${escHtml(c.url)}"${selectVal === c.url ? " selected" : ""}>${escHtml(c.label)}</option>`
+  ).join("");
+  const customSelected = selectVal === "__custom__" ? " selected" : "";
+  const customHidden = selectVal === "__custom__" ? "" : ' style="display:none"';
+  return `
+    <div class="form-group">
+      <label class="form-label" for="hub-central-cluster-select">Cluster</label>
+      <select id="hub-central-cluster-select" class="form-input"${disabled} onchange="onClusterSelectChange(this)">
+        <option value="">— select cluster —</option>
+        ${options}
+        <option value="__custom__"${customSelected}>Custom URL…</option>
+      </select>
+    </div>
+    <div class="form-group" id="hub-central-custom-url-group"${customHidden}>
+      <label class="form-label" for="hub-central-cluster-url">Custom Cluster URL</label>
+      <input id="hub-central-cluster-url" type="url" class="form-input" value="${escHtml(current)}"${disabled} placeholder="https://your-cluster.api.central.arubanetworks.com">
+    </div>`;
+}
+
+function onClusterSelectChange(sel) {
+  const customGroup = $("#hub-central-custom-url-group");
+  const customInput = $("#hub-central-cluster-url");
+  if (sel.value === "__custom__") {
+    if (customGroup) customGroup.style.display = "";
+    if (customInput) customInput.focus();
+  } else {
+    if (customGroup) customGroup.style.display = "none";
+  }
+}
+
 function renderHubCentral() {
   const container = $("#hub-central-content");
   if (!container) return;
@@ -12960,7 +13014,7 @@ function renderHubCentral() {
               <option value="new_central"${config.api_version === "new_central" ? " selected" : ""}>Central / HPE GreenLake</option>
             </select>
           </div>
-          <div class="form-group"><label class="form-label" for="hub-central-cluster-url">Cluster URL</label><input id="hub-central-cluster-url" type="url" class="form-input" value="${escHtml(config.cluster_url || "")}"${disabled}></div>
+          ${renderClusterUrlField(config, disabled)}
           <div class="form-group"><label class="form-label" for="hub-central-client-id">Client ID</label><input id="hub-central-client-id" type="text" class="form-input" value="${escHtml(config.client_id || "")}"${disabled}></div>
           <div class="form-group"><label class="form-label" for="hub-central-client-secret">Client Secret</label><input id="hub-central-client-secret" type="password" class="form-input" placeholder="Leave blank to keep existing"${disabled}></div>
           <div class="form-group"><label class="form-label" for="hub-central-customer-id">Customer ID</label><input id="hub-central-customer-id" type="text" class="form-input" value="${escHtml(config.customer_id || "")}"${disabled}></div>
@@ -13896,7 +13950,11 @@ async function saveCentralSettings() {
     mode: $("#hub-central-mode")?.value || "distributed",
     hub_central_config: {
       api_version: $("#hub-central-api-version")?.value || "classic",
-      cluster_url: $("#hub-central-cluster-url")?.value.trim() || "",
+      cluster_url: (() => {
+        const sel = $("#hub-central-cluster-select");
+        if (sel && sel.value && sel.value !== "__custom__") return sel.value;
+        return $("#hub-central-cluster-url")?.value.trim() || "";
+      })(),
       client_id: $("#hub-central-client-id")?.value.trim() || "",
       client_secret: $("#hub-central-client-secret")?.value || "",
       customer_id: $("#hub-central-customer-id")?.value.trim() || "",

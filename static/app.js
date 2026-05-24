@@ -799,6 +799,8 @@ const recloneVmLog = document.getElementById('reclone-vm-log');
 const recloneLastRun = document.getElementById('reclone-last-run');
 const recloneNowBtn = document.getElementById('reclone-now-btn');
 
+document.getElementById('reclone-clear-btn')?.addEventListener('click', clearRecloneState);
+
 
 // Event delegation for unknown USB action buttons — attached once to the static tbody element
 if (unknownUsbTbody) {
@@ -3185,11 +3187,11 @@ async function clearRecloneState() {
   if (btn) { btn.disabled = true; btn.textContent = 'Clearing…'; }
   try {
     await requestJson('/api/proxmox/reclone-state/clear', { method: 'POST' });
-    showNotification('Reclone error state cleared.', 'info');
+    showNotification('Reclone state cleared.', 'info');
   } catch (error) {
     showNotification(`Clear error: ${error.message}`, 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '✕ Clear Error'; }
+    if (btn) { btn.disabled = false; btn.textContent = '✕ Clear'; }
   }
 }
 window.clearRecloneState = clearRecloneState;

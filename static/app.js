@@ -12966,6 +12966,7 @@ function renderHubCentral() {
           <div class="form-group"><label class="form-label" for="hub-central-customer-id">Customer ID</label><input id="hub-central-customer-id" type="text" class="form-input" value="${escHtml(config.customer_id || "")}"${disabled}></div>
           <div class="form-actions">
             <button id="save-central-btn" class="btn btn-primary" type="button"${disabled}>Save Central Settings</button>
+            <button id="test-central-btn" class="btn btn-secondary" type="button">Test Connection</button>
             <span id="hub-central-msg" class="form-msg"></span>
           </div>
         </div>
@@ -13205,7 +13206,21 @@ function renderHubCentralStatus() {
 function renderHubCentralSites() {
   const container = $("#hcs-overview");
   if (!container || !hubCentralData) return;
-  const { spokes = [], mode, token_valid: hubTokenValid } = hubCentralData;
+  const { spokes = [], mode, token_valid: hubTokenValid, token_state: hubTokenState } = hubCentralData;
+
+  // In centralized mode, surface auth/polling errors clearly
+  if (mode === "centralized" && !hubTokenValid) {
+    const state = typeof hubTokenState === "object" ? (hubTokenState?.state || "unknown") : (hubTokenState || "unknown");
+    const detail = typeof hubTokenState === "object" ? (hubTokenState?.detail || "") : "";
+    const stateLabels = {
+      not_configured: "Central API credentials are not configured. Go to Tenant Setup → Central to add them.",
+      stale: "Central polling data is stale (no successful poll in the last 5 minutes). The hub may still be starting up.",
+      error: `Central API authentication failed. ${detail ? `Error: ${detail}` : "Check credentials in Tenant Setup → Central and use the Test Connection button."}`,
+    };
+    const message = stateLabels[state] || `Central API status: ${state}. Check credentials in Tenant Setup → Central.`;
+    container.innerHTML = `<div class="empty-state" style="color:#c0392b;">${escHtml(message)}</div>`;
+    return;
+  }
 
   // Aggregate by wsite across all spokes
   const siteMap = {};
@@ -13239,7 +13254,10 @@ function renderHubCentralSites() {
 
   const sites = Object.values(siteMap);
   if (!sites.length) {
-    container.innerHTML = '<div class="empty-state">No Central sites configured on any spoke.</div>';
+    const msg = mode === "centralized"
+      ? "Hub is connected but no sites were discovered from Central. Sites auto-populate after the next poll (up to 5 min)."
+      : "No Central sites configured on any spoke.";
+    container.innerHTML = `<div class="empty-state">${escHtml(msg)}</div>`;
     return;
   }
 
@@ -13895,6 +13913,30 @@ async function saveCentralSettings() {
   await loadCentral(true);
   await loadSetup();
 }
+
+async function testCentralConnection() {
+  const btn = $("#test-central-btn");
+  const msg = $("#hub-central-msg");
+  if (btn) { btn.disabled = true; btn.textContent = "Testing…"; }
+  if (msg) { msg.textContent = ""; msg.className = "form-msg"; }
+  try {
+    const res = await apiFetch(`/api/${encodeURIComponent(currentTenantId)}/aggregate/test-central`, { method: "POST" });
+    const data = await readJson(res);
+    if (!res?.ok || !data?.ok) {
+      setFormMessage("hub-central-msg", `Connection failed: ${data?.error || "Unknown error"}`, false);
+    } else {
+      const sitesText = data.sites_discovered > 0
+        ? ` Found ${data.sites_discovered} site(s): ${data.sites.join(", ")}`
+        : " No sites discovered.";
+      setFormMessage("hub-central-msg", `✓ Connected (${data.api_version}).${sitesText}`, true);
+    }
+  } catch (err) {
+    setFormMessage("hub-central-msg", `Connection failed: ${err.message}`, false);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Test Connection"; }
+  }
+}
+
 
 async function saveConfigPush() {
   if (!canManageTenant()) {
@@ -16045,6 +16087,10 @@ function bindEvents() {
     }
     if (event.target.closest("#save-central-btn")) {
       saveCentralSettings();
+      return;
+    }
+    if (event.target.closest("#test-central-btn")) {
+      testCentralConnection();
       return;
     }
     if (event.target.closest("#save-config-push-btn")) {

@@ -1524,7 +1524,7 @@ function renderServerTab(data) {
     const networkTypes = new Set(['nfs', 'cifs', 'glusterfs', 'cephfs', 'rbd', 'iscsi', 'pbs']);
     storagePills.innerHTML = node.storage.map((s) => {
       const icon = networkTypes.has(s.type) ? '🌐' : '🗄️';
-      return `<span class="server-stat-pill" title="${s.name} (${s.type})">${icon} ${s.name}: ${fmtSizeKB(s.used)} / ${fmtSizeKB(s.total)}</span>`;
+      return `<span class="server-stat-pill" title="${escHtml(s.name)} (${escHtml(s.type)})">${icon} ${escHtml(s.name)}: ${fmtSizeKB(s.used)} / ${fmtSizeKB(s.total)}</span>`;
     }).join('');
   }
 

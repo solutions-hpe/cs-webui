@@ -11857,30 +11857,30 @@ function wireHubVmsPanelActions(panel, tenantId, spokeId) {
       .filter(v => !Number.isNaN(v));
   }
 
-  panel.querySelector("#hub-server-bulk-start")?.addEventListener("click", () => {
+  panel.querySelector("#hub-server-bulk-start")?.addEventListener("click", async () => {
     const vmids = getCheckedVmids();
     if (!vmids.length) { showToast("No VMs selected.", "warn"); return; }
-    vmids.forEach(vmid => sendHubProxmoxCommand(tenantId, spokeId, "start_vm", { vmid }));
+    for (const vmid of vmids) await sendHubProxmoxCommand(tenantId, spokeId, "start_vm", { vmid }, true);
     showToast(`Start queued for ${vmids.length} VM(s).`, "ok");
   });
-  panel.querySelector("#hub-server-bulk-stop")?.addEventListener("click", () => {
+  panel.querySelector("#hub-server-bulk-stop")?.addEventListener("click", async () => {
     const vmids = getCheckedVmids();
     if (!vmids.length) { showToast("No VMs selected.", "warn"); return; }
-    vmids.forEach(vmid => sendHubProxmoxCommand(tenantId, spokeId, "stop_vm", { vmid }));
+    for (const vmid of vmids) await sendHubProxmoxCommand(tenantId, spokeId, "stop_vm", { vmid }, true);
     showToast(`Stop queued for ${vmids.length} VM(s).`, "ok");
   });
-  panel.querySelector("#hub-server-bulk-reclone")?.addEventListener("click", () => {
+  panel.querySelector("#hub-server-bulk-reclone")?.addEventListener("click", async () => {
     const vmids = getCheckedVmids();
     if (!vmids.length) { showToast("No VMs selected.", "warn"); return; }
     if (!confirm(`Reclone ${vmids.length} VM(s)?`)) return;
-    vmids.forEach(vmid => sendHubProxmoxCommand(tenantId, spokeId, "reclone_vm", { vmid }));
+    for (const vmid of vmids) await sendHubProxmoxCommand(tenantId, spokeId, "reclone_vm", { vmid }, true);
     showToast(`Reclone queued for ${vmids.length} VM(s).`, "ok");
   });
-  panel.querySelector("#hub-server-bulk-delete")?.addEventListener("click", () => {
+  panel.querySelector("#hub-server-bulk-delete")?.addEventListener("click", async () => {
     const vmids = getCheckedVmids();
     if (!vmids.length) { showToast("No VMs selected.", "warn"); return; }
     if (!confirm(`Delete ${vmids.length} VM(s)? This cannot be undone.`)) return;
-    vmids.forEach(vmid => sendHubProxmoxCommand(tenantId, spokeId, "delete_vm", { vmid }));
+    for (const vmid of vmids) await sendHubProxmoxCommand(tenantId, spokeId, "delete_vm", { vmid }, true);
     showToast(`Delete queued for ${vmids.length} VM(s).`, "ok");
   });
 }
@@ -12901,14 +12901,14 @@ function wireHubVmServerDetailsPanel(panel, tenantId, spokeId) {
 
 // ── Shared: send proxmox command via hub ──────────────────────────────────────
 
-async function sendHubProxmoxCommand(tenantId, spokeId, action, args = {}) {
+async function sendHubProxmoxCommand(tenantId, spokeId, action, args = {}, silent = false) {
   try {
     const resp = await apiFetch(
       `/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/proxmox-command`,
       { method: "POST", body: { action, args } }
     );
     if (!resp || !resp.ok) throw new Error(`HTTP ${resp?.status ?? "?"}`);
-    showToast(`Command queued: ${action}`, "ok");
+    if (!silent) showToast(`Command queued: ${action}`, "ok");
   } catch (err) {
     showToast(`Command failed: ${err.message}`, "error");
   }

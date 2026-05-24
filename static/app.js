@@ -13018,7 +13018,7 @@ function renderClusterUrlField(config, disabled) {
   return `
     <div class="form-group">
       <label class="form-label" for="hub-central-cluster-select">Cluster</label>
-      <select id="hub-central-cluster-select" class="form-input"${disabled} onchange="onClusterSelectChange(this)">
+      <select id="hub-central-cluster-select" class="form-input"${disabled}>
         <option value="">— select cluster —</option>
         ${options}
         <option value="__custom__"${customSelected}>Custom URL…</option>
@@ -16511,6 +16511,13 @@ function bindEvents() {
   $("#sa-cancel-tenant-btn")?.addEventListener("click", () => $("#sa-tenant-form")?.classList.add("hidden"));
   $("#sa-save-tenant-btn")?.addEventListener("click", createTenant);
   $("#sa-create-user-btn")?.addEventListener("click", createUser);
+
+  // Delegated handler for hub Central cluster dropdown (re-rendered into innerHTML)
+  document.addEventListener("change", event => {
+    if (event.target.id === "hub-central-cluster-select") {
+      onClusterSelectChange(event.target);
+    }
+  });
 }
 
 (async function init() {

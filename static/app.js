@@ -3191,7 +3191,7 @@ async function clearRecloneState() {
   } catch (error) {
     showNotification(`Clear error: ${error.message}`, 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '✕ Clear'; }
+    if (btn) { btn.disabled = false; btn.textContent = '✕ Clear Errors'; }
   }
 }
 window.clearRecloneState = clearRecloneState;

@@ -408,7 +408,7 @@ function activateServerSubtab(subtabId = 'server-vms') {
   document.querySelectorAll('.server-subtab').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.subtab === subtabId);
   });
-  ['server-node', 'server-vms', 'server-usb', 'server-t3', 'server-vh', 'server-commands'].forEach((id) => {
+  ['server-node', 'server-vms', 'server-usb', 'server-t3', 'server-other', 'server-vh', 'server-commands'].forEach((id) => {
     const panel = document.getElementById(id);
     if (!panel) return;
     const isActive = id === subtabId;
@@ -1541,7 +1541,7 @@ function renderServerTab(data) {
     String(currentSettings.vm_image_2_template_id || '200'),
   ]);
 
-  // Categorise VMs: templates → sim clients (vmid > 90000, qemu) → containers (lxc) → other clients
+  // Categorise VMs: templates → sim clients (vmid > 90000, qemu) → containers (lxc) → T3 IoT → other
   const templateVms = vms.filter((v) =>
     v.is_template === true || v.is_template === 'true' ||
     configuredTemplateIds.has(String(v.vmid))
@@ -1550,7 +1550,13 @@ function renderServerTab(data) {
   const containerVms = nonTemplateVms.filter((v) => v.type === 'lxc');
   const qemuVms      = nonTemplateVms.filter((v) => v.type !== 'lxc');
   const simVms       = qemuVms.filter((v) => Number(v.vmid) > 90000);
-  const otherVms     = qemuVms.filter((v) => !simVms.includes(v));
+  const nonSimQemu   = qemuVms.filter((v) => !simVms.includes(v));
+  // T3: qemu VMs whose PCI passthrough addresses overlap with known T3 device addresses on this node
+  const t3AddrSet = new Set((data.t3_pci_devices || []).map(d => String(d.id || '').toLowerCase()));
+  const iotVms    = t3AddrSet.size
+    ? nonSimQemu.filter(v => (v.pci_passthrough_addrs || []).some(a => t3AddrSet.has(String(a).toLowerCase())))
+    : [];
+  const otherVms  = nonSimQemu.filter(v => !iotVms.includes(v));
 
   // Update count badges
   const countSim = document.getElementById('vm-count-sim');
@@ -1737,6 +1743,43 @@ function renderServerTab(data) {
   _renderVmGroup('sim', simVms);
   _renderVmGroup('other', otherVms);
   _renderVmGroup('containers', containerVms);
+
+  // Populate IoT (T3) and Other subtab tables
+  const _vmStatusDot = (s) => `<span class="status-dot ${s === 'running' ? 'online' : 'offline'}" title="${escHtml(s)}"></span> ${escHtml(s)}`;
+  const _t3Tbody = document.getElementById('server-t3-vm-tbody');
+  if (_t3Tbody) {
+    _t3Tbody.innerHTML = iotVms.length
+      ? iotVms.map(v => `<tr>
+          <td>${escHtml(String(v.vmid))}</td>
+          <td>${escHtml(v.name || '—')}</td>
+          <td>${escHtml(v.type || 'qemu')}</td>
+          <td>${_vmStatusDot(v.status || 'unknown')}</td>
+          <td>${escHtml((v.pci_passthrough_addrs || []).join(', ') || '—')}</td>
+        </tr>`).join('')
+      : `<tr><td colspan="5" class="empty-state">No IoT (T3) devices detected on this node.</td></tr>`;
+  }
+  // Update T3 subtab badge
+  document.querySelectorAll('.server-subtab[data-subtab="server-t3"]').forEach(btn => {
+    btn.innerHTML = `IoT (T3) <span class="badge-count">${iotVms.length}</span>`;
+  });
+
+  const _otherAll = [...otherVms, ...containerVms];
+  const _otherTbody = document.getElementById('server-other-vm-tbody');
+  if (_otherTbody) {
+    _otherTbody.innerHTML = _otherAll.length
+      ? _otherAll.map(v => `<tr>
+          <td>${escHtml(String(v.vmid))}</td>
+          <td>${escHtml(v.name || '—')}</td>
+          <td>${escHtml(v.type || 'qemu')}</td>
+          <td>${_vmStatusDot(v.status || 'unknown')}</td>
+          <td></td>
+        </tr>`).join('')
+      : `<tr><td colspan="5" class="empty-state">No other VMs or containers.</td></tr>`;
+  }
+  // Update Other subtab badge
+  document.querySelectorAll('.server-subtab[data-subtab="server-other"]').forEach(btn => {
+    btn.innerHTML = `Other <span class="badge-count">${_otherAll.length}</span>`;
+  });
 
   // Restore checked state preserved from before the rebuild
   if (_checkedVmids.size) {
@@ -11469,7 +11512,13 @@ function renderHubVmServerDetail(container, host) {
   const containerVms = nonTpl.filter(v => v.type === "lxc");
   const qemuVms = nonTpl.filter(v => v.type !== "lxc");
   const simVms = qemuVms.filter(v => Number(v.vmid) > 90000);
-  const otherVms = qemuVms.filter(v => !simVms.includes(v));
+  const nonSimQemu = qemuVms.filter(v => !simVms.includes(v));
+  // T3: qemu VMs whose PCI passthrough addresses match a T3 device on this node
+  const t3AddrSet = new Set((px.t3_pci_devices || []).map(d => String(d.id || "").toLowerCase()));
+  const iotVms = t3AddrSet.size
+    ? nonSimQemu.filter(v => (v.pci_passthrough_addrs || []).some(a => t3AddrSet.has(String(a).toLowerCase())))
+    : [];
+  const otherVms = [...nonSimQemu.filter(v => !iotVms.includes(v)), ...containerVms];
 
   // Use the physically-present dongle count for the USB badge, falling back to
   // usb_devices (usb_state) length when present_usb is not yet available.
@@ -11477,7 +11526,8 @@ function renderHubVmServerDetail(container, host) {
   const subtabs = [
     { id: "vms",      label: `VMs <span class="badge-count">${vms.length}</span>` },
     { id: "usb",      label: `USB (T2) <span class="badge-count">${presentUsbCount}</span>` },
-    { id: "iot",      label: `IoT (T3) <span class="badge-count">${otherVms.length}</span>` },
+    { id: "iot",      label: `IoT (T3) <span class="badge-count">${iotVms.length}</span>` },
+    { id: "other",    label: `Other <span class="badge-count">${otherVms.length}</span>` },
     { id: "vh",       label: "VirtualHere" },
     { id: "commands", label: "Command Queue" },
     { id: "details",  label: "Details" },
@@ -11523,7 +11573,7 @@ function renderHubVmServerDetail(container, host) {
     }
   });
 
-  const ctx = { tenantId, spokeId, simVms, otherVms, containerVms, templateVms, usb, reclone, px, host };
+  const ctx = { tenantId, spokeId, simVms, iotVms, otherVms, containerVms, templateVms, usb, reclone, px, host };
   document.querySelectorAll(".hub-vmserver-subtab").forEach(btn => {
     btn.addEventListener("click", () => {
       hubVmServerActiveSubtab = btn.dataset.hvmsubtab;
@@ -11534,20 +11584,23 @@ function renderHubVmServerDetail(container, host) {
   renderHubVmServerSubpanel(ctx);
 }
 
-function renderHubVmServerSubpanel({ tenantId, spokeId, simVms, otherVms, containerVms, templateVms, usb, reclone, px, host }) {
+function renderHubVmServerSubpanel({ tenantId, spokeId, simVms, iotVms, otherVms, containerVms, templateVms, usb, reclone, px, host }) {
   const panel = document.getElementById("hub-vmserver-subpanel");
   if (!panel) return;
   const subtab = hubVmServerActiveSubtab;
 
   if (subtab === "vms") {
-    panel.innerHTML = renderHubVmServerVmsPanel(spokeId, { simVms, otherVms, containerVms, templateVms, reclone, px, host });
+    panel.innerHTML = renderHubVmServerVmsPanel(spokeId, { simVms, otherVms: iotVms.concat(otherVms), containerVms, templateVms, reclone, px, host });
     wireHubVmsPanelActions(panel, tenantId, spokeId);
   } else if (subtab === "usb") {
     // Pass the full context so the USB panel can access proxmox state and spoke config.
     panel.innerHTML = renderHubVmServerUsbPanel(host);
     wireHubVmServerUsbPanel(panel, tenantId, spokeId, host);
   } else if (subtab === "iot") {
-    panel.innerHTML = renderHubVmServerIoTPanel(spokeId, otherVms);
+    panel.innerHTML = renderHubVmServerIoTPanel(spokeId, iotVms);
+    wireHubVmPerRowActions(panel, tenantId, spokeId);
+  } else if (subtab === "other") {
+    panel.innerHTML = renderHubVmServerOtherPanel(spokeId, otherVms);
     wireHubVmPerRowActions(panel, tenantId, spokeId);
   } else if (subtab === "vh") {
     panel.innerHTML = renderHubVmServerVhPanel(px);
@@ -12445,16 +12498,49 @@ function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
 
 // ── IoT (T3) tab ─────────────────────────────────────────────────────────────
 
-function renderHubVmServerIoTPanel(spokeId, otherVms) {
+function renderHubVmServerIoTPanel(spokeId, iotVms) {
   return `
     <div class="setup-card setup-section-gap">
       <div class="setup-card-header">
         <h2>IoT (T3) Clients</h2>
-        <p>IoT client classification coming soon.</p>
+        <p>VMs with PCI passthrough of a T3 IoT adapter (VID 168c:0034).</p>
       </div>
       <div class="table-scroll">
         <table class="data-table">
-          <thead><tr><th>VMID</th><th>Name</th><th>Type</th><th>Status</th><th>USB</th><th>Actions</th></tr></thead>
+          <thead><tr><th>VMID</th><th>Name</th><th>Type</th><th>Status</th><th>PCI Addrs</th><th>Actions</th></tr></thead>
+          <tbody>
+            ${iotVms.length
+              ? iotVms.map(vm => `<tr>
+                  <td>${escHtml(String(vm.vmid ?? "—"))}</td>
+                  <td>${escHtml(vm.name || "—")}</td>
+                  <td>${escHtml(vm.type || "qemu")}</td>
+                  <td>${_hubVmStatusDot(vm)} ${escHtml(vm.status || "—")}</td>
+                  <td style="font-size:.8rem;color:var(--muted);">${escHtml((vm.pci_passthrough_addrs || []).join(", ") || "—")}</td>
+                  <td style="white-space:nowrap;">
+                    <button class="btn-icon hub-vm-action" data-action="start_vm"   data-vmid="${escHtml(String(vm.vmid))}" title="Start">▶</button>
+                    <button class="btn-icon hub-vm-action" data-action="stop_vm"    data-vmid="${escHtml(String(vm.vmid))}" title="Stop">■</button>
+                    <button class="btn-icon hub-vm-action" data-action="reclone_vm" data-vmid="${escHtml(String(vm.vmid))}" title="Reclone">↺</button>
+                  </td>
+                </tr>`).join("")
+              : `<tr><td colspan="6" class="empty-state">No IoT (T3) devices detected on this node.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+// ── Other tab ─────────────────────────────────────────────────────────────────
+
+function renderHubVmServerOtherPanel(spokeId, otherVms) {
+  return `
+    <div class="setup-card setup-section-gap">
+      <div class="setup-card-header">
+        <h2>Other VMs &amp; Containers</h2>
+        <p>VMs and LXC containers not classified as USB (T2) or IoT (T3).</p>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr><th>VMID</th><th>Name</th><th>Type</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody>
             ${otherVms.length
               ? otherVms.map(vm => `<tr>
@@ -12462,14 +12548,13 @@ function renderHubVmServerIoTPanel(spokeId, otherVms) {
                   <td>${escHtml(vm.name || "—")}</td>
                   <td>${escHtml(vm.type || "qemu")}</td>
                   <td>${_hubVmStatusDot(vm)} ${escHtml(vm.status || "—")}</td>
-                  <td>${vm.has_usb_config || vm.reclone_bus_path ? "🔌 USB" : "—"}</td>
                   <td style="white-space:nowrap;">
                     <button class="btn-icon hub-vm-action" data-action="start_vm"   data-vmid="${escHtml(String(vm.vmid))}" title="Start">▶</button>
                     <button class="btn-icon hub-vm-action" data-action="stop_vm"    data-vmid="${escHtml(String(vm.vmid))}" title="Stop">■</button>
                     <button class="btn-icon hub-vm-action" data-action="reclone_vm" data-vmid="${escHtml(String(vm.vmid))}" title="Reclone">↺</button>
                   </td>
                 </tr>`).join("")
-              : `<tr><td colspan="6" class="empty-state">No IoT clients found.</td></tr>`}
+              : `<tr><td colspan="5" class="empty-state">No other VMs or containers.</td></tr>`}
           </tbody>
         </table>
       </div>

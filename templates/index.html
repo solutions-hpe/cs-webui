@@ -1411,6 +1411,7 @@
           <button class="setup-subtab server-subtab active" data-subtab="server-vms" role="tab">VMs</button>
           <button class="setup-subtab server-subtab" data-subtab="server-usb" role="tab">USB (T2)</button>
           <button class="setup-subtab server-subtab" data-subtab="server-t3" role="tab">IoT (T3)</button>
+          <button class="setup-subtab server-subtab" data-subtab="server-other" role="tab">Other</button>
           <button class="setup-subtab server-subtab" data-subtab="server-vh" role="tab">VirtualHere</button>
           <button class="setup-subtab server-subtab" data-subtab="server-commands" role="tab">Command Queue</button>
           <button class="setup-subtab server-subtab" data-subtab="server-node" role="tab">Details</button>
@@ -1628,7 +1629,7 @@
           <div class="setup-card setup-section-gap">
             <div class="setup-card-header">
               <h2>IoT (T3) Clients</h2>
-              <p>IoT client classification coming soon.</p>
+              <p>VMs with PCI passthrough of a T3 IoT adapter (VID 168c:0034).</p>
             </div>
             <table class="data-table" id="server-t3-vm-table">
               <colgroup>
@@ -1638,8 +1639,29 @@
                 <col style="width:90px">
                 <col>
               </colgroup>
-              <thead><tr><th>VMID</th><th>Name</th><th>Type</th><th>Status</th><th>USB</th></tr></thead>
+              <thead><tr><th>VMID</th><th>Name</th><th>Type</th><th>Status</th><th>PCI</th></tr></thead>
               <tbody id="server-t3-vm-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Other sub-tab -->
+        <div id="server-other" class="setup-subpanel hidden">
+          <div class="setup-card setup-section-gap">
+            <div class="setup-card-header">
+              <h2>Other VMs &amp; Containers</h2>
+              <p>VMs and LXC containers not classified as USB (T2) or IoT (T3).</p>
+            </div>
+            <table class="data-table" id="server-other-vm-table">
+              <colgroup>
+                <col style="width:70px">
+                <col>
+                <col style="width:80px">
+                <col style="width:90px">
+                <col>
+              </colgroup>
+              <thead><tr><th>VMID</th><th>Name</th><th>Type</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody id="server-other-vm-tbody"></tbody>
             </table>
           </div>
         </div>

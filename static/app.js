@@ -13101,6 +13101,7 @@ function renderHubCentral() {
           <div class="form-actions">
             <button id="save-central-btn" class="btn btn-primary" type="button"${disabled}>Save Central Settings</button>
             <button id="test-central-btn" class="btn btn-secondary" type="button">Test Connection</button>
+            <button id="clear-central-secrets-btn" class="btn btn-danger" type="button"${disabled}>Clear Secrets</button>
             <span id="hub-central-msg" class="form-msg"></span>
           </div>
         </div>
@@ -14071,6 +14072,37 @@ async function saveCentralSettings() {
   setFormMessage("hub-central-msg", "Central settings saved.", true);
   await loadCentral(true);
   await loadSetup();
+}
+
+async function clearCentralSecrets() {
+  if (!canManageTenant()) {
+    setFormMessage("hub-central-msg", "Tenant Viewer access is read-only.", false);
+    return;
+  }
+  if (!confirm("Clear the stored Central client secret and access token?")) return;
+  const btn = $("#clear-central-secrets-btn");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Clearing…";
+  }
+  try {
+    const res = await apiFetch(`/api/${encodeURIComponent(currentTenantId)}/aggregate/central-clear-secrets`, { method: "POST" });
+    if (!res?.ok) {
+      const err = await readJson(res);
+      setFormMessage("hub-central-msg", err?.detail || "Unable to clear Central secrets.", false);
+      return;
+    }
+    await loadCentral(true);
+    setFormMessage("hub-central-msg", "Secrets cleared.", true);
+  } catch (err) {
+    setFormMessage("hub-central-msg", err.message || "Unable to clear Central secrets.", false);
+  } finally {
+    const refreshedBtn = $("#clear-central-secrets-btn");
+    if (refreshedBtn) {
+      refreshedBtn.disabled = false;
+      refreshedBtn.textContent = "Clear Secrets";
+    }
+  }
 }
 
 async function testCentralConnection() {
@@ -16258,6 +16290,10 @@ function bindEvents() {
     }
     if (event.target.closest("#test-central-btn")) {
       testCentralConnection();
+      return;
+    }
+    if (event.target.closest("#clear-central-secrets-btn")) {
+      clearCentralSecrets();
       return;
     }
     if (event.target.closest("#register-central-webhook-btn")) {

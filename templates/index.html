@@ -529,6 +529,13 @@
                     <input id="ts-reclone-concurrency" class="form-input" type="number" value="1" min="1" max="20" placeholder="1">
                   </div>
                 </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label" for="ts-protected-vmids">Protected VMIDs</label>
+                    <input id="ts-protected-vmids" class="form-input" type="text" placeholder="e.g. 101, 102, 200">
+                    <span class="form-hint">Comma-separated VMIDs that cannot be started, stopped, recloned, or deleted. VM 1001 is always protected.</span>
+                  </div>
+                </div>
               </div>
               <div id="ts-proxmox-msg" class="settings-message hidden"></div>
             </div>
@@ -592,6 +599,13 @@
                     <div class="form-group">
                       <label class="form-label" for="ts-ov-reclone-concurrency">Max parallel operations</label>
                       <input id="ts-ov-reclone-concurrency" class="form-input" type="number" value="1" min="1" max="20" placeholder="1">
+                    </div>
+                  </div>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label class="form-label" for="ts-ov-protected-vmids">Protected VMIDs</label>
+                      <input id="ts-ov-protected-vmids" class="form-input" type="text" placeholder="e.g. 101, 102, 200">
+                      <span class="form-hint">Comma-separated. VM 1001 is always protected.</span>
                     </div>
                   </div>
                 </div>
@@ -2349,6 +2363,13 @@
                     <input id="reclone-concurrency" class="form-input" type="number" value="1" min="1" max="20"
                            placeholder="1">
                     <span class="form-hint">Number of VMs to reclone or provision simultaneously. 1 = sequential (safe). Increase for faster fleet operations.</span>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label" for="protected-vmids">Protected VMIDs</label>
+                    <input id="protected-vmids" class="form-input" type="text" placeholder="e.g. 101, 102, 200">
+                    <span class="form-hint">Comma-separated VMIDs that cannot be started, stopped, recloned, or deleted from this UI. VM 1001 is always protected.</span>
                   </div>
                 </div>
               </div>

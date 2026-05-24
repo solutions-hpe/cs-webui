@@ -200,6 +200,7 @@ let currentSettings = {
   reclone_schedule_enabled: 'off',
   reclone_schedule_cron: 'sunday 02:00',
   reclone_concurrency: '1',
+  protected_vmids: '',
   l1_vlan_start: '100',
   l1_vlan_end: '199'
 };
@@ -970,6 +971,7 @@ function mergeSettings(next = {}) {
     reclone_schedule_enabled: next.reclone_schedule_enabled ?? currentSettings.reclone_schedule_enabled ?? 'off',
     reclone_schedule_cron: next.reclone_schedule_cron ?? currentSettings.reclone_schedule_cron ?? 'sunday 02:00',
     reclone_concurrency: next.reclone_concurrency ?? currentSettings.reclone_concurrency ?? '1',
+    protected_vmids: next.protected_vmids ?? currentSettings.protected_vmids ?? '',
     l1_vlan_start: next.l1_vlan_start ?? currentSettings.l1_vlan_start ?? '100',
     l1_vlan_end: next.l1_vlan_end ?? currentSettings.l1_vlan_end ?? '199'
   };
@@ -1986,6 +1988,8 @@ function applySettingsToUI(s) {
   const schedule = parseScheduleCron(settings.reclone_schedule_cron);
   if (recloneScheduleEnabledInput) recloneScheduleEnabledInput.checked = settings.reclone_schedule_enabled === 'on';
   if (recloneConcurrencyInput) recloneConcurrencyInput.value = settings.reclone_concurrency ?? '1';
+  const protectedVmidsInput = document.getElementById('protected-vmids');
+  if (protectedVmidsInput && !protectedVmidsInput.matches(':focus')) protectedVmidsInput.value = settings.protected_vmids ?? '';
   if (l1VlanStartInput && !l1VlanStartInput.matches(':focus')) l1VlanStartInput.value = settings.l1_vlan_start ?? '100';
   if (l1VlanEndInput && !l1VlanEndInput.matches(':focus')) l1VlanEndInput.value = settings.l1_vlan_end ?? '199';
   if (recloneScheduleDayInput && !recloneScheduleDayInput.matches(':focus')) recloneScheduleDayInput.value = schedule.day;
@@ -2851,6 +2855,7 @@ function collectUsbSettingsPayload() {
     reclone_schedule_enabled: recloneScheduleEnabledInput?.checked ? 'on' : 'off',
     reclone_schedule_cron: `${recloneScheduleDayInput?.value || 'sunday'} ${recloneScheduleTimeInput?.value || '02:00'}`,
     reclone_concurrency: String(recloneConcurrencyInput?.value ?? '1'),
+    protected_vmids: String(document.getElementById('protected-vmids')?.value ?? currentSettings.protected_vmids ?? ''),
     l1_vlan_start: String(l1VlanStartInput?.value ?? currentSettings.l1_vlan_start ?? '100'),
     l1_vlan_end: String(l1VlanEndInput?.value ?? currentSettings.l1_vlan_end ?? '199'),
   };
@@ -13690,6 +13695,7 @@ async function initTsProxmoxTab(tenantId) {
       $("#ts-vm-image-2-template-id") && ($("#ts-vm-image-2-template-id").value = cfg.vm_image_2_template_id ?? 200);
       $("#ts-vm-image-1-pct") && ($("#ts-vm-image-1-pct").value = cfg.vm_image_1_pct ?? 50);
       $("#ts-reclone-concurrency") && ($("#ts-reclone-concurrency").value = cfg.reclone_concurrency ?? 1);
+      $("#ts-protected-vmids") && ($("#ts-protected-vmids").value = cfg.protected_vmids ?? "");
     } catch (_) { /* leave form at HTML defaults */ }
   }
 
@@ -13704,6 +13710,7 @@ async function initTsProxmoxTab(tenantId) {
       vm_image_2_template_id: parseInt($("#ts-vm-image-2-template-id")?.value || "200", 10) || 200,
       vm_image_1_pct: parseInt($("#ts-vm-image-1-pct")?.value || "50", 10) || 50,
       reclone_concurrency: parseInt($("#ts-reclone-concurrency")?.value || "1", 10) || 1,
+      protected_vmids: $("#ts-protected-vmids")?.value?.trim() ?? "",
     };
     saveBtn.disabled = true;
     try {
@@ -13747,6 +13754,7 @@ async function initTsProxmoxTab(tenantId) {
         $("#ts-ov-vm-image-2-template-id") && ($("#ts-ov-vm-image-2-template-id").value = cfg.vm_image_2_template_id ?? 200);
         $("#ts-ov-vm-image-1-pct") && ($("#ts-ov-vm-image-1-pct").value = cfg.vm_image_1_pct ?? 50);
         $("#ts-ov-reclone-concurrency") && ($("#ts-ov-reclone-concurrency").value = cfg.reclone_concurrency ?? 1);
+        $("#ts-ov-protected-vmids") && ($("#ts-ov-protected-vmids").value = cfg.protected_vmids ?? "");
         showInlineMessage(overrideMsg, "", false, 0);
       } catch (error) {
         showInlineMessage(overrideMsg, error.message || "Failed to load spoke config.", true);
@@ -13769,6 +13777,7 @@ async function initTsProxmoxTab(tenantId) {
         vm_image_2_template_id: parseInt($("#ts-ov-vm-image-2-template-id")?.value || "200", 10) || 200,
         vm_image_1_pct: parseInt($("#ts-ov-vm-image-1-pct")?.value || "50", 10) || 50,
         reclone_concurrency: parseInt($("#ts-ov-reclone-concurrency")?.value || "1", 10) || 1,
+        protected_vmids: $("#ts-ov-protected-vmids")?.value?.trim() ?? "",
       };
       try {
         await pushSpokeConfig(tenantId, spokeId, config);

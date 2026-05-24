@@ -14084,7 +14084,15 @@ async function testCentralConnection() {
       const sitesText = data.sites_discovered > 0
         ? ` Found ${data.sites_discovered} site(s): ${data.sites.join(", ")}`
         : " No sites discovered.";
-      setFormMessage("hub-central-msg", `✓ Connected (${data.api_version}).${sitesText}`, true);
+      let detail = `✓ Connected (${data.api_version}).${sitesText}`;
+      if (data.raw_sites_response) {
+        detail += `\n\nRaw API response:\n${JSON.stringify(data.raw_sites_response, null, 2)}`;
+      }
+      setFormMessage("hub-central-msg", detail, true);
+      if (data.raw_sites_response) {
+        const msgEl = $("#hub-central-msg");
+        if (msgEl) msgEl.style.whiteSpace = "pre-wrap";
+      }
     }
   } catch (err) {
     setFormMessage("hub-central-msg", `Connection failed: ${err.message}`, false);

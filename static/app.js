@@ -11605,7 +11605,7 @@ function renderHubVmServerSubpanel({ tenantId, spokeId, simVms, iotVms, otherVms
   const subtab = hubVmServerActiveSubtab;
 
   if (subtab === "vms") {
-    panel.innerHTML = renderHubVmServerVmsPanel(spokeId, { simVms, otherVms: iotVms.concat(otherVms), containerVms, templateVms, reclone, px, host });
+    panel.innerHTML = renderHubVmServerVmsPanel(tenantId, spokeId, { simVms, otherVms: iotVms.concat(otherVms), containerVms, templateVms, reclone, px, host });
     wireHubVmsPanelActions(panel, tenantId, spokeId);
   } else if (subtab === "usb") {
     // Pass the full context so the USB panel can access proxmox state and spoke config.
@@ -11641,7 +11641,8 @@ function _hubVmStatusDot(vm) {
 
 // ── VMs tab ──────────────────────────────────────────────────────────────────
 
-function renderHubVmServerVmsPanel(spokeId, { simVms, otherVms, containerVms, templateVms, reclone, px, host }) {
+function renderHubVmServerVmsPanel(tenantId, spokeId, { simVms, otherVms, containerVms, templateVms, reclone, px, host }) {
+  const canManage = canManageTenant(tenantId);
   const recloneStatus = reclone.status || "idle";
   const recloneColor = recloneStatus === "running" ? "badge-blue"
     : recloneStatus === "completed" ? "badge-green"
@@ -11673,7 +11674,10 @@ function renderHubVmServerVmsPanel(spokeId, { simVms, otherVms, containerVms, te
               <h2 style="font-size:1rem;margin:0;">Fleet Reclone</h2>
             </div>
             <div class="reclone-action-stack">
-              <button id="hub-spoke-reclone-now-btn" class="btn btn-primary btn-small" type="button">⟳ Reclone All Now</button>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                <button id="hub-spoke-reclone-now-btn" class="btn btn-primary btn-small" type="button">⟳ Reclone All Now</button>
+                ${canManage && recloneStatus !== "idle" && recloneStatus !== "running" ? '<button id="hub-spoke-reclone-clear-btn" class="btn btn-secondary btn-small" type="button">✕ Clear Errors</button>' : ""}
+              </div>
               <div class="badge ${recloneColor}">${escHtml(recloneStatus === "idle" ? "Idle" : recloneStatus.charAt(0).toUpperCase() + recloneStatus.slice(1))}</div>
             </div>
             ${recloneStatus === "running" ? `
@@ -11849,6 +11853,23 @@ function wireHubVmsPanelActions(panel, tenantId, spokeId) {
   panel.querySelector("#hub-spoke-reclone-now-btn")?.addEventListener("click", () => {
     if (!confirm("Reclone all VMs on this spoke?")) return;
     sendHubProxmoxCommand(tenantId, spokeId, "reclone_all", {});
+  });
+  panel.querySelector("#hub-spoke-reclone-clear-btn")?.addEventListener("click", async () => {
+    const btn = panel.querySelector("#hub-spoke-reclone-clear-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "Clearing…"; }
+    try {
+      const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/fleet-reclone-clear-spoke`, {
+        method: "POST",
+        body: { spoke_id: spokeId },
+      });
+      const data = await readJson(res);
+      if (!res?.ok) throw new Error(data?.detail || "Unable to clear reclone state.");
+      showToast("Queued reclone state clear for this spoke.", "ok");
+      setTimeout(() => loadHubVmServer(true), 3000);
+    } catch (err) {
+      showToast(err?.message || "Unable to clear reclone state.", "error");
+      if (btn) { btn.disabled = false; btn.textContent = "✕ Clear Errors"; }
+    }
   });
 
   function getCheckedVmids() {

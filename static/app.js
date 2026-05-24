@@ -11465,7 +11465,7 @@ function renderHubVmServer() {
       });
       const data = await readJson(res);
       if (!res?.ok) { showToast(data?.detail || "Failed to update auto-provisioning.", "error"); e.target.checked = !enable; }
-      else { showToast(`Auto-provisioning ${enable ? "enabled" : "disabled"} on ${data?.updated_spokes ?? 0} spoke(s).`, "ok"); await loadHubVmServerAggregateStatus(); }
+      else { showToast(`Auto-provisioning ${enable ? "enabled" : "disabled"} on ${data?.updated_spokes ?? 0} spoke(s).`, "ok"); await loadHubVmServerAggregateStatus(); renderHubVmServer(); }
     } catch (err) {
       showToast(err?.message || "Failed to update auto-provisioning.", "error");
       e.target.checked = !enable;

@@ -3018,7 +3018,7 @@ function updateUsbCountdowns() {
   document.querySelectorAll('[data-missing-until]').forEach((node) => {
     const until = Number(node.dataset.missingUntil || 0) * 1000;
     const remaining = Math.max(0, Math.floor((until - Date.now()) / 1000));
-    node.textContent = remaining > 0 ? `${Math.ceil(remaining / 60)}m remaining` : 'Ready to destroy';
+    node.textContent = remaining > 0 ? `${Math.ceil(remaining / 60)}m remaining before decommission` : 'Ready to decommission';
   });
 }
 
@@ -12651,7 +12651,7 @@ function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
     panel.querySelectorAll("[data-missing-until]").forEach(node => {
       const until     = Number(node.dataset.missingUntil || 0) * 1000;
       const remaining = Math.max(0, Math.floor((until - Date.now()) / 1000));
-      node.textContent = remaining > 0 ? `${Math.ceil(remaining / 60)}m remaining` : "Ready to destroy";
+      node.textContent = remaining > 0 ? `${Math.ceil(remaining / 60)}m remaining before decommission` : "Ready to decommission";
     });
   }
   tickCountdowns();

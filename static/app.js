@@ -7978,7 +7978,7 @@ let aggregateCentralData = null;
 let centralWebhookStatus = null;
 let hubCentralData = null;
 let hubCentralActiveSubtab = "hcs-sites";
-let hubTenantSetupActiveSubtab = "ts-setup";
+let hubTenantSetupActiveSubtab = "ts-central-api";
 let hubCentralSiteOpen = null;
 let hubConfigDraft = "";
 let hubConfigActiveSubtab = "api";
@@ -14362,8 +14362,8 @@ async function initHubTenantSetupSubtab(subtab = hubTenantSetupActiveSubtab, for
   }
 }
 
-async function activateHubTenantSetupSubtab(subtab = "ts-setup", force = false) {
-  hubTenantSetupActiveSubtab = subtab || "ts-setup";
+async function activateHubTenantSetupSubtab(subtab = "ts-central-api", force = false) {
+  hubTenantSetupActiveSubtab = subtab || "ts-central-api";
   setHubTenantSetupPanels(hubTenantSetupActiveSubtab);
   await initHubTenantSetupSubtab(hubTenantSetupActiveSubtab, force);
 }

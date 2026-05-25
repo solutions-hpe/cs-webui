@@ -8290,6 +8290,14 @@ async function loadAggregateData(path) {
   return res.json().catch(() => null);
 }
 
+function summarizeTenantAlerts(summary, aggregate) {
+  const checks = aggregate?.checks_summary || {};
+  const alertCount = Number(checks.fail || 0) + Number(checks.warning || 0);
+  if (alertCount > 0) return { tone: "alert", text: `${alertCount} active ${alertCount === 1 ? "alert" : "alerts"}` };
+  if ((summary?.offlineCount ?? 0) > 0) return { tone: "alert", text: `${summary.offlineCount} offline ${summary.offlineCount === 1 ? "spoke" : "spokes"}` };
+  return { tone: "ok", text: "OK" };
+}
+
 function compareTenantDashboardValues(a, b) {
   if (typeof a === "number" && typeof b === "number") return a - b;
   return String(a || "").localeCompare(String(b || ""), undefined, { numeric: true, sensitivity: "base" });
@@ -10925,14 +10933,35 @@ async function saveHubSimulationConf() {
   setFormMessage("hub-sim-config-msg", `Saved to GitHub. Repo sync queued for ${data?.synced_spokes ?? 0} spoke(s).`, true);
 }
 
+function getTenantGithubSettingsElements() {
+  const candidates = [
+    {
+      repoUrl: $("#hub-github-sim-repo-url"),
+      repoBranch: $("#hub-github-sim-repo-branch"),
+      token: $("#hub-github-token"),
+      tokenStatus: $("#hub-github-token-status"),
+      messageId: "hub-github-msg",
+    },
+    {
+      repoUrl: $("#tenant-sim-repo-url"),
+      repoBranch: $("#tenant-sim-repo-branch"),
+      token: $("#tenant-github-token"),
+      tokenStatus: $("#tenant-github-token-status"),
+      messageId: "tenant-github-msg",
+    },
+  ];
+  return candidates.find((item) => item.repoUrl || item.repoBranch || item.token) || candidates[0];
+}
+
 function collectTenantGithubSettingsPayload() {
+  const fields = getTenantGithubSettingsElements();
   const payload = {
-    sim_repo_url: $("#tenant-sim-repo-url")?.value.trim() || "",
-    sim_repo_branch: $("#tenant-sim-repo-branch")?.value.trim() || "main",
+    sim_repo_url: fields.repoUrl?.value.trim() || "",
+    sim_repo_branch: fields.repoBranch?.value.trim() || "main",
   };
-  const tokenSecret = getSecretInputPayload($("#tenant-github-token"));
+  const tokenSecret = getSecretInputPayload(fields.token);
   if (tokenSecret.include) payload.github_token = tokenSecret.value;
-  return { payload, tokenSecret };
+  return { payload, tokenSecret, fields };
 }
 
 function extractTenantGithubSettings(data, fallback = {}) {
@@ -10961,8 +10990,9 @@ async function postTenantGithubSettings(tenantId, payload) {
 }
 
 async function saveTenantGithubSettings() {
+  const { fields } = collectTenantGithubSettingsPayload();
   if (!canManageTenant()) {
-    setFormMessage("tenant-github-msg", "Tenant Viewer access is read-only.", false);
+    setFormMessage(fields.messageId, "Tenant Viewer access is read-only.", false);
     return;
   }
   const tenantId = getActiveTenantId();
@@ -10972,10 +11002,10 @@ async function saveTenantGithubSettings() {
   const repoUnchanged = (payload.sim_repo_url || "") === (currentGithub.sim_repo_url || "")
     && (payload.sim_repo_branch || "main") === (currentGithub.sim_repo_branch || "main");
   if (repoUnchanged && !tokenSecret.include) return;
-  setFormMessage("tenant-github-msg", "Saving GitHub settings…", true);
+  setFormMessage(fields.messageId, "Saving GitHub settings…", true);
   const { res, data } = await postTenantGithubSettings(tenantId, payload);
   if (!res || !res.ok) {
-    setFormMessage("tenant-github-msg", data?.detail || "Unable to save GitHub settings.", false);
+    setFormMessage(fields.messageId, data?.detail || "Unable to save GitHub settings.", false);
     return;
   }
   const githubData = extractTenantGithubSettings(data, {
@@ -10991,17 +11021,20 @@ async function saveTenantGithubSettings() {
       ? { ...tenantDetailState.data[tenantId].settings, ...settingsData, github: githubData }
       : { ...tenantDetailState.data[tenantId].settings, github: githubData };
   }
-  setFormMessage("tenant-github-msg", "GitHub settings saved.", true);
+  resetSecretInput(fields.token);
   hydrateTenantSetupPanel({ settings: { github: githubData } });
   resetHubSimulationConfState(tenantId);
+  const pushedToSpokes = Number.isFinite(data?.pushed_to_spokes) ? data.pushed_to_spokes : null;
+  setFormMessage(fields.messageId, pushedToSpokes === null ? "GitHub settings saved." : `GitHub settings saved. Queued ${pushedToSpokes} spoke${pushedToSpokes === 1 ? "" : "s"}.`, true);
 }
 window.saveTenantGithubSettings = saveTenantGithubSettings;
 
 function hydrateTenantSetupPanel(data = {}) {
   const github = data?.settings?.github || {};
   const configured = isConfiguredSecretValue(github.github_token_configured);
-  setSecretInputConfigured($("#tenant-github-token"), configured);
-  $("#tenant-github-token-status") && ($("#tenant-github-token-status").textContent = configured ? "Token configured" : "Token not configured");
+  const fields = getTenantGithubSettingsElements();
+  setSecretInputConfigured(fields.token, configured);
+  if (fields.tokenStatus) fields.tokenStatus.textContent = configured ? "Token configured" : "Token not configured";
 }
 
 async function loadTenantDetailData(force = false) {
@@ -11166,7 +11199,6 @@ function renderTenantSetupPanel(data) {
   const tenant = data.settings?.tenant || getTenantMeta(tenantId);
   const aruba = data.settings?.aruba || {};
   const notifications = data.settings?.notifications || {};
-  const github = data.settings?.github || {};
   const processingModes = {
     central_api: data.settings?.processing_modes?.central_api || 'centralized',
     teams: data.settings?.processing_modes?.teams || 'centralized',
@@ -11186,17 +11218,6 @@ function renderTenantSetupPanel(data) {
           <div class="setup-status-item"><span class="setup-status-label">Tenant ID</span><span class="setup-status-value"><code>${escHtml(tenant.id || tenantId)}</code></span></div>
           <div class="setup-status-item"><span class="setup-status-label">Aruba CID</span><span class="setup-status-value">${escHtml(tenant.aruba_cid || "—")}</span></div>
           <div class="setup-status-item"><span class="setup-status-label">Created</span><span class="setup-status-value">${escHtml(fmtDate(tenant.created_at))}</span></div>
-        </div>
-      </section>
-      <section class="setup-card">
-        <div class="setup-card-header"><h2>GitHub / Repo</h2><p>Credentials and source repo for simulation.conf editing. Changes save automatically when each field loses focus.</p></div>
-        <div class="setup-form">
-          <div class="form-group"><label class="form-label" for="tenant-sim-repo-url">Simulation Repo URL</label><input id="tenant-sim-repo-url" type="url" class="form-input" value="${escHtml(github.sim_repo_url || "")}" placeholder="https://github.com/owner/repo.git" onblur="window.saveTenantGithubSettings && window.saveTenantGithubSettings()"${disabled}></div>
-          <div class="form-group"><label class="form-label" for="tenant-sim-repo-branch">Simulation Repo Branch</label><input id="tenant-sim-repo-branch" type="text" class="form-input" value="${escHtml(github.sim_repo_branch || "main")}" placeholder="main" onblur="window.saveTenantGithubSettings && window.saveTenantGithubSettings()"${disabled}></div>
-          <div class="form-group"><label class="form-label" for="tenant-github-token">GitHub Token</label><input id="tenant-github-token" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true" onblur="window.saveTenantGithubSettings && window.saveTenantGithubSettings()"${disabled}><span class="form-hint" id="tenant-github-token-status">${escHtml(github.github_token_configured ? "Token configured" : "Token not configured")}</span></div>
-          <div class="form-actions">
-            <span id="tenant-github-msg" class="form-msg"></span>
-          </div>
         </div>
       </section>
       <section class="setup-card">
@@ -13430,6 +13451,7 @@ function renderHubCentral() {
 
 function renderHubConfigPage(data) {
   const approved = (data.spokes || []).filter(spoke => spoke.status === "approved");
+  const github = data.settings?.github || {};
   if (!hubConfigDraft) {
     const seed = approved.find(spoke => Object.keys(spoke.config || {}).length > 0)?.config || {};
     hubConfigDraft = JSON.stringify(seed, null, 2);
@@ -13456,9 +13478,21 @@ function renderHubConfigPage(data) {
       <button class="setup-subtab hub-config-subtab ${hubConfigActiveSubtab === "simulation" ? "active" : ""}" data-hub-config-subtab="simulation" type="button">Simulation Config</button>
     </nav>
     <div id="hub-config-api-panel" class="${hubConfigActiveSubtab === "api" ? "" : "hidden"}">
+      <section class="setup-card setup-section-gap">
+        <div class="setup-card-header"><h2>Shared GitHub / Repo Settings</h2><p>Configure this once for the hub and every approved spoke. Changes save automatically when each field loses focus.</p></div>
+        <div class="setup-form">
+          <div class="form-group"><label class="form-label" for="hub-github-sim-repo-url">Simulation Repo URL</label><input id="hub-github-sim-repo-url" type="url" class="form-input" value="${escHtml(github.sim_repo_url || "")}" placeholder="https://github.com/owner/repo.git" onblur="window.saveTenantGithubSettings && window.saveTenantGithubSettings()"${disabled}></div>
+          <div class="form-group"><label class="form-label" for="hub-github-sim-repo-branch">Simulation Repo Branch</label><input id="hub-github-sim-repo-branch" type="text" class="form-input" value="${escHtml(github.sim_repo_branch || "main")}" placeholder="main" onblur="window.saveTenantGithubSettings && window.saveTenantGithubSettings()"${disabled}></div>
+          <div class="form-group"><label class="form-label" for="hub-github-token">GitHub Token</label><input id="hub-github-token" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true" onblur="window.saveTenantGithubSettings && window.saveTenantGithubSettings()"${disabled}><span class="form-hint" id="hub-github-token-status">${escHtml(github.github_token_configured ? "Token configured" : "Token not configured")}</span></div>
+          <div class="tenant-detail-note">These credentials are used by the hub and propagated to all approved spokes in this tenant.</div>
+          <div class="form-actions">
+            <span id="hub-github-msg" class="form-msg"></span>
+          </div>
+        </div>
+      </section>
       <div class="tenant-detail-grid setup-section-gap" style="align-items:start">
         <section class="setup-card">
-          <div class="setup-card-header"><h2>Push Config to Spokes</h2><p>Save tenant config on the hub and deliver it to each spoke on its next inbox check.</p></div>
+          <div class="setup-card-header"><h2>Push Config to Spokes</h2><p>Save tenant config on the hub and deliver spoke-specific config on the next inbox check.</p></div>
           <div class="setup-form">
             <div class="form-group">
               <label class="form-label" for="hub-config-payload">Config JSON</label>
@@ -13905,7 +13939,6 @@ function setHubTenantSetupPanels(subtab = hubTenantSetupActiveSubtab) {
     "ts-setup-panel",
     "ts-central-api-panel",
     "ts-proxmox-panel",
-    "ts-github-panel",
     "ts-security-panel",
     "ts-notifications-panel",
     "ts-troubleshoot-panel",
@@ -14049,55 +14082,6 @@ async function initTsProxmoxTab(tenantId) {
       }
     };
   }
-}
-
-async function initTsGithubTab(tenantId) {
-  const select = $("#ts-github-spoke-select");
-  const saveBtn = $("#ts-github-save-btn");
-  const msg = $("#ts-github-msg");
-  const tokenInput = $("#ts-github-token-input");
-  const branchEl = $("#ts-branch-input");
-  if (!select || !saveBtn || !tenantId) return;
-  saveBtn.disabled = !canManageTenant(tenantId);
-  await populateSpokeSelect(select, tenantId, select.value);
-
-  const loadGithub = async () => {
-    const spokeId = select.value;
-    if (!spokeId) {
-      showInlineMessage(msg, "No spokes available for this tenant.", true);
-      return;
-    }
-    const data = await loadSpokeConfig(tenantId, spokeId);
-    const cfg = data.config || {};
-    if (branchEl) branchEl.value = cfg.repo_branch ?? "";
-    if (tokenInput) tokenInput.value = "";
-    resetSecretInput(tokenInput);
-    showInlineMessage(msg, "", false, 0);
-  };
-
-  // Only bind handlers and load once per tenant to preserve in-progress edits
-  if (select._ghTenant === tenantId) return;
-  select._ghTenant = tenantId;
-
-  select.onchange = () => { void loadGithub().catch((error) => showInlineMessage(msg, error.message || "Failed to load GitHub settings.", true)); };
-  saveBtn.onclick = async () => {
-    const spokeId = select.value;
-    if (!spokeId) return;
-    const payload = {
-      repo_branch: branchEl?.value.trim() || "main",
-    };
-    const tokenSecret = getSecretInputPayload(tokenInput);
-    if (tokenSecret.include) payload.github_token = tokenSecret.value.trim();
-    try {
-      await pushSpokeConfig(tenantId, spokeId, payload);
-      resetSecretInput(tokenInput);
-      showInlineMessage(msg, "GitHub settings pushed ✓", false);
-    } catch (error) {
-      showInlineMessage(msg, error.message || "Failed to push GitHub settings.", true);
-    }
-  };
-
-  await loadGithub();
 }
 
 async function initTsSecurityTab(tenantId) {
@@ -14261,10 +14245,6 @@ async function initHubTenantSetupSubtab(subtab = hubTenantSetupActiveSubtab, for
     await initTsProxmoxTab(tenantId);
     return;
   }
-  if (subtab === "ts-github") {
-    await initTsGithubTab(tenantId);
-    return;
-  }
   if (subtab === "ts-security") {
     await initTsSecurityTab(tenantId);
     return;
@@ -14403,6 +14383,7 @@ async function loadConfig(force = false) {
   container.innerHTML = '<div class="empty-state">Loading…</div>';
   const data = await loadTenantDetailData(force);
   container.innerHTML = data ? renderHubConfigPage(data) : '<div class="empty-state">Unable to load tenant config.</div>';
+  if (data) hydrateTenantSetupPanel(data);
   renderHubSimulationConfigPanel();
   if (hubConfigActiveSubtab === "simulation") await loadHubSimulationConf(force);
 }

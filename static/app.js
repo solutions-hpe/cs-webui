@@ -10860,30 +10860,77 @@ async function saveHubSimulationConf() {
   setFormMessage("hub-sim-config-msg", `Saved to GitHub. Repo sync queued for ${data?.synced_spokes ?? 0} spoke(s).`, true);
 }
 
-async function saveTenantGithubSettings() {
-  if (!canManageTenant()) {
-    setFormMessage("tenant-github-msg", "Tenant Viewer access is read-only.", false);
-    return;
-  }
-  const tenantId = currentTenantId;
-  if (!tenantId) return;
+function collectTenantGithubSettingsPayload() {
   const payload = {
     sim_repo_url: $("#tenant-sim-repo-url")?.value.trim() || "",
     sim_repo_branch: $("#tenant-sim-repo-branch")?.value.trim() || "main",
   };
   const tokenSecret = getSecretInputPayload($("#tenant-github-token"));
   if (tokenSecret.include) payload.github_token = tokenSecret.value;
-  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/settings/github`, { method: "POST", body: payload });
-  const data = await readJson(res);
+  return { payload, tokenSecret };
+}
+
+function extractTenantGithubSettings(data, fallback = {}) {
+  if (data?.settings?.github && typeof data.settings.github === "object") return data.settings.github;
+  if (data?.settings && typeof data.settings === "object" && ("sim_repo_url" in data.settings || "sim_repo_branch" in data.settings || "github_token_configured" in data.settings)) return data.settings;
+  if (data?.github && typeof data.github === "object") return data.github;
+  if (data && typeof data === "object" && ("sim_repo_url" in data || "sim_repo_branch" in data || "github_token_configured" in data)) return data;
+  return fallback;
+}
+
+async function postTenantGithubSettings(tenantId, payload) {
+  const endpoints = [
+    { url: `/api/${encodeURIComponent(tenantId)}/settings`, body: payload },
+    { url: `/api/${encodeURIComponent(tenantId)}/settings`, body: { github: payload } },
+    { url: `/api/${encodeURIComponent(tenantId)}/settings/github`, body: payload },
+  ];
+  let lastResult = { res: null, data: null };
+  for (const request of endpoints) {
+    const res = await apiFetch(request.url, { method: "POST", body: request.body });
+    const data = await readJson(res);
+    if (res?.ok) return { res, data };
+    lastResult = { res, data };
+    if (res && ![400, 404, 405, 422].includes(res.status)) break;
+  }
+  return lastResult;
+}
+
+async function saveTenantGithubSettings() {
+  if (!canManageTenant()) {
+    setFormMessage("tenant-github-msg", "Tenant Viewer access is read-only.", false);
+    return;
+  }
+  const tenantId = getActiveTenantId();
+  if (!tenantId) return;
+  const { payload, tokenSecret } = collectTenantGithubSettingsPayload();
+  const currentGithub = tenantDetailState.data[tenantId]?.settings?.github || {};
+  const repoUnchanged = (payload.sim_repo_url || "") === (currentGithub.sim_repo_url || "")
+    && (payload.sim_repo_branch || "main") === (currentGithub.sim_repo_branch || "main");
+  if (repoUnchanged && !tokenSecret.include) return;
+  setFormMessage("tenant-github-msg", "Saving GitHub settings…", true);
+  const { res, data } = await postTenantGithubSettings(tenantId, payload);
   if (!res || !res.ok) {
     setFormMessage("tenant-github-msg", data?.detail || "Unable to save GitHub settings.", false);
     return;
   }
-  if (tenantDetailState.data[tenantId]?.settings) tenantDetailState.data[tenantId].settings.github = data;
+  const githubData = extractTenantGithubSettings(data, {
+    ...currentGithub,
+    ...payload,
+    github_token_configured: tokenSecret.include ? Boolean(payload.github_token) : currentGithub.github_token_configured,
+  });
+  const settingsData = data?.settings && typeof data.settings === "object" && !(("sim_repo_url" in data.settings) || ("sim_repo_branch" in data.settings) || ("github_token_configured" in data.settings))
+    ? data.settings
+    : (data?.github && typeof data.github === "object" ? { github: data.github } : null);
+  if (tenantDetailState.data[tenantId]?.settings) {
+    tenantDetailState.data[tenantId].settings = settingsData
+      ? { ...tenantDetailState.data[tenantId].settings, ...settingsData, github: githubData }
+      : { ...tenantDetailState.data[tenantId].settings, github: githubData };
+  }
   setFormMessage("tenant-github-msg", "GitHub settings saved.", true);
-  hydrateTenantSetupPanel({ settings: { github: data } });
+  hydrateTenantSetupPanel({ settings: { github: githubData } });
   resetHubSimulationConfState(tenantId);
 }
+window.saveTenantGithubSettings = saveTenantGithubSettings;
 
 function hydrateTenantSetupPanel(data = {}) {
   const github = data?.settings?.github || {};
@@ -11077,13 +11124,12 @@ function renderTenantSetupPanel(data) {
         </div>
       </section>
       <section class="setup-card">
-        <div class="setup-card-header"><h2>GitHub / Repo</h2><p>Credentials and source repo for simulation.conf editing. Saving pushes the branch and token to approved spokes.</p></div>
+        <div class="setup-card-header"><h2>GitHub / Repo</h2><p>Credentials and source repo for simulation.conf editing. Changes save automatically when each field loses focus.</p></div>
         <div class="setup-form">
-          <div class="form-group"><label class="form-label" for="tenant-sim-repo-url">Simulation Repo URL</label><input id="tenant-sim-repo-url" type="url" class="form-input" value="${escHtml(github.sim_repo_url || "")}" placeholder="https://github.com/owner/repo.git"${disabled}></div>
-          <div class="form-group"><label class="form-label" for="tenant-sim-repo-branch">Simulation Repo Branch</label><input id="tenant-sim-repo-branch" type="text" class="form-input" value="${escHtml(github.sim_repo_branch || "main")}" placeholder="main"${disabled}></div>
-          <div class="form-group"><label class="form-label" for="tenant-github-token">GitHub Token</label><input id="tenant-github-token" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true"${disabled}><span class="form-hint" id="tenant-github-token-status">${escHtml(github.github_token_configured ? "Token configured" : "Token not configured")}</span></div>
+          <div class="form-group"><label class="form-label" for="tenant-sim-repo-url">Simulation Repo URL</label><input id="tenant-sim-repo-url" type="url" class="form-input" value="${escHtml(github.sim_repo_url || "")}" placeholder="https://github.com/owner/repo.git" onblur="window.saveTenantGithubSettings && window.saveTenantGithubSettings()"${disabled}></div>
+          <div class="form-group"><label class="form-label" for="tenant-sim-repo-branch">Simulation Repo Branch</label><input id="tenant-sim-repo-branch" type="text" class="form-input" value="${escHtml(github.sim_repo_branch || "main")}" placeholder="main" onblur="window.saveTenantGithubSettings && window.saveTenantGithubSettings()"${disabled}></div>
+          <div class="form-group"><label class="form-label" for="tenant-github-token">GitHub Token</label><input id="tenant-github-token" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true" onblur="window.saveTenantGithubSettings && window.saveTenantGithubSettings()"${disabled}><span class="form-hint" id="tenant-github-token-status">${escHtml(github.github_token_configured ? "Token configured" : "Token not configured")}</span></div>
           <div class="form-actions">
-            <button id="save-tenant-github-btn" class="btn btn-primary" type="button"${disabled}>Save GitHub Settings</button>
             <span id="tenant-github-msg" class="form-msg"></span>
           </div>
         </div>
@@ -16512,10 +16558,6 @@ function bindEvents() {
     }
     if (event.target.closest("#save-config-push-btn")) {
       saveConfigPush();
-      return;
-    }
-    if (event.target.closest("#save-tenant-github-btn")) {
-      saveTenantGithubSettings();
       return;
     }
     if (event.target.closest("#hub-sim-config-refresh-btn")) {

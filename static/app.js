@@ -14607,12 +14607,19 @@ function renderHubCaSitesTab(container, sites, search) {
     container.innerHTML = `<div class="empty-state">${search ? "No sites match your search." : "No sites returned from Central."}</div>`;
     return;
   }
+  const healthBadge = (score) => {
+    if (score == null || score === "") return "—";
+    const n = parseInt(score, 10);
+    const cls = n >= 80 ? "badge-ok" : n >= 50 ? "badge-warning" : "badge-failure";
+    const label = n >= 80 ? "Healthy" : n >= 50 ? "Fair" : "Poor";
+    return `<span class="badge ${cls}">${label}</span>`;
+  };
   const rows = filtered.map((site) => `
     <tr>
       <td><strong>${escHtml(site.name || "—")}</strong></td>
       <td>${site.health_score != null ? `${escHtml(String(site.health_score))}%` : "—"}</td>
       <td>${site.wireless_clients != null ? escHtml(String(site.wireless_clients)) : "—"}</td>
-      <td>${escHtml(site.status || site.central_site || "—")}</td>
+      <td>${healthBadge(site.health_score)}</td>
       <td>${hubCaMonitorBtn("site", { name: site.name || "", central_site: site.central_site || site.name || "" })}</td>
     </tr>`).join("");
   container.innerHTML = `
@@ -14833,17 +14840,25 @@ async function openHubCaMonitorModal(type, payload) {
   const sub = $("#ts-ca-modal-sub");
   const spokeSelect = $("#ts-ca-modal-spoke");
   const confirmBtn = $("#ts-ca-modal-confirm");
+  const closeBtn = $("#ts-ca-modal-close");
   const msg = $("#ts-ca-modal-msg");
   if (!modal || !spokeSelect || !confirmBtn) return;
 
   if (title) title.textContent = `Monitor Site: ${payload?.name || "—"}`;
-  if (sub) sub.textContent = `Assign a spoke to monitor “${payload?.name || "—"}” and add it to site mappings.`;
+  if (sub) sub.textContent = `Assign a spoke to monitor "${payload?.name || "—"}" and add it to site mappings.`;
   if (msg) {
     msg.textContent = "";
     msg.style.color = "";
   }
   spokeSelect.innerHTML = '<option value="">Loading spokes…</option>';
   modal.classList.remove("hidden");
+
+  // Close on backdrop click (outer overlay, not the inner card which stops propagation)
+  modal.onclick = () => closeHubCaMonitorModal();
+  if (closeBtn) closeBtn.onclick = () => closeHubCaMonitorModal();
+  // Close on ESC
+  const escHandler = (e) => { if (e.key === "Escape") { closeHubCaMonitorModal(); document.removeEventListener("keydown", escHandler); } };
+  document.addEventListener("keydown", escHandler);
 
   try {
     const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes`);

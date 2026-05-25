@@ -444,6 +444,7 @@
       </div>
       <nav class="setup-subnav">
         <button class="setup-subtab hub-ts-subtab active" data-subtab="ts-setup" type="button">Setup</button>
+        <button class="setup-subtab hub-ts-subtab" data-subtab="ts-central-api" type="button">Central API</button>
         <button class="setup-subtab hub-ts-subtab" data-subtab="ts-proxmox" type="button">Proxmox</button>
         <button class="setup-subtab hub-ts-subtab" data-subtab="ts-security" type="button">Security</button>
         <button class="setup-subtab hub-ts-subtab" data-subtab="ts-notifications" type="button">Notifications</button>
@@ -452,6 +453,45 @@
       </nav>
       <div id="ts-setup-panel">
         <div id="hub-tenant-setup-content"></div>
+      </div>
+      <div id="ts-central-api-panel" class="hidden">
+        <div class="page-toolbar">
+          <div class="toolbar-stats">
+            <span class="stat-pill" id="ts-ca-mode-pill">— mode</span>
+            <span class="stat-pill" id="ts-ca-sites-pill">— sites</span>
+            <span class="stat-pill" id="ts-ca-updated-pill">—</span>
+          </div>
+          <div class="toolbar-actions">
+            <button id="ts-ca-refresh-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+          </div>
+        </div>
+        <nav class="setup-subnav" style="margin-bottom:0;border-bottom:1px solid var(--border);">
+          <button class="setup-subtab ts-ca-subtab active" data-subtab="ts-ca-sites" type="button">Sites</button>
+          <button class="setup-subtab ts-ca-subtab" data-subtab="ts-ca-alerts" type="button">Alerts</button>
+          <button class="setup-subtab ts-ca-subtab" data-subtab="ts-ca-insights" type="button">Insights</button>
+          <button class="setup-subtab ts-ca-subtab" data-subtab="ts-ca-clients" type="button">Clients</button>
+        </nav>
+        <div style="padding:10px 0 6px;">
+          <input type="search" id="ts-ca-search" class="form-input" placeholder="Search…" style="max-width:320px;" autocomplete="off">
+        </div>
+        <div id="ts-ca-content">
+          <div class="empty-state">Select Central API tab to browse.</div>
+        </div>
+        <div id="ts-ca-monitor-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:2000;display:flex;align-items:center;justify-content:center;">
+          <div style="background:var(--surface);border-radius:8px;padding:24px;min-width:320px;max-width:480px;box-shadow:0 8px 32px rgba(0,0,0,.3);">
+            <h3 style="margin:0 0 8px;" id="ts-ca-modal-title">Monitor Site</h3>
+            <p style="color:var(--muted);font-size:0.85rem;margin:0 0 16px;" id="ts-ca-modal-sub"></p>
+            <div class="form-group">
+              <label class="form-label">Assign to Spoke</label>
+              <select id="ts-ca-modal-spoke" class="form-input"></select>
+            </div>
+            <div class="form-actions" style="margin-top:16px;">
+              <button id="ts-ca-modal-confirm" class="btn btn-primary" type="button">Add to Monitoring</button>
+              <button id="ts-ca-modal-cancel" class="btn btn-secondary" type="button">Cancel</button>
+              <span id="ts-ca-modal-msg" class="form-msg"></span>
+            </div>
+          </div>
+        </div>
       </div>
       <div id="ts-proxmox-panel" class="hidden">
         <div class="page-toolbar">

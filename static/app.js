@@ -13942,6 +13942,7 @@ function setHubTenantSetupPanels(subtab = hubTenantSetupActiveSubtab) {
   $$(".hub-ts-subtab").forEach((button) => button.classList.toggle("active", button.dataset.subtab === subtab));
   [
     "ts-setup-panel",
+    "ts-central-api-panel",
     "ts-proxmox-panel",
     "ts-security-panel",
     "ts-notifications-panel",
@@ -14241,6 +14242,10 @@ async function initTsTroubleshootTab(tenantId) {
 async function initHubTenantSetupSubtab(subtab = hubTenantSetupActiveSubtab, force = false) {
   const tenantId = getActiveTenantId();
   if (!tenantId || !currentUser) return;
+  if (subtab === "ts-central-api") {
+    await initTsCentralApiTab(force);
+    return;
+  }
   if (subtab === "ts-proxmox") {
     await initTsProxmoxTab(tenantId);
     return;
@@ -14281,6 +14286,394 @@ async function loadTenantAssignedSites(tenantId) {
     ? data.central_sites_config.site_mappings
     : {};
   return Object.keys(mappings).filter(Boolean).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+}
+
+// ── Central API Browse ──────────────────────────────────────────────────────
+
+let hubCentralBrowseData = null;
+let hubCaBrowseActiveTab = "ts-ca-sites";
+let hubCaBrowseRefreshTimer = null;
+
+function hubCaBrowseCacheKey(tenantId = getActiveTenantId()) {
+  return tenantId ? `hub_ca_browse_${tenantId}` : "";
+}
+
+function saveHubCaBrowseCache(data, tenantId = getActiveTenantId()) {
+  const key = hubCaBrowseCacheKey(tenantId);
+  if (!key) return;
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (_) {}
+}
+
+function loadHubCaBrowseCache(tenantId = getActiveTenantId()) {
+  const key = hubCaBrowseCacheKey(tenantId);
+  if (!key) return null;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function resetHubCaBrowsePills() {
+  const modePill = $("#ts-ca-mode-pill");
+  const sitesPill = $("#ts-ca-sites-pill");
+  const updPill = $("#ts-ca-updated-pill");
+  if (modePill) modePill.textContent = "— mode";
+  if (sitesPill) sitesPill.textContent = "— sites";
+  if (updPill) updPill.textContent = "—";
+}
+
+function updateHubCaBrowsePills(data) {
+  const modePill = $("#ts-ca-mode-pill");
+  const sitesPill = $("#ts-ca-sites-pill");
+  const updPill = $("#ts-ca-updated-pill");
+  if (modePill) modePill.textContent = `${data?.mode || "—"} mode`;
+  if (sitesPill) sitesPill.textContent = `${(data?.sites || []).length} sites`;
+  if (updPill) {
+    if (data?.cached_at) {
+      updPill.textContent = `Updated ${new Date(data.cached_at * 1000).toLocaleTimeString()}`;
+    } else {
+      updPill.textContent = "—";
+    }
+  }
+}
+
+function scheduleHubCaBrowseRefresh() {
+  clearTimeout(hubCaBrowseRefreshTimer);
+  const tenantId = getActiveTenantId();
+  if (!tenantId) return;
+  hubCaBrowseRefreshTimer = setTimeout(() => {
+    if (hubTenantSetupActiveSubtab === "ts-central-api" && getActiveTenantId() === tenantId) {
+      loadHubCaBrowseData(true).catch(() => {});
+    }
+  }, 5 * 60 * 1000);
+}
+
+async function initTsCentralApiTab(force = false) {
+  const tenantId = getActiveTenantId();
+  if (!tenantId) return;
+
+  $$(".ts-ca-subtab").forEach((button) => {
+    button.onclick = () => {
+      hubCaBrowseActiveTab = button.dataset.subtab || "ts-ca-sites";
+      renderHubCaBrowseTab();
+    };
+  });
+
+  const searchEl = $("#ts-ca-search");
+  if (searchEl) searchEl.oninput = () => renderHubCaBrowseTab();
+
+  const refreshBtn = $("#ts-ca-refresh-btn");
+  if (refreshBtn) refreshBtn.onclick = () => { void loadHubCaBrowseData(true); };
+
+  const cancelBtn = $("#ts-ca-modal-cancel");
+  if (cancelBtn) cancelBtn.onclick = closeHubCaMonitorModal;
+
+  const modal = $("#ts-ca-monitor-modal");
+  if (modal) {
+    modal.onclick = (event) => {
+      if (event.target === modal) closeHubCaMonitorModal();
+    };
+  }
+
+  await loadHubCaBrowseData(force);
+}
+
+async function loadHubCaBrowseData(force = false) {
+  const tenantId = getActiveTenantId();
+  const content = $("#ts-ca-content");
+  if (!tenantId || !content) return;
+
+  const cached = loadHubCaBrowseCache(tenantId);
+  if (cached && !force) {
+    hubCentralBrowseData = cached;
+    updateHubCaBrowsePills(cached);
+    renderHubCaBrowseTab();
+  } else if (!cached) {
+    hubCentralBrowseData = null;
+    resetHubCaBrowsePills();
+    content.innerHTML = '<div class="empty-state">Loading Central data…</div>';
+  }
+
+  try {
+    const params = new URLSearchParams({ tenant_id: tenantId });
+    if (force) params.set("force", "true");
+    const res = await apiFetch(`/api/central/browse?${params.toString()}`);
+    const data = await readJson(res);
+    if (!res?.ok) throw new Error(data?.detail || data?.warning || "Unable to load Central data.");
+    hubCentralBrowseData = data || { sites: [], alerts: [], insights: [], clients: [], mode: "—" };
+    saveHubCaBrowseCache(hubCentralBrowseData, tenantId);
+    updateHubCaBrowsePills(hubCentralBrowseData);
+    renderHubCaBrowseTab();
+  } catch (error) {
+    if (!hubCentralBrowseData) {
+      content.innerHTML = `<div class="empty-state">Error loading Central data: ${escHtml(error?.message || "Unknown error")}</div>`;
+    }
+  } finally {
+    scheduleHubCaBrowseRefresh();
+  }
+}
+
+function renderHubCaBrowseTab() {
+  const content = $("#ts-ca-content");
+  if (!content || !hubCentralBrowseData) return;
+
+  const search = ($("#ts-ca-search")?.value || "").trim().toLowerCase();
+  const tab = hubCaBrowseActiveTab || "ts-ca-sites";
+  $$(".ts-ca-subtab").forEach((button) => button.classList.toggle("active", button.dataset.subtab === tab));
+
+  if (tab === "ts-ca-alerts") renderHubCaAlertsTab(content, hubCentralBrowseData.alerts || [], search);
+  else if (tab === "ts-ca-insights") renderHubCaInsightsTab(content, hubCentralBrowseData.insights || [], search);
+  else if (tab === "ts-ca-clients") renderHubCaClientsTab(content, hubCentralBrowseData.clients || [], search);
+  else renderHubCaSitesTab(content, hubCentralBrowseData.sites || [], search);
+
+  if (hubCentralBrowseData.warning && !content.querySelector("tbody") && !content.querySelector(".ca-browse-warning")) {
+    content.insertAdjacentHTML("afterbegin", `<div class="empty-state ca-browse-warning" style="color:#c0392b;">${escHtml(hubCentralBrowseData.warning)}</div>`);
+  }
+}
+
+function hubCaMonitorBtn(type, payload = {}) {
+  const dataAttrs = Object.entries(payload)
+    .map(([key, value]) => `data-ca-${key.replace(/_/g, "-")}="${escHtml(String(value ?? ""))}"`)
+    .join(" ");
+  return `<button class="btn btn-small btn-primary ca-monitor-btn" type="button" data-ca-type="${escHtml(type)}" ${dataAttrs}>Monitor</button>`;
+}
+
+function attachHubCaMonitorButtons(container) {
+  container.querySelectorAll(".ca-monitor-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      const payload = {
+        name: button.dataset.caName || "",
+        site: button.dataset.caSite || "",
+        central_site: button.dataset.caCentralSite || "",
+        mac: button.dataset.caMac || "",
+        hostname: button.dataset.caHostname || "",
+      };
+      openHubCaMonitorModal(button.dataset.caType || "", payload).catch((error) => {
+        showToast(error.message || "Unable to open monitor dialog.", "error");
+      });
+    });
+  });
+}
+
+function renderHubCaSitesTab(container, sites, search) {
+  const filtered = sites.filter((site) => !search || JSON.stringify(site).toLowerCase().includes(search));
+  if (!filtered.length) {
+    container.innerHTML = `<div class="empty-state">${search ? "No sites match your search." : "No sites returned from Central."}</div>`;
+    return;
+  }
+  const rows = filtered.map((site) => `
+    <tr>
+      <td><strong>${escHtml(site.name || "—")}</strong></td>
+      <td>${site.health_score != null ? `${escHtml(String(site.health_score))}%` : "—"}</td>
+      <td>${site.wireless_clients != null ? escHtml(String(site.wireless_clients)) : "—"}</td>
+      <td>${escHtml(site.status || site.central_site || "—")}</td>
+      <td>${hubCaMonitorBtn("site", { name: site.name || "", central_site: site.central_site || site.name || "" })}</td>
+    </tr>`).join("");
+  container.innerHTML = `
+    <div class="setup-card" style="overflow-x:auto;">
+      <table class="data-table">
+        <thead><tr><th>Site Name</th><th>Health</th><th>Wireless Clients</th><th>Status</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  attachHubCaMonitorButtons(container);
+}
+
+function renderHubCaAlertsTab(container, alerts, search) {
+  const filtered = alerts.filter((alert) => !search || JSON.stringify(alert).toLowerCase().includes(search));
+  if (!filtered.length) {
+    container.innerHTML = `<div class="empty-state">${search ? "No alerts match your search." : "No active alerts."}</div>`;
+    return;
+  }
+  const rows = filtered.map((alert) => `
+    <tr>
+      <td>${escHtml(alert.name || "—")}</td>
+      <td>${escHtml(alert.site || "—")}</td>
+      <td><span class="badge badge-${alert.severity === "error" || alert.severity === "red" ? "failure" : "warning"}">${escHtml(alert.severity || "—")}</span></td>
+      <td style="color:var(--muted);font-size:0.8rem;">${alert.ts ? escHtml(new Date(alert.ts * 1000).toLocaleString()) : "—"}</td>
+      <td>${hubCaMonitorBtn("alert", { name: alert.name || "", site: alert.site || "" })}</td>
+    </tr>`).join("");
+  container.innerHTML = `
+    <div class="setup-card" style="overflow-x:auto;">
+      <table class="data-table">
+        <thead><tr><th>Alert Name</th><th>Site</th><th>Severity</th><th>Time</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  attachHubCaMonitorButtons(container);
+}
+
+function renderHubCaInsightsTab(container, insights, search) {
+  const filtered = insights.filter((insight) => !search || JSON.stringify(insight).toLowerCase().includes(search));
+  if (!filtered.length) {
+    container.innerHTML = `<div class="empty-state">${search ? "No insights match your search." : "No insights returned from Central."}</div>`;
+    return;
+  }
+  const rows = filtered.map((insight) => `
+    <tr>
+      <td>${escHtml(insight.name || "—")}</td>
+      <td>${escHtml(insight.site || "—")}</td>
+      <td>${escHtml(insight.category || "—")}</td>
+      <td><span class="badge">${escHtml(insight.severity || "—")}</span></td>
+      <td>${hubCaMonitorBtn("insight", { name: insight.name || "", site: insight.site || "" })}</td>
+    </tr>`).join("");
+  container.innerHTML = `
+    <div class="setup-card" style="overflow-x:auto;">
+      <table class="data-table">
+        <thead><tr><th>Insight</th><th>Site</th><th>Category</th><th>Severity</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  attachHubCaMonitorButtons(container);
+}
+
+function renderHubCaClientsTab(container, clients, search) {
+  const filtered = clients.filter((client) => !search || JSON.stringify(client).toLowerCase().includes(search));
+  if (!filtered.length) {
+    container.innerHTML = `<div class="empty-state">${search ? "No clients match your search." : "No clients returned from Central."}</div>`;
+    return;
+  }
+  const rows = filtered.map((client) => `
+    <tr>
+      <td>${escHtml(client.hostname || "—")}</td>
+      <td><code style="font-size:11px;">${escHtml(client.mac || "—")}</code></td>
+      <td>${escHtml(client.ip || "—")}</td>
+      <td>${escHtml(client.site || "—")}</td>
+      <td>${escHtml(client.ap || "—")}</td>
+      <td>${escHtml(client.ssid || "—")}</td>
+      <td>${escHtml(client.status || "—")}</td>
+      <td>${hubCaMonitorBtn("client", { mac: client.mac || "", hostname: client.hostname || "", site: client.site || "" })}</td>
+    </tr>`).join("");
+  container.innerHTML = `
+    <div class="setup-card" style="overflow-x:auto;">
+      <table class="data-table">
+        <thead><tr><th>Hostname</th><th>MAC</th><th>IP</th><th>Site</th><th>AP</th><th>SSID</th><th>Status</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  attachHubCaMonitorButtons(container);
+}
+
+async function openHubCaMonitorModal(type, payload) {
+  const tenantId = getActiveTenantId();
+  if (!tenantId) return;
+
+  if (type !== "site") {
+    showToast("Monitoring via Simulations — coming soon", "ok");
+    return;
+  }
+
+  const modal = $("#ts-ca-monitor-modal");
+  const title = $("#ts-ca-modal-title");
+  const sub = $("#ts-ca-modal-sub");
+  const spokeSelect = $("#ts-ca-modal-spoke");
+  const confirmBtn = $("#ts-ca-modal-confirm");
+  const msg = $("#ts-ca-modal-msg");
+  if (!modal || !spokeSelect || !confirmBtn) return;
+
+  if (title) title.textContent = `Monitor Site: ${payload?.name || "—"}`;
+  if (sub) sub.textContent = `Assign a spoke to monitor “${payload?.name || "—"}” and add it to site mappings.`;
+  if (msg) {
+    msg.textContent = "";
+    msg.style.color = "";
+  }
+  spokeSelect.innerHTML = '<option value="">Loading spokes…</option>';
+  modal.classList.remove("hidden");
+
+  try {
+    const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes`);
+    const spokes = await readJson(res);
+    if (!res?.ok) throw new Error(spokes?.detail || "Unable to load spokes.");
+    const approved = (Array.isArray(spokes) ? spokes : []).filter((spoke) => spoke.status === "approved");
+    if (!approved.length) {
+      spokeSelect.innerHTML = '<option value="">No approved spokes</option>';
+    } else {
+      spokeSelect.innerHTML = approved
+        .map((spoke) => `<option value="${escHtml(spoke.id)}">${escHtml(spoke.spoke_name || spoke.hostname || spoke.id)}</option>`)
+        .join("");
+    }
+  } catch (error) {
+    spokeSelect.innerHTML = '<option value="">Unable to load spokes</option>';
+    if (msg) {
+      msg.textContent = error.message || "Unable to load spokes.";
+      msg.style.color = "var(--error)";
+    }
+  }
+
+  confirmBtn.onclick = async () => {
+    const spokeId = spokeSelect.value;
+    if (!spokeId) {
+      if (msg) {
+        msg.textContent = "Select a spoke.";
+        msg.style.color = "var(--error)";
+      }
+      return;
+    }
+
+    confirmBtn.disabled = true;
+    if (msg) {
+      msg.textContent = "";
+      msg.style.color = "";
+    }
+
+    try {
+      const spokeRes = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes`);
+      const spokes = await readJson(spokeRes);
+      if (!spokeRes?.ok) throw new Error(spokes?.detail || "Unable to load spoke assignments.");
+      const spoke = (Array.isArray(spokes) ? spokes : []).find((item) => item.id === spokeId);
+      const currentSites = Array.isArray(spoke?.assigned_sites)
+        ? spoke.assigned_sites
+        : (spoke?.assigned_site ? [spoke.assigned_site] : []);
+      const nextSites = [...new Set([...currentSites, payload?.name].filter(Boolean))];
+      await updateTsSpokeAssignedSites(tenantId, spokeId, nextSites);
+
+      const cfgRes = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/central-sites-config`);
+      const cfg = await readJson(cfgRes);
+      if (!cfgRes?.ok) throw new Error(cfg?.detail || "Unable to load Central site mappings.");
+      const siteMappings = {
+        ...((cfg && typeof cfg.site_mappings === "object") ? cfg.site_mappings : {}),
+        [payload.name]: payload.central_site || payload.name,
+      };
+      const saveRes = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/central-sites-config`, {
+        method: "POST",
+        body: {
+          ...(cfg || {}),
+          site_mappings: siteMappings,
+        },
+      });
+      const saveData = await readJson(saveRes);
+      if (!saveRes?.ok) throw new Error(saveData?.detail || "Unable to save Central site mappings.");
+
+      closeHubCaMonitorModal();
+      hubCentralData = null;
+      showToast(`“${payload.name}” added to monitoring.`, "ok");
+      await Promise.all([
+        loadHubCentralData(true).catch(() => {}),
+        loadHubCaBrowseData(true).catch(() => {}),
+      ]);
+    } catch (error) {
+      if (msg) {
+        msg.textContent = error.message || "Error adding site to monitoring.";
+        msg.style.color = "var(--error)";
+      }
+    } finally {
+      confirmBtn.disabled = false;
+    }
+  };
+}
+
+function closeHubCaMonitorModal() {
+  const modal = $("#ts-ca-monitor-modal");
+  const msg = $("#ts-ca-modal-msg");
+  if (modal) modal.classList.add("hidden");
+  if (msg) {
+    msg.textContent = "";
+    msg.style.color = "";
+  }
 }
 
 async function updateTsSpokeAssignedSites(tenantId, spokeId, assignedSites) {

@@ -14303,15 +14303,26 @@ async function initTsTroubleshootTab(tenantId) {
   const msg = $("#ts-troubleshoot-msg");
   if (!select || !updateBtn || !tenantId) return;
   updateBtn.disabled = !canManageTenant(tenantId);
-  await populateSpokeSelect(select, tenantId, select.value);
+
+  // Populate spokes then prepend "All Spokes" as the default
+  await populateSpokeSelect(select, tenantId, "__all__");
+  const allOpt = document.createElement("option");
+  allOpt.value = "__all__";
+  allOpt.textContent = "All Spokes";
+  select.insertBefore(allOpt, select.firstChild);
+  select.value = "__all__";
 
   const loadTroubleshoot = async () => {
     const spokeId = select.value;
-    if (!spokeId) {
+    if (!spokeId || spokeId === "__all__") {
       setTroubleshootField("ts-trbl-version", "—");
       setTroubleshootField("ts-trbl-repo-synced", "—");
       setTroubleshootField("ts-trbl-repo-error", "—");
       setTroubleshootField("ts-trbl-installer-version", "—");
+      showInlineMessage(msg, "Select a specific spoke to view health details.", false);
+      return;
+    }
+    if (!spokeId) {
       showInlineMessage(msg, "No spokes available for this tenant.", true);
       return;
     }
@@ -14327,6 +14338,18 @@ async function initTsTroubleshootTab(tenantId) {
   select.onchange = () => { void loadTroubleshoot().catch((error) => showInlineMessage(msg, error.message || "Failed to load troubleshooting data.", true)); };
   updateBtn.onclick = async () => {
     const spokeId = select.value;
+    if (spokeId === "__all__") {
+      // Send update to every spoke in the list
+      const spokeOpts = [...select.options].filter((o) => o.value && o.value !== "__all__");
+      if (!spokeOpts.length) { showInlineMessage(msg, "No spokes to update.", true); return; }
+      let succeeded = 0;
+      for (const opt of spokeOpts) {
+        const ok = await sendCommandToSpoke(tenantId, opt.value, "update_now");
+        if (ok) succeeded++;
+      }
+      showInlineMessage(msg, `Update queued for ${succeeded} of ${spokeOpts.length} spoke(s) ✓`, succeeded === 0);
+      return;
+    }
     if (!spokeId) return;
     const ok = await sendCommandToSpoke(tenantId, spokeId, "update_now");
     showInlineMessage(msg, ok ? "Update queued for spoke ✓" : "Failed to queue update.", !ok);

@@ -2221,28 +2221,30 @@ if (githubClearConfigBtn) {
   }));
 }
 
-syncNowBtn.addEventListener('click', async () => {
-  syncNowBtn.disabled = true;
-  syncNowBtn.textContent = '⬇ Syncing…';
-  syncNowMsg.textContent = 'GitHub sync started…';
-  syncNowMsg.className = 'settings-message success';
-  try {
-    const res = await fetch('/api/sync-now', { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-    syncNowMsg.textContent = 'Sync triggered — status will update below when complete.';
-  } catch (err) {
-    syncNowMsg.textContent = `Error: ${err.message}`;
-    syncNowMsg.className = 'settings-message error';
-  } finally {
-    syncNowBtn.disabled = false;
-    syncNowBtn.textContent = '⬇ Sync from GitHub Now';
-    clearTimeout(syncNowMsg._timer);
-    syncNowMsg._timer = setTimeout(() => {
-      syncNowMsg.className = 'settings-message hidden';
-    }, 6000);
-  }
-});
+if (syncNowBtn) {
+  syncNowBtn.addEventListener('click', async () => {
+    syncNowBtn.disabled = true;
+    syncNowBtn.textContent = '⬇ Syncing…';
+    syncNowMsg.textContent = 'GitHub sync started…';
+    syncNowMsg.className = 'settings-message success';
+    try {
+      const res = await fetch('/api/sync-now', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      syncNowMsg.textContent = 'Sync triggered — status will update below when complete.';
+    } catch (err) {
+      syncNowMsg.textContent = `Error: ${err.message}`;
+      syncNowMsg.className = 'settings-message error';
+    } finally {
+      syncNowBtn.disabled = false;
+      syncNowBtn.textContent = '⬇ Sync from GitHub Now';
+      clearTimeout(syncNowMsg._timer);
+      syncNowMsg._timer = setTimeout(() => {
+        syncNowMsg.className = 'settings-message hidden';
+      }, 6000);
+    }
+  });
+}
 
 function applyVersionStatus(data) {
   // Show cs-webui frontend version (not client-sim installer version) in Setup tile
@@ -13965,6 +13967,7 @@ async function initTsGithubTab(tenantId) {
   const saveBtn = $("#ts-github-save-btn");
   const msg = $("#ts-github-msg");
   const tokenInput = $("#ts-github-token-input");
+  const branchEl = $("#ts-branch-input");
   if (!select || !saveBtn || !tenantId) return;
   saveBtn.disabled = !canManageTenant(tenantId);
   await populateSpokeSelect(select, tenantId, select.value);
@@ -13977,18 +13980,22 @@ async function initTsGithubTab(tenantId) {
     }
     const data = await loadSpokeConfig(tenantId, spokeId);
     const cfg = data.config || {};
-    $("#ts-branch-input") && ($("#ts-branch-input").value = cfg.repo_branch ?? "");
+    if (branchEl) branchEl.value = cfg.repo_branch ?? "";
     if (tokenInput) tokenInput.value = "";
     resetSecretInput(tokenInput);
     showInlineMessage(msg, "", false, 0);
   };
+
+  // Only bind handlers and load once per tenant to preserve in-progress edits
+  if (select._ghTenant === tenantId) return;
+  select._ghTenant = tenantId;
 
   select.onchange = () => { void loadGithub().catch((error) => showInlineMessage(msg, error.message || "Failed to load GitHub settings.", true)); };
   saveBtn.onclick = async () => {
     const spokeId = select.value;
     if (!spokeId) return;
     const payload = {
-      repo_branch: $("#ts-branch-input")?.value.trim() || "main",
+      repo_branch: branchEl?.value.trim() || "main",
     };
     const tokenSecret = getSecretInputPayload(tokenInput);
     if (tokenSecret.include) payload.github_token = tokenSecret.value.trim();

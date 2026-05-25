@@ -2119,7 +2119,7 @@
             <button id="hub-managed-unlock-btn" class="btn btn-secondary btn-small" type="button" title="Revert to local management — use if hub tenant was deleted or hub is unreachable" style="margin-left:12px;">Revert to Local Control</button>
           </div>
         <nav class="setup-subnav" role="tablist">
-          <button class="setup-subtab" data-subtab="setup-github" role="tab">GitHub</button>
+          <button class="setup-subtab" data-subtab="setup-github" role="tab">Updates</button>
           <button class="setup-subtab" data-subtab="setup-hub" role="tab">Hub</button>
           <button class="setup-subtab" data-subtab="setup-proxmox" role="tab">Proxmox</button>
           <button class="setup-subtab" data-subtab="setup-security" role="tab">Security</button>
@@ -2131,44 +2131,9 @@
         <div id="setup-github" class="setup-subpanel active">
           <div class="setup-card setup-section-gap">
                 <div class="setup-card-header">
-                  <h2>Repository Settings</h2>
-                  <p>Choose which branch of <strong>solutions-hpe/client-sim</strong> the dashboard syncs from.
-                     The repository URL is fixed. Changes take effect immediately and persist across restarts.</p>
+                  <h2>GitHub Sync Status</h2>
+                  <p>Repository and branch are configured centrally from the hub. Use the hub's Setup → GitHub tab to change branch or token.</p>
                 </div>
-
-                <div class="setup-form">
-                  <div class="form-group">
-                    <label class="form-label" for="repo-url-input">Repository</label>
-                    <input id="repo-url-input" class="form-input input-readonly" type="text"
-                           value="https://github.com/solutions-hpe/client-sim.git" readonly>
-                    <span class="form-hint">Fixed — only branch can be changed.</span>
-                  </div>
-
-                  <div class="form-group">
-                    <label class="form-label" for="branch-input">Branch</label>
-                    <input id="branch-input" class="form-input" type="text"
-                           placeholder="e.g. main, dev, feature/test" autocomplete="off" spellcheck="false">
-                    <span class="form-hint">Letters, numbers, hyphens, underscores, dots, and slashes only.</span>
-                  </div>
-
-                  <div class="form-group">
-                    <label class="form-label" for="github-token-input">GitHub Token</label>
-                    <input id="github-token-input" class="form-input" type="password"
-                           placeholder="Paste token — leave blank to keep current" autocomplete="new-password" data-secret-field="true">
-                    <span class="form-hint" id="github-token-status"></span>
-                  </div>
-
-                  <div class="form-actions" style="display:flex; justify-content:flex-end; gap:8px;">
-                    <button id="github-clear-config-btn" class="btn btn-secondary" type="button">Clear Config</button>
-                    <button id="sync-now-btn" class="btn btn-primary" type="button">⬇ Sync from GitHub Now</button>
-                  </div>
-
-                  <div id="sync-now-message" class="settings-message hidden" role="alert"></div>
-
-                  <div id="settings-message" class="settings-message hidden" role="alert"></div>
-                </div>
-
-                <hr class="setup-divider">
 
                 <div class="setup-status-grid">
                   <div class="setup-status-item">

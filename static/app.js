@@ -8511,14 +8511,8 @@ function primeHubClientExpandedSet(siteKeys = [], tenantId = currentTenantId) {
   if (!tenantId) return;
   if (!hubClientUiState.seenSitesByTenant[tenantId]) hubClientUiState.seenSitesByTenant[tenantId] = new Set();
   const seen = hubClientUiState.seenSitesByTenant[tenantId];
-  const expanded = getHubClientExpandedSet(tenantId);
-  // Auto-expand any site that hasn't been seen before (preserves user's explicit collapses)
-  siteKeys.filter(Boolean).forEach(key => {
-    if (!seen.has(key)) {
-      expanded.add(key);
-      seen.add(key);
-    }
-  });
+  // Mark sites as seen without auto-expanding; user must manually expand
+  siteKeys.filter(Boolean).forEach(key => seen.add(key));
 }
 
 function normalizeHubClientActiveSimulations(value) {

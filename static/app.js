@@ -7969,7 +7969,6 @@ let superadminActiveSubtab = "sa-pending";
 let tenantDetailState = { open: false, tenantId: null, activeTab: "dashboard", data: {} };
 const hubAdminTabIds = new Set(["dashboard", "setup", "superadmin"]);
 let tenantUserCounts = {};
-let dashboardTenantRows = [];
 let aggregateDashboardData = null;
 let aggregateClientRows = [];
 let aggregateProxmoxHosts = [];
@@ -7997,7 +7996,6 @@ let hubVmServerFleetPollTimer = null;
 let hubVmServerFleetConcurrencyDraft = 3;
 let hubVmServerFleetConcurrencyTenant = null;
 let hubClientTypeFilter = "all";
-const tenantDashboardSort = { key: "name", direction: "asc" };
 
 const PROCESSING_FEATURES = ["aruba_polling", "teams_webhook", "email", "heartbeat", "gkill", "schedules", "repo_sync"];
 const spokeUiState = { expandedByTenant: {}, search: "" };
@@ -8290,52 +8288,6 @@ async function loadAggregateData(path) {
   return res.json().catch(() => null);
 }
 
-async function loadAggregateDataForTenant(tenantId, path) {
-  if (!currentUser || !tenantId) return null;
-  const res = await apiFetch(`/api/aggregate/${path}?tenant_id=${encodeURIComponent(tenantId)}`);
-  if (!res || !res.ok) return null;
-  return res.json().catch(() => null);
-}
-
-function summarizeTenantAlerts(summary, aggregate) {
-  const checks = aggregate?.checks_summary || {};
-  const alertCount = Number(checks.fail || 0) + Number(checks.warning || 0);
-  if (alertCount > 0) {
-    return { tone: "alert", text: `${alertCount} active ${alertCount === 1 ? "alert" : "alerts"}` };
-  }
-  if (summary.offlineCount > 0) {
-    return { tone: "alert", text: `${summary.offlineCount} offline ${summary.offlineCount === 1 ? "spoke" : "spokes"}` };
-  }
-  return { tone: "ok", text: "OK" };
-}
-
-function renderTenantCard(cardData) {
-  const { id, name, summary, alert } = cardData;
-  const row = document.createElement("tr");
-  row.className = "tenant-list-row";
-  row.dataset.enterTenant = id;
-  row.tabIndex = 0;
-  row.setAttribute("role", "button");
-  row.innerHTML = `
-    <td>${statusDot(summary.onlineCount > 0 || summary.approvedCount === 0)}</td>
-    <td><strong>${escHtml(name || id)}</strong><div class="tenant-card-subtitle">${escHtml(id)}</div></td>
-    <td>${summary.approvedCount}</td>
-    <td>${summary.clientCount}</td>
-    <td>${summary.vmCount}</td>
-    <td>${escHtml(relativeTime(summary.lastSync))}</td>
-    <td><span class="tenant-alert-pill ${alert.tone}">${escHtml(alert.text)}</span></td>
-    <td class="tenant-card-cta">Open →</td>
-  `;
-  return row;
-}
-
-function renderTenantDashboardEmptyState() {
-  const canAddTenant = Boolean(currentUser?.is_superadmin);
-  return canAddTenant
-    ? 'No tenants yet. Create your first tenant to get started.<div class="tenant-empty-action"><button class="btn btn-primary btn-small" data-add-tenant type="button">Add Tenant</button></div>'
-    : 'No tenants are available yet. Contact a hub administrator to add one.';
-}
-
 function hubSimulationBadgeClass(simulation) {
   if (FAILURE_SIMS.has(simulation)) return "badge badge-failure";
   if (TRAFFIC_SIMS.has(simulation)) return "badge badge-traffic";
@@ -8506,41 +8458,6 @@ function toggleHubSiteExpand(siteKey) {
   renderClientRowsForHub();
 }
 window.toggleHubSiteExpand = toggleHubSiteExpand;
-
-function renderDashboardAggregate(data) {
-  const hardwareRows = Object.entries(data.hardware_breakdown || {}).map(([name, count]) => `
-    <tr><td>${escHtml(name)}</td><td>${count}</td></tr>
-  `).join("");
-  const checks = data.checks_summary || {};
-  return `
-    <div class="tenant-metrics-grid">
-      <article class="tenant-metric-card"><span class="tenant-metric-label">Total Clients</span><strong class="tenant-metric-value">${data.client_count ?? 0}</strong><span class="tenant-metric-hint">Across approved spokes</span></article>
-      <article class="tenant-metric-card"><span class="tenant-metric-label">Spoke Health</span><strong class="tenant-metric-value">${data.spokes_online ?? 0} / ${data.spokes_total ?? 0}</strong><span class="tenant-metric-hint">Online within last 300s</span></article>
-      <article class="tenant-metric-card"><span class="tenant-metric-label">Checks Passing</span><strong class="tenant-metric-value">${checks.pass ?? 0}</strong><span class="tenant-metric-hint">Warnings ${checks.warning ?? 0} · Failing ${checks.fail ?? 0}</span></article>
-      <article class="tenant-metric-card"><span class="tenant-metric-label">Hardware Types</span><strong class="tenant-metric-value">${Object.keys(data.hardware_breakdown || {}).length}</strong><span class="tenant-metric-hint">Observed client platforms</span></article>
-    </div>
-    <div class="tenant-detail-grid">
-      <section class="setup-card">
-        <div class="setup-card-header"><h2>Hardware Breakdown</h2><p>Client totals per reported hardware type for this tenant.</p></div>
-        <table class="data-table">
-          <thead><tr><th>Hardware Type</th><th>Count</th></tr></thead>
-          <tbody>${hardwareRows || '<tr><td colspan="2" class="empty-state">No client hardware reported.</td></tr>'}</tbody>
-        </table>
-      </section>
-      <section class="setup-card">
-        <div class="setup-card-header"><h2>Checks Summary</h2><p>Roll-up across stored spoke telemetry in this tenant.</p></div>
-        <table class="data-table">
-          <tbody>
-            <tr><td>Pass</td><td>${checks.pass ?? 0}</td></tr>
-            <tr><td>Fail</td><td>${checks.fail ?? 0}</td></tr>
-            <tr><td>Warning</td><td>${checks.warning ?? 0}</td></tr>
-            <tr><td>Spokes Online</td><td>${data.spokes_online ?? 0} of ${data.spokes_total ?? 0}</td></tr>
-          </tbody>
-        </table>
-      </section>
-    </div>
-  `;
-}
 
 const HUB_STATUS_PRIORITY = { fail: 3, warning: 2, degraded: 3, no_data: 2, pass: 1, ok: 1 };
 const hubSimTopPanels = ["hub-simtop-checks", "hub-simtop-hardware", "hub-simtop-clients"];
@@ -9140,81 +9057,6 @@ function buildTenantUserCounts(users = []) {
 
 function getTenantUserCount(tenantId) {
   return Object.prototype.hasOwnProperty.call(tenantUserCounts, tenantId) ? tenantUserCounts[tenantId] : null;
-}
-
-function compareTenantDashboardValues(a, b) {
-  if (typeof a === "number" && typeof b === "number") return a - b;
-  return String(a || "").localeCompare(String(b || ""), undefined, { numeric: true, sensitivity: "base" });
-}
-
-function tenantDashboardSortValue(row, key) {
-  if (key === "approvedCount") return row.summary?.approvedCount ?? row.approvedSpokes ?? -1;
-  if (key === "clientCount") return row.summary?.clientCount ?? -1;
-  if (key === "vmCount") return row.summary?.vmCount ?? -1;
-  if (key === "approvedSpokes" || key === "userCount") return row[key] ?? -1;
-  if (key === "lastSync") {
-    const v = row.summary?.lastSync ?? row.lastSync;
-    return v ? new Date(v).getTime() : 0;
-  }
-  if (key === "createdAt") return row.createdAt ? new Date(row.createdAt).getTime() : 0;
-  return String(row[key] || "").toLowerCase();
-}
-
-function sortDashboardTenantRows(rows) {
-  const { key, direction } = tenantDashboardSort;
-  const sorted = [...rows].sort((left, right) => compareTenantDashboardValues(
-    tenantDashboardSortValue(left, key),
-    tenantDashboardSortValue(right, key),
-  ));
-  return direction === "desc" ? sorted.reverse() : sorted;
-}
-
-function renderDashboardTenantSortHeader(label, key) {
-  const active = tenantDashboardSort.key === key;
-  const indicator = active ? (tenantDashboardSort.direction === "asc" ? "▲" : "▼") : "↕";
-  const ariaSort = active ? (tenantDashboardSort.direction === "asc" ? "ascending" : "descending") : "none";
-  return `<button class="tenant-table-sort${active ? " active" : ""}" data-dashboard-tenant-sort="${escHtml(key)}" aria-sort="${ariaSort}" type="button"><span>${escHtml(label)}</span><span class="tenant-table-sort-indicator" aria-hidden="true">${indicator}</span></button>`;
-}
-
-function renderDashboardTenantTable(rows) {
-  const sortedRows = sortDashboardTenantRows(rows);
-  const body = sortedRows.length ? sortedRows.map(row => {
-    const summary = row.summary || {};
-    const alert = row.alert || {};
-    const lastSync = summary.lastSync ?? row.lastSync;
-    return `
-    <tr class="tenant-list-row" data-enter-tenant="${escHtml(row.id)}" tabindex="0" role="button">
-      <td>${statusDot((summary.onlineCount ?? 0) > 0 || (summary.approvedCount ?? 0) === 0)}</td>
-      <td><strong>${escHtml(row.name || row.id)}</strong><div class="tenant-card-subtitle">${escHtml(row.id)}</div></td>
-      <td>${summary.approvedCount ?? row.approvedSpokes ?? '—'}</td>
-      <td>${summary.clientCount ?? '—'}</td>
-      <td>${summary.vmCount ?? '—'}</td>
-      <td>${lastSync ? escHtml(relativeTime(lastSync)) : '<span class="muted">—</span>'}</td>
-      <td>${alert.text ? `<span class="tenant-alert-pill ${alert.tone}">${escHtml(alert.text)}</span>` : ''}</td>
-      <td class="tenant-card-cta">Open →</td>
-    </tr>
-  `;}).join("") : '<tr><td colspan="8" class="empty-state">No tenants available.</td></tr>';
-  return `
-    <section class="setup-card tenant-list-card">
-      <div class="table-scroll">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th></th>
-              <th>${renderDashboardTenantSortHeader("Tenant", "name")}</th>
-              <th>${renderDashboardTenantSortHeader("Spokes", "approvedCount")}</th>
-              <th>${renderDashboardTenantSortHeader("Clients", "clientCount")}</th>
-              <th>${renderDashboardTenantSortHeader("VMs", "vmCount")}</th>
-              <th>${renderDashboardTenantSortHeader("Last Sync", "lastSync")}</th>
-              <th>Status</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>${body}</tbody>
-        </table>
-      </div>
-    </section>
-  `;
 }
 
 function setTenantDetailVisible(open) {
@@ -11291,56 +11133,17 @@ async function openTenantDetail(tenantId, tabId = "dashboard", force = false) {
 }
 
 async function loadDashboard(force = false) {
-  const grid = $("#dashboard-grid");
   const empty = $("#dashboard-empty");
+  $("#dashboard-add-tenant-btn")?.classList.toggle("hidden", !currentUser?.is_superadmin);
+  if (!empty) return;
   if (!currentUser) {
-    if (grid) grid.innerHTML = "";
-    if (empty) empty.innerHTML = "";
+    empty.innerHTML = "";
     return;
   }
-  if (currentUser) {
-    dashboardTenantRows = [];
-    $("#dash-tenants-pill") && ($("#dash-tenants-pill").textContent = `${tenants.length} tenants`);
-    $("#dashboard-add-tenant-btn")?.classList.toggle("hidden", !currentUser?.is_superadmin);
-    if (!grid || !empty) return;
-    if (!tenants.length) {
-      grid.innerHTML = "";
-      $("#dash-spokes-pill") && ($("#dash-spokes-pill").textContent = '0 spokes');
-      $("#dash-clients-pill") && ($("#dash-clients-pill").textContent = '0 clients');
-      $("#dash-online-pill") && ($("#dash-online-pill").textContent = '0 alerts');
-      empty.innerHTML = renderTenantDashboardEmptyState();
-      empty.classList.remove("hidden");
-      return;
-    }
-    const rows = await Promise.all(tenants.map(async tenant => {
-      const [spokes, aggregate] = await Promise.all([
-        ensureTenantSpokesFor(tenant.id, force),
-        loadAggregateDataForTenant(tenant.id, "dashboard"),
-      ]);
-      const summary = summarizeTenantSpokes(spokes || []);
-      return {
-        id: tenant.id,
-        name: tenant.name || tenant.id,
-        summary,
-        alert: summarizeTenantAlerts(summary, aggregate),
-      };
-    }));
-    rows.sort((left, right) => String(left.name || left.id).localeCompare(String(right.name || right.id), undefined, { numeric: true, sensitivity: "base" }));
-    dashboardTenantRows = rows;
-    // Poll pending spokes on every dashboard refresh for tenant admins
-    if (canManageTenant()) loadTenantPendingSpokes();
-    const totalSpokes = rows.reduce((sum, row) => sum + row.summary.approvedCount, 0);
-    const totalClients = rows.reduce((sum, row) => sum + row.summary.clientCount, 0);
-    const totalAlerts = rows.filter(row => row.alert.tone === "alert").length;
-    $("#dash-spokes-pill") && ($("#dash-spokes-pill").textContent = `${totalSpokes} spokes`);
-    $("#dash-clients-pill") && ($("#dash-clients-pill").textContent = `${totalClients} clients`);
-    $("#dash-online-pill") && ($("#dash-online-pill").textContent = totalAlerts ? `${totalAlerts} tenants need attention` : 'All tenants OK');
-    grid.classList.remove("spoke-grid", "tenant-card-grid");
-    empty.classList.toggle("hidden", rows.length > 0);
-    empty.innerHTML = rows.length ? "" : renderTenantDashboardEmptyState();
-    grid.innerHTML = renderDashboardTenantTable(rows);
-    return;
-  }
+  empty.innerHTML = currentUser.is_superadmin
+    ? 'Select a tenant context to continue. Superadmins can manage tenants from the Superadmin tab.'
+    : 'Select a tenant context to continue.';
+  empty.classList.remove("hidden");
 }
 
 async function loadHubSimulations(force = false) {
@@ -16443,25 +16246,8 @@ function bindEvents() {
       return;
     }
 
-    const enterTenantButton = event.target.closest("[data-enter-tenant]");
-    if (enterTenantButton) {
-      enterTenantContext(enterTenantButton.dataset.enterTenant, "simulations", true);
-      return;
-    }
-
     if (event.target.closest("[data-add-tenant]")) {
       openSuperadminTenantForm();
-      return;
-    }
-
-    const tenantSortButton = event.target.closest("[data-dashboard-tenant-sort]");
-    if (tenantSortButton) {
-      const key = tenantSortButton.dataset.dashboardTenantSort;
-      if (key) {
-        tenantDashboardSort.direction = tenantDashboardSort.key === key && tenantDashboardSort.direction === "asc" ? "desc" : "asc";
-        tenantDashboardSort.key = key;
-        $("#dashboard-grid") && ($("#dashboard-grid").innerHTML = renderDashboardTenantTable(dashboardTenantRows));
-      }
       return;
     }
 

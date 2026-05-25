@@ -8677,13 +8677,9 @@ function hubCentralMonitorSummary(data = hubCentralData) {
       }
     }
   }
-  const knownSites = new Set([
-    ...Object.keys(siteMappings),
-    ...Object.keys(fallbackSites),
-    ...Object.keys(statusBySite),
-    ...Object.keys(wirelessBySite),
-    ...Object.keys(clientCountBySite),
-  ].filter(Boolean));
+  const knownSites = new Set(
+    Object.keys(fallbackSites).filter(Boolean)
+  );
   const sites = [...knownSites]
     .sort((left, right) => String(left).localeCompare(String(right), undefined, { sensitivity: "base" }))
     .map((wsite) => {

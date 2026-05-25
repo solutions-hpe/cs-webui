@@ -13946,7 +13946,6 @@ function setHubTenantSetupPanels(subtab = hubTenantSetupActiveSubtab) {
   $$(".hub-ts-subtab").forEach((button) => button.classList.toggle("active", button.dataset.subtab === subtab));
   [
     "ts-setup-panel",
-    "ts-central-api-panel",
     "ts-proxmox-panel",
     "ts-security-panel",
     "ts-notifications-panel",
@@ -14246,10 +14245,6 @@ async function initTsTroubleshootTab(tenantId) {
 async function initHubTenantSetupSubtab(subtab = hubTenantSetupActiveSubtab, force = false) {
   const tenantId = getActiveTenantId();
   if (!tenantId || !currentUser) return;
-  if (subtab === "ts-central-api") {
-    await loadCentral(force);
-    return;
-  }
   if (subtab === "ts-proxmox") {
     await initTsProxmoxTab(tenantId);
     return;

@@ -136,7 +136,6 @@
           <button class="tab" data-tab="hub-clients" type="button">Clients</button>
           <button class="tab" data-tab="hub-central" type="button">Central</button>
           <button class="tab" data-tab="hub-vm-server" type="button">VM Server</button>
-          <button class="tab" data-tab="hub-api-server" type="button">API Server</button>
           <span class="tab-nav-sep" aria-hidden="true"></span>
           <button class="tab tab-nav-right" data-tab="hub-config" type="button">Config</button>
           <button class="tab" role="tab" aria-selected="false" data-tab="hub-tenant-setup" type="button">⚙ Setup</button>
@@ -196,6 +195,8 @@
         <button class="setup-subtab hub-simtop-subtab active" data-hubsimtop="hub-simtop-checks" role="tab" type="button">Checks</button>
         <button class="setup-subtab hub-simtop-subtab" data-hubsimtop="hub-simtop-hardware" role="tab" type="button">Hardware</button>
         <button class="setup-subtab hub-simtop-subtab" data-hubsimtop="hub-simtop-clients" role="tab" type="button">Client Count</button>
+        <button class="setup-subtab hub-simtop-subtab" data-hubsimtop="hub-simtop-sites" role="tab" type="button">Sites</button>
+        <button class="setup-subtab hub-simtop-subtab" data-hubsimtop="hub-simtop-alerts" role="tab" type="button">Alerts</button>
         <button class="setup-subtab hub-simtop-subtab" data-hubsimtop="hub-simtop-insights" role="tab" type="button">Insights</button>
       </nav>
 
@@ -233,7 +234,6 @@
           </div>
           <div id="hub-sim-site-list" class="sim-site-list"></div>
         </div>
-        <div id="hub-monitored-checks-content" style="margin-top:1rem;"></div>
       </div>
 
       <div id="hub-simtop-hardware" class="setup-subpanel hidden">
@@ -251,7 +251,6 @@
           </div>
           <div id="hub-hw-site-list" class="sim-site-list"></div>
         </div>
-        <div id="hub-monitored-hardware-content" style="margin-top:1rem;"></div>
       </div>
 
       <div id="hub-simtop-clients" class="setup-subpanel hidden">
@@ -272,6 +271,30 @@
         <div id="hub-monitored-clients-content" style="margin-top:1rem;"></div>
       </div>
 
+      <div id="hub-simtop-sites" class="setup-subpanel hidden">
+        <section class="central-toolbar">
+          <div id="hub-monitored-sites-refreshed" class="central-last-synced">Last refreshed: —</div>
+          <div class="toolbar-actions">
+            <button id="hub-monitored-sites-refresh-btn" class="btn btn-primary btn-small" type="button">Refresh</button>
+          </div>
+        </section>
+        <div id="hub-monitored-sites-content">
+          <div class="central-empty">No monitored sites configured.</div>
+        </div>
+      </div>
+
+      <div id="hub-simtop-alerts" class="setup-subpanel hidden">
+        <section class="central-toolbar">
+          <div id="hub-monitored-alerts-refreshed" class="central-last-synced">Last refreshed: —</div>
+          <div class="toolbar-actions">
+            <button id="hub-monitored-alerts-refresh-btn" class="btn btn-primary btn-small" type="button">Refresh</button>
+          </div>
+        </section>
+        <div id="hub-monitored-alerts-content">
+          <div class="central-empty">No monitored alerts configured.</div>
+        </div>
+      </div>
+
       <div id="hub-simtop-insights" class="setup-subpanel hidden">
         <section class="central-toolbar">
           <div id="hub-monitored-last-refreshed" class="central-last-synced">Last refreshed: —</div>
@@ -280,7 +303,7 @@
           </div>
         </section>
         <div id="hub-monitored-insights-content">
-          <div class="central-empty">Loading…</div>
+          <div class="central-empty">No monitored insights configured.</div>
         </div>
       </div>
     </main>
@@ -370,21 +393,6 @@
       </div>
       <div id="hub-vm-server-content"></div>
     </main>
-
-    <main id="tab-hub-api-server" class="page tab-content hidden">
-      <div class="page-toolbar">
-        <div class="toolbar-stats">
-          <span class="stat-pill" id="hub-api-spokes-pill">— spokes</span>
-          <span class="stat-pill" id="hub-api-online-pill">— healthy</span>
-          <span class="stat-pill" id="hub-api-version-pill">— versions</span>
-        </div>
-        <div class="toolbar-actions">
-          <button id="refresh-api-server-btn" class="btn btn-primary btn-small" type="button">Refresh</button>
-        </div>
-      </div>
-      <div id="hub-api-server-content"></div>
-    </main>
-
 
     <!-- ── Islands tab (auth required) ── -->
     <main id="tab-hub-spokes" class="page tab-content hidden">
@@ -1883,6 +1891,8 @@
           <button class="setup-subtab simtop-subtab active" data-simtop="simtop-checks" role="tab">Checks</button>
           <button class="setup-subtab simtop-subtab" data-simtop="simtop-hardware" role="tab">Hardware</button>
           <button class="setup-subtab simtop-subtab" data-simtop="simtop-clients" role="tab">Client Count</button>
+          <button class="setup-subtab simtop-subtab" data-simtop="simtop-sites" role="tab">Sites</button>
+          <button class="setup-subtab simtop-subtab" data-simtop="simtop-alerts" role="tab">Alerts</button>
           <button class="setup-subtab simtop-subtab" data-simtop="simtop-insights" role="tab">Insights</button>
         </nav>
 
@@ -1936,7 +1946,6 @@
               <div class="sim-clients-loading">Loading…</div>
             </div>
           </div>
-          <div id="spoke-monitored-checks-content" style="margin-top:1rem;"></div>
         </div>
 
         <!-- Hardware sub-panel -->
@@ -1955,7 +1964,6 @@
             </div>
             <div id="hw-site-list" class="sim-site-list"></div>
           </div>
-          <div id="spoke-monitored-hardware-content" style="margin-top:1rem;"></div>
         </div>
 
         <!-- Client Count sub-panel -->
@@ -1975,6 +1983,20 @@
             <div id="cc-site-detail" class="sim-site-list"></div>
           </div>
           <div id="spoke-monitored-clients-content" style="margin-top:1rem;"></div>
+        </div>
+
+        <!-- Sites sub-panel -->
+        <div id="simtop-sites" class="setup-subpanel hidden">
+          <div id="spoke-monitored-sites-content">
+            <div class="central-empty">No monitored sites configured.</div>
+          </div>
+        </div>
+
+        <!-- Alerts sub-panel -->
+        <div id="simtop-alerts" class="setup-subpanel hidden">
+          <div id="spoke-monitored-alerts-content">
+            <div class="central-empty">No monitored alerts configured.</div>
+          </div>
         </div>
 
         <!-- Insights sub-panel -->

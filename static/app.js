@@ -5657,17 +5657,18 @@ function connectWebSocket() {
 }
 
 // ── Simulations top-level tabs ──────────────────────────────────────────
-const simTopPanels = ['simtop-checks', 'simtop-hardware', 'simtop-clients', 'simtop-insights'];
+const simTopPanels = ['simtop-checks', 'simtop-hardware', 'simtop-clients', 'simtop-sites', 'simtop-alerts', 'simtop-insights'];
 
 function renderSpokeMonitoredItems() {
   const checks = (currentSettings.monitored_checks || []);
   const DEST = {
-    site:    'spoke-monitored-checks-content',
-    alert:   'spoke-monitored-hardware-content',
+    site:    'spoke-monitored-sites-content',
+    alert:   'spoke-monitored-alerts-content',
     client:  'spoke-monitored-clients-content',
     insight: 'spoke-monitored-insights-content',
   };
   const LABELS = { site: 'Monitored Sites', alert: 'Monitored Alerts', client: 'Monitored Clients', insight: 'Monitored Insights' };
+  const EMPTY  = { site: 'No monitored sites configured.', alert: 'No monitored alerts configured.', client: 'No monitored clients configured.', insight: 'No monitored insights configured.' };
   const byType = { site: [], alert: [], client: [], insight: [] };
   checks.forEach((c) => { if (byType[c.type]) byType[c.type].push(c); });
 
@@ -5699,13 +5700,9 @@ function renderSpokeMonitoredItems() {
   Object.entries(DEST).forEach(([type, id]) => {
     const el = document.getElementById(id);
     if (!el) return;
-    el.innerHTML = makeTable(byType[type], type);
+    const html = makeTable(byType[type], type);
+    el.innerHTML = html || `<div class="central-empty">${escHtml(EMPTY[type])}</div>`;
   });
-
-  const insightsEl = document.getElementById('spoke-monitored-insights-content');
-  if (insightsEl && !byType.insight.length) {
-    insightsEl.innerHTML = `<div class="central-empty">No monitored insights. Add insights via <strong>Central API → Insights</strong> using the Monitor button.</div>`;
-  }
 }
 
 function activateSimTopTab(tabId = 'simtop-checks') {
@@ -8600,7 +8597,7 @@ function toggleHubSiteExpand(siteKey) {
 window.toggleHubSiteExpand = toggleHubSiteExpand;
 
 const HUB_STATUS_PRIORITY = { fail: 3, warning: 2, degraded: 3, no_data: 2, pass: 1, ok: 1 };
-const hubSimTopPanels = ["hub-simtop-checks", "hub-simtop-hardware", "hub-simtop-clients", "hub-simtop-insights"];
+const hubSimTopPanels = ["hub-simtop-checks", "hub-simtop-hardware", "hub-simtop-clients", "hub-simtop-sites", "hub-simtop-alerts", "hub-simtop-insights"];
 
 function hubWorstStatus(a, b) {
   const pa = HUB_STATUS_PRIORITY[String(a || "").toLowerCase()] || 0;
@@ -8894,10 +8891,10 @@ function activateHubSimTopTab(tabId = "hub-simtop-checks") {
     panel.classList.toggle("hidden", id !== tabId);
   });
   hubSimActiveTab = tabId;
-  if (tabId === "hub-simtop-checks") { renderHubSimChecksList(); loadAndRenderHubMonitoredItems(); }
-  if (tabId === "hub-simtop-hardware") { renderHubHwPanel(); loadAndRenderHubMonitoredItems(); }
-  if (tabId === "hub-simtop-clients") { renderHubCcPanel(); loadAndRenderHubMonitoredItems(); }
-  if (tabId === "hub-simtop-insights") loadAndRenderHubMonitoredItems();
+  if (tabId === "hub-simtop-checks") renderHubSimChecksList();
+  if (tabId === "hub-simtop-hardware") { renderHubHwPanel(); }
+  if (tabId === "hub-simtop-clients") { renderHubCcPanel(); }
+  if (tabId === "hub-simtop-sites" || tabId === "hub-simtop-alerts" || tabId === "hub-simtop-insights") loadAndRenderHubMonitoredItems();
 }
 
 function renderHubSimChecksList() {
@@ -8994,21 +8991,20 @@ async function loadAndRenderHubMonitoredItems(force = false) {
 }
 
 function renderHubMonitoredItems(items = [], tenantId = "") {
-  // Distribute items into the four tab containers by type:
-  //   site  → Checks tab   (hub-monitored-checks-content)
-  //   alert → Hardware tab  (hub-monitored-hardware-content)
-  //   client→ Client Count  (hub-monitored-clients-content)
-  //   insight→ Insights tab (hub-monitored-insights-content)
+  // Distribute items into dedicated tab containers by type:
+  //   site    → Sites tab    (hub-monitored-sites-content)
+  //   alert   → Alerts tab   (hub-monitored-alerts-content)
+  //   client  → Client Count (hub-monitored-clients-content)
+  //   insight → Insights tab (hub-monitored-insights-content)
   const DEST = {
-    site:    "hub-monitored-checks-content",
-    alert:   "hub-monitored-hardware-content",
+    site:    "hub-monitored-sites-content",
+    alert:   "hub-monitored-alerts-content",
     client:  "hub-monitored-clients-content",
     insight: "hub-monitored-insights-content",
   };
   const LABELS = { site: "Monitored Sites", alert: "Monitored Alerts", insight: "Monitored Insights", client: "Monitored Clients" };
+  const EMPTY  = { site: "No monitored sites configured.", alert: "No monitored alerts configured.", insight: "No monitored insights configured.", client: "No monitored clients configured." };
 
-  // Also keep a handle on the old single container for the refresh button
-  const insightsContainer = document.getElementById("hub-monitored-insights-content");
   const lastRefEl = document.getElementById("hub-monitored-last-refreshed");
   if (lastRefEl) lastRefEl.textContent = `Last refreshed: ${new Date().toLocaleTimeString()}`;
 
@@ -9057,13 +9053,9 @@ function renderHubMonitoredItems(items = [], tenantId = "") {
   Object.entries(DEST).forEach(([type, containerId]) => {
     const el = document.getElementById(containerId);
     if (!el) return;
-    el.innerHTML = makeTable(byType[type], type);
+    const html = makeTable(byType[type], type);
+    el.innerHTML = html || `<div class="central-empty">${escHtml(EMPTY[type])}</div>`;
   });
-
-  // If Insights panel has no items, show empty state
-  if (insightsContainer && !byType.insight.length) {
-    insightsContainer.innerHTML = `<div class="empty-state">No monitored insights. Add insights via <strong>Setup → Central API → Insights</strong> using the Monitor button.</div>`;
-  }
 
   // Wire up Remove buttons across all containers
   document.querySelectorAll(".hub-monitored-remove-btn").forEach((btn) => {

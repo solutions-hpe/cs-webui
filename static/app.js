@@ -8678,7 +8678,7 @@ function hubCentralMonitorSummary(data = hubCentralData) {
     }
   }
   const knownSites = new Set(
-    Object.keys(siteMappings).filter(Boolean)
+    [...assignedBySite.keys()].filter(Boolean)
   );
   const sites = [...knownSites]
     .sort((left, right) => String(left).localeCompare(String(right), undefined, { sensitivity: "base" }))

@@ -663,6 +663,9 @@ const updateMsg = document.getElementById('update-message');
 const versionCurrent = document.getElementById('version-current');
 const versionAvailable = document.getElementById('version-available');
 const versionLastChecked = document.getElementById('version-last-checked');
+const serverVersionCurrent = document.getElementById('server-version-current');
+const serverVersionAvailable = document.getElementById('server-version-available');
+const serverUpdateMsg = document.getElementById('server-update-message');
 const setupActiveBranch = document.getElementById('setup-active-branch');
 const repoUrlInput = document.getElementById('repo-url-input');
 const centralTabButtons = document.querySelectorAll('#tab-nav .spoke-only .tab[data-tab="central"]');
@@ -2228,34 +2231,72 @@ function applyVersionStatus(data) {
   if (versionAvailable) versionAvailable.textContent = data.cswebui_available ?? data.available_version ?? '—';
   if (versionLastChecked) versionLastChecked.textContent = data.last_checked ?? '—';
 
+  // Show server backend (installer) version
+  if (serverVersionCurrent) serverVersionCurrent.textContent = data.current_version ?? '—';
+  if (serverVersionAvailable) serverVersionAvailable.textContent = data.available_version ?? '—';
+
+  // Highlight update-server-btn when an update is available
+  const updateServerBtn = document.getElementById('update-server-btn');
+  if (updateServerBtn && !updateServerBtn.dataset.busy) {
+    const hasUpdate = data.update_available && data.available_version && data.available_version !== data.current_version;
+    updateServerBtn.classList.toggle('btn-warning', !!hasUpdate);
+    updateServerBtn.title = hasUpdate
+      ? `Update available: v${data.available_version} — click to install`
+      : 'Pull latest server code from GitHub and restart the service';
+  }
+
   const inProgress = !!data.update_in_progress;
   updateWasInProgress = inProgress;
 
+  // Server update progress
+  const logDetails = document.getElementById('server-update-log-details');
+  const logOutput  = document.getElementById('server-update-log-output');
+  if (serverUpdateMsg) {
+    if (data.update_error) {
+      serverUpdateMsg.textContent = `Update failed: ${data.update_error}`;
+      serverUpdateMsg.className = 'settings-message error';
+      serverUpdateMsg.classList.remove('hidden');
+      if (logDetails && logOutput && data.update_log?.length) {
+        logOutput.textContent = data.update_log.join('\n');
+        logDetails.classList.remove('hidden');
+        logDetails.open = true;
+      }
+    } else if (inProgress) {
+      const lastLine = data.update_log?.length ? ` — ${data.update_log[data.update_log.length - 1]}` : '';
+      serverUpdateMsg.textContent = `Installing v${data.available_version}… service will restart.${lastLine}`;
+      serverUpdateMsg.className = 'settings-message success';
+      serverUpdateMsg.classList.remove('hidden');
+      if (logDetails && logOutput && data.update_log?.length) {
+        logOutput.textContent = data.update_log.join('\n');
+        logDetails.classList.remove('hidden');
+        logOutput.scrollTop = logOutput.scrollHeight;
+      }
+    }
+  }
+
   if (!updateMsg) return;
 
-  const logDetails = document.getElementById('update-log-details');
-  const logOutput  = document.getElementById('update-log-output');
+  const legacyLogDetails = document.getElementById('update-log-details');
+  const legacyLogOutput  = document.getElementById('update-log-output');
 
   if (data.update_error) {
     updateMsg.textContent = `Update failed: ${data.update_error}`;
     updateMsg.className = 'settings-message error';
     updateMsg.classList.remove('hidden');
-    // Show captured install output in the collapsible panel
-    if (logDetails && logOutput && data.update_log?.length) {
-      logOutput.textContent = data.update_log.join('\n');
-      logDetails.classList.remove('hidden');
-      logDetails.open = true;
+    if (legacyLogDetails && legacyLogOutput && data.update_log?.length) {
+      legacyLogOutput.textContent = data.update_log.join('\n');
+      legacyLogDetails.classList.remove('hidden');
+      legacyLogDetails.open = true;
     }
   } else if (inProgress) {
     const lastLine = data.update_log?.length ? ` — ${data.update_log[data.update_log.length - 1]}` : '';
     updateMsg.textContent = `Installing v${data.available_version}… service will restart.${lastLine}`;
     updateMsg.className = 'settings-message success';
     updateMsg.classList.remove('hidden');
-    // Keep log panel updated live
-    if (logDetails && logOutput && data.update_log?.length) {
-      logOutput.textContent = data.update_log.join('\n');
-      logDetails.classList.remove('hidden');
-      logOutput.scrollTop = logOutput.scrollHeight;
+    if (legacyLogDetails && legacyLogOutput && data.update_log?.length) {
+      legacyLogOutput.textContent = data.update_log.join('\n');
+      legacyLogDetails.classList.remove('hidden');
+      legacyLogOutput.scrollTop = legacyLogOutput.scrollHeight;
     }
   }
 }
@@ -2285,8 +2326,43 @@ if (refreshWebuiBtn) {
   });
 }
 
-// Load initial version status on page load
-fetch('/api/version').then(r => r.json()).then(applyVersionStatus).catch(() => {});
+// Update Server button — calls /api/self-update (no GitHub token needed)
+const updateServerBtn = document.getElementById('update-server-btn');
+if (updateServerBtn) {
+  updateServerBtn.addEventListener('click', async () => {
+    updateServerBtn.disabled = true;
+    updateServerBtn.dataset.busy = 'true';
+    updateServerBtn.textContent = '⬆ Checking…';
+    if (serverUpdateMsg) {
+      serverUpdateMsg.textContent = 'Syncing repo and checking for updates…';
+      serverUpdateMsg.className = 'settings-message success';
+      serverUpdateMsg.classList.remove('hidden');
+    }
+    try {
+      const res = await fetch('/api/self-update', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      if (serverUpdateMsg) {
+        serverUpdateMsg.textContent = data.message;
+        if (data.message?.includes('already up to date') || data.message?.includes('Already up to date')) {
+          serverUpdateMsg._timer = setTimeout(() => { serverUpdateMsg.className = 'settings-message hidden'; }, 8000);
+        }
+      }
+    } catch (err) {
+      if (serverUpdateMsg) {
+        serverUpdateMsg.textContent = `Error: ${err.message}`;
+        serverUpdateMsg.className = 'settings-message error';
+        serverUpdateMsg._timer = setTimeout(() => { serverUpdateMsg.className = 'settings-message hidden'; }, 10000);
+      }
+    } finally {
+      updateServerBtn.disabled = false;
+      delete updateServerBtn.dataset.busy;
+      updateServerBtn.textContent = '⬆ Update Server';
+    }
+  });
+}
+
+
 
 function normalizeFlagValue(value) {
   return String(value ?? 'off').toLowerCase() === 'on' ? 'on' : 'off';

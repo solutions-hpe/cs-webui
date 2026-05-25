@@ -2210,7 +2210,32 @@
 
           <div class="setup-card setup-section-gap">
                 <div class="setup-card-header">
-                  <h2>Frontend Version</h2>
+                  <h2>Server Version</h2>
+                  <p>The server backend (server.py). Click Update to pull the latest version from GitHub and restart.</p>
+                </div>
+                <div class="setup-status-grid">
+                  <div class="setup-status-item">
+                    <span class="setup-status-label">Installed version</span>
+                    <span id="server-version-current" class="setup-status-value">—</span>
+                  </div>
+                  <div class="setup-status-item">
+                    <span class="setup-status-label">Available version</span>
+                    <span id="server-version-available" class="setup-status-value">—</span>
+                  </div>
+                </div>
+                <div class="setup-form">
+                  <div class="form-actions" style="display:flex; justify-content:flex-end; gap:8px;">
+                    <button id="update-server-btn" class="btn btn-primary" type="button" title="Pull latest server code from GitHub and restart the service">⬆ Update Server</button>
+                  </div>
+                  <div id="server-update-message" class="settings-message hidden" role="alert"></div>
+                  <details id="server-update-log-details" class="hidden" style="margin-top:10px;">
+                    <summary style="cursor:pointer;font-size:0.82rem;color:rgba(255,255,255,0.6);">Show install output</summary>
+                    <pre id="server-update-log-output" class="update-log-pre"></pre>
+                  </details>
+                </div>
+              </div>
+
+          <div class="setup-card setup-section-gap">
                   <p>The frontend auto-refreshes every 30 minutes. Use the button below to pull the latest version immediately.</p>
                 </div>
                 <div class="setup-status-grid">

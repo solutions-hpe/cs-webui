@@ -14609,18 +14609,26 @@ function renderHubCaInsightsTab(container, insights, search) {
     container.innerHTML = `<div class="empty-state">${search ? "No insights match your search." : "No insights returned from Central."}</div>`;
     return;
   }
-  const rows = filtered.map((insight) => `
-    <tr>
-      <td>${escHtml(insight.name || "—")}</td>
+  const rows = filtered.map((insight) => {
+    const statusBadge = insight.status === "read"
+      ? `<span class="badge badge-grey">Read</span>`
+      : `<span class="badge badge-blue">Unread</span>`;
+    const catLabel = (insight.category || "").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase()) || "—";
+    const devCount = insight.device_count ? `<span style="font-size:12px;">${insight.device_count} device${insight.device_count !== 1 ? "s" : ""}</span>` : "";
+    const desc = insight.description ? `<div style="font-size:11px;color:#666;margin-top:2px;">${escHtml(insight.description)}</div>` : "";
+    return `<tr>
+      <td><strong>${escHtml(insight.name || "—")}</strong>${desc}</td>
+      <td>${escHtml(catLabel)}</td>
       <td>${escHtml(insight.site || "—")}</td>
-      <td>${escHtml(insight.category || "—")}</td>
-      <td><span class="badge">${escHtml(insight.severity || "—")}</span></td>
+      <td>${devCount}</td>
+      <td>${statusBadge}</td>
       <td>${hubCaMonitorBtn("insight", { name: insight.name || "", site: insight.site || "" })}</td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
   container.innerHTML = `
     <div class="setup-card" style="overflow-x:auto;">
       <table class="data-table">
-        <thead><tr><th>Insight</th><th>Site</th><th>Category</th><th>Severity</th><th></th></tr></thead>
+        <thead><tr><th>Insight</th><th>Category</th><th>Site</th><th>Devices</th><th>Status</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;

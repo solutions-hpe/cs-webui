@@ -8975,18 +8975,18 @@ let _hubMonitoredItemsData = null;
 
 async function loadAndRenderHubMonitoredItems(force = false) {
   const tenantId = getActiveTenantId();
-  const lastRefEl = document.getElementById("hub-monitored-last-refreshed");
   if (!tenantId) return;
   try {
     const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/monitored-items`);
     const data = await readJson(res);
     if (!res?.ok) throw new Error(data?.detail || "Failed to load monitored items.");
     _hubMonitoredItemsData = Array.isArray(data?.items) ? data.items : [];
-    if (lastRefEl) lastRefEl.textContent = `Last refreshed: ${new Date().toLocaleTimeString()}`;
     renderHubMonitoredItems(_hubMonitoredItemsData, tenantId);
   } catch (error) {
-    const container = document.getElementById("hub-monitored-items-content");
-    if (container) container.innerHTML = `<div class="empty-state" style="color:var(--error);">${escHtml(error.message || "Failed to load monitored items.")}</div>`;
+    ["hub-monitored-sites-content", "hub-monitored-alerts-content", "hub-monitored-insights-content"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = `<div class="central-empty" style="color:var(--error);">${escHtml(error.message || "Failed to load.")}</div>`;
+    });
   }
 }
 
@@ -9005,8 +9005,11 @@ function renderHubMonitoredItems(items = [], tenantId = "") {
   const LABELS = { site: "Monitored Sites", alert: "Monitored Alerts", insight: "Monitored Insights", client: "Monitored Clients" };
   const EMPTY  = { site: "No monitored sites configured.", alert: "No monitored alerts configured.", insight: "No monitored insights configured.", client: "No monitored clients configured." };
 
-  const lastRefEl = document.getElementById("hub-monitored-last-refreshed");
-  if (lastRefEl) lastRefEl.textContent = `Last refreshed: ${new Date().toLocaleTimeString()}`;
+  const now = new Date().toLocaleTimeString();
+  ["hub-monitored-last-refreshed", "hub-monitored-sites-refreshed", "hub-monitored-alerts-refreshed"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = `Last refreshed: ${now}`;
+  });
 
   // Group by type
   const byType = { site: [], alert: [], client: [], insight: [] };
@@ -14886,6 +14889,9 @@ async function openHubCaMonitorModal(type, payload) {
       } else {
         showToast(`"${name}" added to Monitored Items (Simulations tab).`, "ok");
       }
+      // Refresh monitored items so it shows up immediately in the Simulations tab
+      _hubMonitoredItemsData = null;
+      await loadAndRenderHubMonitoredItems(true);
     } catch (error) {
       showToast(error.message || "Failed to add monitored item.", "error");
     }
@@ -17522,6 +17528,8 @@ function bindEvents() {
   });
   $("#hub-sim-refresh-btn")?.addEventListener("click", () => loadHubSimulations(true));
   $("#hub-monitored-refresh-btn")?.addEventListener("click", () => loadAndRenderHubMonitoredItems(true));
+  $("#hub-monitored-sites-refresh-btn")?.addEventListener("click", () => loadAndRenderHubMonitoredItems(true));
+  $("#hub-monitored-alerts-refresh-btn")?.addEventListener("click", () => loadAndRenderHubMonitoredItems(true));
   $("#refresh-clients-btn")?.addEventListener("click", () => loadClients(true));
   $("#refresh-hub-central-btn")?.addEventListener("click", () => loadHubCentralData(true));
   $("#refresh-vm-server-btn")?.addEventListener("click", () => loadVmServer(true));

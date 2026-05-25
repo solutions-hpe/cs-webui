@@ -14608,18 +14608,25 @@ function renderHubCaAlertsTab(container, alerts, search) {
     container.innerHTML = `<div class="empty-state">${search ? "No alerts match your search." : "No active alerts."}</div>`;
     return;
   }
-  const rows = filtered.map((alert) => `
-    <tr>
-      <td>${escHtml(alert.name || "—")}</td>
+  const rows = filtered.map((alert) => {
+    const sev = alert.severity || "";
+    const badgeCls = sev === "error" || sev === "red" || sev === "critical" ? "badge-failure" : sev === "warning" || sev === "yellow" ? "badge-warning" : "badge-info";
+    const sevLabel = (sev || "—").replace(/\b\w/g, c => c.toUpperCase());
+    const catLabel = alert.category ? `<span style="font-size:11px;color:var(--muted);">${escHtml(alert.category)}</span>` : "";
+    const devLabel = alert.detail ? `<span style="font-size:11px;color:var(--muted);">${escHtml(alert.detail)}</span>` : "";
+    return `<tr>
+      <td><strong>${escHtml(alert.name || "—")}</strong>${catLabel ? "<br>" + catLabel : ""}</td>
       <td>${escHtml(alert.site || "—")}</td>
-      <td><span class="badge badge-${alert.severity === "error" || alert.severity === "red" ? "failure" : "warning"}">${escHtml(alert.severity || "—")}</span></td>
-      <td style="color:var(--muted);font-size:0.8rem;">${alert.ts ? escHtml(new Date(alert.ts * 1000).toLocaleString()) : "—"}</td>
+      <td><span class="badge ${badgeCls}">${escHtml(sevLabel)}</span></td>
+      <td>${devLabel}</td>
+      <td style="color:var(--muted);font-size:0.8rem;">${alert.ts ? escHtml(new Date(typeof alert.ts === "number" ? alert.ts * 1000 : alert.ts).toLocaleString()) : "—"}</td>
       <td>${hubCaMonitorBtn("alert", { name: alert.name || "", site: alert.site || "" })}</td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
   container.innerHTML = `
     <div class="setup-card" style="overflow-x:auto;">
       <table class="data-table">
-        <thead><tr><th>Alert Name</th><th>Site</th><th>Severity</th><th>Time</th><th></th></tr></thead>
+        <thead><tr><th>Alert</th><th>Site</th><th>Severity</th><th>Device</th><th>Time</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;

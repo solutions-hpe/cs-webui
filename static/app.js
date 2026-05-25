@@ -8555,7 +8555,7 @@ function toggleHubSiteExpand(siteKey) {
 window.toggleHubSiteExpand = toggleHubSiteExpand;
 
 const HUB_STATUS_PRIORITY = { fail: 3, warning: 2, degraded: 3, no_data: 2, pass: 1, ok: 1 };
-const hubSimTopPanels = ["hub-simtop-checks", "hub-simtop-hardware", "hub-simtop-clients"];
+const hubSimTopPanels = ["hub-simtop-checks", "hub-simtop-hardware", "hub-simtop-clients", "hub-simtop-monitored"];
 
 function hubWorstStatus(a, b) {
   const pa = HUB_STATUS_PRIORITY[String(a || "").toLowerCase()] || 0;
@@ -8852,6 +8852,7 @@ function activateHubSimTopTab(tabId = "hub-simtop-checks") {
   if (tabId === "hub-simtop-checks") renderHubSimChecksList();
   if (tabId === "hub-simtop-hardware") renderHubHwPanel();
   if (tabId === "hub-simtop-clients") renderHubCcPanel();
+  if (tabId === "hub-simtop-monitored") loadAndRenderHubMonitoredItems();
 }
 
 function renderHubSimChecksList() {
@@ -8927,6 +8928,101 @@ function renderHubSimChecksList() {
     container.appendChild(row);
   }
 }
+
+let _hubMonitoredItemsData = null;
+
+async function loadAndRenderHubMonitoredItems(force = false) {
+  const tenantId = getActiveTenantId();
+  const lastRefEl = document.getElementById("hub-monitored-last-refreshed");
+  if (!tenantId) return;
+  try {
+    const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/monitored-items`);
+    const data = await readJson(res);
+    if (!res?.ok) throw new Error(data?.detail || "Failed to load monitored items.");
+    _hubMonitoredItemsData = Array.isArray(data?.items) ? data.items : [];
+    if (lastRefEl) lastRefEl.textContent = `Last refreshed: ${new Date().toLocaleTimeString()}`;
+    renderHubMonitoredItems(_hubMonitoredItemsData, tenantId);
+  } catch (error) {
+    const container = document.getElementById("hub-monitored-items-content");
+    if (container) container.innerHTML = `<div class="empty-state" style="color:var(--error);">${escHtml(error.message || "Failed to load monitored items.")}</div>`;
+  }
+}
+
+function renderHubMonitoredItems(items = [], tenantId = "") {
+  const container = document.getElementById("hub-monitored-items-content");
+  if (!container) return;
+
+  const TYPES = ["site", "alert", "insight", "client"];
+  const LABELS = { site: "Sites", alert: "Alerts", insight: "Insights", client: "Clients" };
+
+  if (!items.length) {
+    container.innerHTML = `<div class="empty-state">No monitored items. Add items via <strong>Setup → Central API</strong> using the Monitor button.</div>`;
+    return;
+  }
+
+  const byType = {};
+  TYPES.forEach((type) => { byType[type] = items.filter((item) => item.type === type); });
+
+  const sections = TYPES.filter((type) => byType[type].length > 0).map((type) => {
+    const rows = byType[type].map((item) => {
+      const isOk = item.status === "ok" || !item.consecutive_failures;
+      const dotClass = isOk ? "check-dot dot-pass" : "check-dot dot-fail";
+      const dotTitle = isOk
+        ? `Last seen: ${item.last_seen ? new Date(item.last_seen * 1000).toLocaleString() : "—"}`
+        : `Missing for ${item.consecutive_failures} consecutive check${item.consecutive_failures === 1 ? "" : "s"}`;
+      const lastSeen = item.last_seen ? new Date(item.last_seen * 1000).toLocaleString() : "—";
+      const failures = item.consecutive_failures || 0;
+      const statusBadge = isOk
+        ? `<span class="badge badge-success">Reporting</span>`
+        : `<span class="badge badge-failure">Missing (${failures})</span>`;
+      return `
+        <tr>
+          <td><span class="${dotClass}" title="${escHtml(dotTitle)}"></span></td>
+          <td><strong>${escHtml(item.name || item.identifier || "—")}</strong></td>
+          <td>${escHtml(item.identifier || "—")}</td>
+          <td>${statusBadge}</td>
+          <td style="color:var(--muted);font-size:0.8rem;">${escHtml(lastSeen)}</td>
+          <td>
+            <button class="btn btn-small btn-secondary hub-monitored-remove-btn"
+              data-item-id="${escHtml(item.id)}" type="button">Remove</button>
+          </td>
+        </tr>`;
+    }).join("");
+    return `
+      <div class="setup-card" style="margin-bottom:1rem;">
+        <h4 style="margin:0 0 0.5rem 0;color:var(--muted);font-size:0.85rem;text-transform:uppercase;letter-spacing:0.05em;">${escHtml(LABELS[type])}</h4>
+        <div style="overflow-x:auto;">
+          <table class="data-table">
+            <thead><tr><th></th><th>Name</th><th>Identifier</th><th>Status</th><th>Last Seen</th><th></th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }).join("");
+
+  container.innerHTML = sections;
+
+  container.querySelectorAll(".hub-monitored-remove-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const itemId = btn.dataset.itemId;
+      if (!itemId || !tenantId) return;
+      btn.disabled = true;
+      try {
+        const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/monitored-items/${encodeURIComponent(itemId)}`, { method: "DELETE" });
+        if (!res?.ok) {
+          const err = await readJson(res);
+          throw new Error(err?.detail || "Failed to remove item.");
+        }
+        showToast("Monitored item removed.", "ok");
+        await loadAndRenderHubMonitoredItems(true);
+      } catch (error) {
+        showToast(error.message || "Failed to remove item.", "error");
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
 
 function openHubSimDetail(checkId) {
   const check = hubAggregateChecks(hubCentralData?.spokes || []).find((item) => item.check_id === checkId);
@@ -14563,7 +14659,36 @@ async function openHubCaMonitorModal(type, payload) {
   if (!tenantId) return;
 
   if (type !== "site") {
-    showToast("Monitoring via Simulations — coming soon", "ok");
+    // For alerts, insights, clients — add directly to monitored items list
+    const typeMap = { alert: "alert", insight: "insight", client: "client" };
+    const itemType = typeMap[type];
+    if (!itemType) {
+      showToast("Unknown monitor type.", "error");
+      return;
+    }
+    const name = payload?.name || payload?.hostname || payload?.mac || "—";
+    const identifier = type === "client"
+      ? (payload?.mac || payload?.hostname || "")
+      : (payload?.name || "");
+    if (!identifier) {
+      showToast("Cannot monitor: missing identifier.", "error");
+      return;
+    }
+    try {
+      const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/monitored-items`, {
+        method: "POST",
+        body: { type: itemType, name, identifier },
+      });
+      const data = await readJson(res);
+      if (!res?.ok) throw new Error(data?.detail || "Failed to add monitored item.");
+      if (data?.created === false) {
+        showToast(`"${name}" is already being monitored.`, "ok");
+      } else {
+        showToast(`"${name}" added to Monitored Items (Simulations tab).`, "ok");
+      }
+    } catch (error) {
+      showToast(error.message || "Failed to add monitored item.", "error");
+    }
     return;
   }
 
@@ -17188,6 +17313,7 @@ function bindEvents() {
     hubCcOpenWsite = null;
   });
   $("#hub-sim-refresh-btn")?.addEventListener("click", () => loadHubSimulations(true));
+  $("#hub-monitored-refresh-btn")?.addEventListener("click", () => loadAndRenderHubMonitoredItems(true));
   $("#refresh-clients-btn")?.addEventListener("click", () => loadClients(true));
   $("#refresh-hub-central-btn")?.addEventListener("click", () => loadHubCentralData(true));
   $("#refresh-vm-server-btn")?.addEventListener("click", () => loadVmServer(true));

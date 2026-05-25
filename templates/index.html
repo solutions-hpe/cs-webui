@@ -197,6 +197,7 @@
         <button class="setup-subtab hub-simtop-subtab active" data-hubsimtop="hub-simtop-checks" role="tab" type="button">Checks</button>
         <button class="setup-subtab hub-simtop-subtab" data-hubsimtop="hub-simtop-hardware" role="tab" type="button">Hardware</button>
         <button class="setup-subtab hub-simtop-subtab" data-hubsimtop="hub-simtop-clients" role="tab" type="button">Client Count</button>
+        <button class="setup-subtab hub-simtop-subtab" data-hubsimtop="hub-simtop-monitored" role="tab" type="button">Monitored</button>
       </nav>
 
       <div id="hub-simtop-checks" class="setup-subpanel">
@@ -266,6 +267,18 @@
             <div id="hub-cc-detail-badge" class="sim-status-badge sim-unknown">—</div>
           </div>
           <div id="hub-cc-site-detail" class="sim-site-list"></div>
+        </div>
+      </div>
+
+      <div id="hub-simtop-monitored" class="setup-subpanel hidden">
+        <section class="central-toolbar">
+          <div id="hub-monitored-last-refreshed" class="central-last-synced">Last refreshed: —</div>
+          <div class="toolbar-actions">
+            <button id="hub-monitored-refresh-btn" class="btn btn-primary btn-small" type="button">Refresh</button>
+          </div>
+        </section>
+        <div id="hub-monitored-items-content">
+          <div class="central-empty">Loading monitored items…</div>
         </div>
       </div>
     </main>

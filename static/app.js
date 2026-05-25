@@ -8493,6 +8493,149 @@ function hubFormatCheckTs(ts) {
   return ts ? new Date(ts * 1000).toLocaleTimeString() : "";
 }
 
+function hubCentralBadge(label, tone = "gray", title = "") {
+  const styles = {
+    green: "background:rgba(46, 204, 113, 0.14);color:#1e8449;",
+    red: "background:rgba(192, 57, 43, 0.14);color:#c0392b;",
+    gray: "background:rgba(127, 140, 141, 0.16);color:#6c7a89;",
+  };
+  return `<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:0.78rem;font-weight:700;${styles[tone] || styles.gray}"${title ? ` title="${escHtml(title)}"` : ""}>${escHtml(label)}</span>`;
+}
+
+function hubCentralNormalizeCheckStatus(status) {
+  const normalized = String(status || "").toUpperCase();
+  return ["OK", "ERROR"].includes(normalized) ? normalized : "UNKNOWN";
+}
+
+function hubCentralNormalizeClientStatus(status) {
+  const normalized = String(status || "").toUpperCase();
+  if (normalized === "PASS") return "OK";
+  if (["OK", "DEGRADED", "ERROR", "NO_DATA"].includes(normalized)) return normalized;
+  return "NO_DATA";
+}
+
+function hubCentralAggregateCheckStatus(statusMap = {}) {
+  const checks = Object.values(statusMap).filter((value) => value && typeof value === "object");
+  if (!checks.length) return { label: "UNKNOWN", tone: "gray", hasError: false };
+  const statuses = checks.map((value) => hubCentralNormalizeCheckStatus(value.status));
+  if (statuses.includes("ERROR")) return { label: "ERROR", tone: "red", hasError: true };
+  if (statuses.every((value) => value === "OK")) return { label: "OK", tone: "green", hasError: false };
+  return { label: "UNKNOWN", tone: "gray", hasError: false };
+}
+
+function hubCentralClientStatusMeta(info = null) {
+  const label = hubCentralNormalizeClientStatus(info?.status);
+  const isIssue = label === "DEGRADED" || label === "ERROR";
+  return {
+    label,
+    tone: label === "OK" ? "green" : (isIssue ? "red" : "gray"),
+    isIssue,
+  };
+}
+
+function hubCentralMonitorSummary(data = hubCentralData) {
+  const source = data || {};
+  const siteMappings = source?.central_sites_config?.site_mappings && typeof source.central_sites_config.site_mappings === "object"
+    ? source.central_sites_config.site_mappings
+    : {};
+  const fallbackSites = {};
+  const derivedStatusBySite = {};
+  const derivedWirelessBySite = {};
+  const derivedClientCountBySite = {};
+  (Array.isArray(source.spokes) ? source.spokes : []).forEach((spoke) => {
+    (Array.isArray(spoke?.sites) ? spoke.sites : []).forEach((site) => {
+      const wsite = String(site?.wsite || "").trim();
+      if (!wsite) return;
+      if (!fallbackSites[wsite]) fallbackSites[wsite] = String(site?.central_site || "").trim();
+      if (!derivedStatusBySite[wsite]) derivedStatusBySite[wsite] = {};
+      Object.entries(site?.status_map || {}).forEach(([checkId, info]) => {
+        if (!info || typeof info !== "object") return;
+        if (!derivedStatusBySite[wsite][checkId] || hubCentralNormalizeCheckStatus(info.status) === "ERROR") {
+          derivedStatusBySite[wsite][checkId] = info;
+        }
+      });
+      if (derivedWirelessBySite[wsite] == null && Number.isFinite(Number(site?.wireless_clients))) {
+        derivedWirelessBySite[wsite] = Number(site.wireless_clients);
+      }
+    });
+    const spokeClientCounts = spoke?.client_count_status && typeof spoke.client_count_status === "object" ? spoke.client_count_status : {};
+    Object.entries(spokeClientCounts).forEach(([wsite, info]) => {
+      if (!derivedClientCountBySite[wsite] && info && typeof info === "object") derivedClientCountBySite[wsite] = info;
+    });
+  });
+  const statusBySite = source?.status && typeof source.status === "object" ? source.status : derivedStatusBySite;
+  const wirelessBySite = source?.wireless_clients && typeof source.wireless_clients === "object" ? source.wireless_clients : derivedWirelessBySite;
+  const clientCountBySite = source?.client_count_status && typeof source.client_count_status === "object" ? source.client_count_status : derivedClientCountBySite;
+  const spokes = (Array.isArray(source.spokes) ? source.spokes : []).map((spoke) => ({
+    ...spoke,
+    display_name: spokeDisplayName(spoke, "Spoke"),
+    assigned_site: String(spoke?.assigned_site || "").trim(),
+    spoke_online: typeof spoke?.spoke_online === "boolean" ? spoke.spoke_online : Boolean(spoke?.online),
+  }));
+  const assignedBySite = new Map();
+  for (const spoke of spokes) {
+    if (!spoke.assigned_site) continue;
+    const existing = assignedBySite.get(spoke.assigned_site);
+    if (!existing || (spoke.spoke_online && !existing.spoke_online) || spoke.display_name.localeCompare(existing.display_name, undefined, { sensitivity: "base" }) < 0) {
+      assignedBySite.set(spoke.assigned_site, spoke);
+    }
+  }
+  const knownSites = new Set([
+    ...Object.keys(siteMappings),
+    ...Object.keys(fallbackSites),
+    ...Object.keys(statusBySite),
+    ...Object.keys(wirelessBySite),
+    ...Object.keys(clientCountBySite),
+  ].filter(Boolean));
+  const sites = [...knownSites]
+    .sort((left, right) => String(left).localeCompare(String(right), undefined, { sensitivity: "base" }))
+    .map((wsite) => {
+      const assignedSpoke = assignedBySite.get(wsite) || null;
+      const statusMap = statusBySite[wsite] && typeof statusBySite[wsite] === "object" ? statusBySite[wsite] : {};
+      const checkStatus = hubCentralAggregateCheckStatus(statusMap);
+      const clientCount = clientCountBySite[wsite] && typeof clientCountBySite[wsite] === "object" ? clientCountBySite[wsite] : null;
+      const clientStatus = hubCentralClientStatusMeta(clientCount);
+      const assignedSpokeOffline = Boolean(assignedSpoke && !assignedSpoke.spoke_online);
+      return {
+        wsite,
+        central_site: String(siteMappings[wsite] || fallbackSites[wsite] || "").trim(),
+        assigned_spoke: assignedSpoke,
+        wireless_clients: Number.isFinite(Number(wirelessBySite[wsite])) ? Number(wirelessBySite[wsite]) : null,
+        status_map: statusMap,
+        check_status: checkStatus,
+        client_count: clientCount,
+        client_status: clientStatus,
+        alerts_suppressed: assignedSpokeOffline,
+        has_active_check_issue: Boolean(assignedSpoke?.spoke_online) && checkStatus.hasError,
+        has_active_client_issue: Boolean(assignedSpoke?.spoke_online) && clientStatus.isIssue,
+      };
+    });
+  const checkFailures = sites
+    .flatMap((site) => Object.entries(site.status_map || {})
+      .filter(([, info]) => info && typeof info === "object" && hubCentralNormalizeCheckStatus(info.status) === "ERROR")
+      .map(([checkId, info]) => ({
+        check_id: checkId,
+        check_name: info.check_name || checkId,
+        site: site.wsite,
+        error_count: Number(info.count || 0),
+        ts: info.ts || null,
+        suppressed: site.alerts_suppressed,
+      })))
+    .sort((left, right) => Number(right.ts || 0) - Number(left.ts || 0) || String(left.site || "").localeCompare(String(right.site || ""), undefined, { sensitivity: "base" }));
+  const activeIssueCount = sites.filter((site) => site.has_active_check_issue || site.has_active_client_issue).length;
+  return { sites, checkFailures, activeIssueCount };
+}
+
+function hubCentralBannerHtml(summary) {
+  if (!summary.sites.length) {
+    return '<div class="setup-card" style="margin-bottom:12px;border-left:4px solid #95a5a6;background:rgba(149,165,166,0.08);"><div style="font-weight:700;color:#6c7a89;">No monitored sites configured.</div></div>';
+  }
+  if (summary.activeIssueCount > 0) {
+    return `<div class="setup-card" style="margin-bottom:12px;border-left:4px solid #c0392b;background:rgba(192,57,43,0.08);"><div style="font-weight:700;color:#c0392b;">${summary.activeIssueCount} active Central issue${summary.activeIssueCount === 1 ? "" : "s"}</div></div>`;
+  }
+  return '<div class="setup-card" style="margin-bottom:12px;border-left:4px solid #1e8449;background:rgba(46,204,113,0.08);"><div style="font-weight:700;color:#1e8449;">All sites healthy</div></div>';
+}
+
 function hubAggregateChecks(spokes) {
   const byCheckId = new Map();
   for (const spoke of (spokes || [])) {
@@ -13325,8 +13468,8 @@ function loadHubCentralCache() {
 
 function applyHubCentralData(data) {
   hubCentralData = data;
-  const spokes = data.spokes || [];
-  const siteCount = spokes.reduce((n, s) => n + (s.sites || []).length, 0);
+  const spokes = Array.isArray(data?.spokes) ? data.spokes : [];
+  const siteCount = hubCentralMonitorSummary(data).sites.length;
   $("#hcs-spokes-pill") && ($("#hcs-spokes-pill").textContent = `${spokes.length} spokes`);
   $("#hcs-sites-pill") && ($("#hcs-sites-pill").textContent = `${siteCount} sites`);
   renderHubCentralStatus();
@@ -13393,9 +13536,8 @@ function renderHubCentralStatus() {
 function renderHubCentralSites() {
   const container = $("#hcs-overview");
   if (!container || !hubCentralData) return;
-  const { spokes = [], mode, token_valid: hubTokenValid, token_state: hubTokenState } = hubCentralData;
+  const { mode, token_valid: hubTokenValid, token_state: hubTokenState } = hubCentralData;
 
-  // In centralized mode, surface auth/polling errors clearly
   if (mode === "centralized" && !hubTokenValid) {
     const state = typeof hubTokenState === "object" ? (hubTokenState?.state || "unknown") : (hubTokenState || "unknown");
     const detail = typeof hubTokenState === "object" ? (hubTokenState?.detail || "") : "";
@@ -13409,74 +13551,39 @@ function renderHubCentralSites() {
     return;
   }
 
-  // Aggregate by wsite across all spokes
-  const siteMap = {};
-  for (const spoke of spokes) {
-    for (const site of (spoke.sites || [])) {
-      if (!siteMap[site.wsite]) {
-        siteMap[site.wsite] = {
-          wsite: site.wsite,
-          central_site: site.central_site || "",
-          check_ok: 0, check_fail: 0, check_unknown: 0, wireless_clients: 0,
-          status_map: {},
-          token_valid: mode === "centralized" ? hubTokenValid : false,
-          spokes: [],
-        };
-      }
-      const agg = siteMap[site.wsite];
-      agg.check_ok += site.check_ok || 0;
-      agg.check_fail += site.check_fail || 0;
-      agg.check_unknown += site.check_unknown || 0;
-      agg.wireless_clients += typeof site.wireless_clients === "number" ? site.wireless_clients : 0;
-      if (mode !== "centralized" && spoke.token_valid) agg.token_valid = true;
-      // Merge status_map — ERROR wins over OK for same check
-      for (const [cid, cv] of Object.entries(site.status_map || {})) {
-        if (!agg.status_map[cid] || (cv.status === "ERROR" && agg.status_map[cid].status !== "ERROR")) {
-          agg.status_map[cid] = { ...cv };
-        }
-      }
-      agg.spokes.push({ spoke_id: spoke.spoke_id, spoke_name: spoke.spoke_name, spoke_online: spoke.spoke_online });
-    }
-  }
-
-  const sites = Object.values(siteMap);
-  if (!sites.length) {
-    const msg = mode === "centralized"
-      ? "Hub is connected but no sites were discovered from Central. Sites auto-populate after the next poll (up to 5 min)."
-      : "No Central sites configured on any spoke.";
-    container.innerHTML = `<div class="empty-state">${escHtml(msg)}</div>`;
-    return;
-  }
-
-  const rows = sites.map(s => {
-    const hasChecks = Object.keys(s.status_map).length > 0;
-    return `<tr style="cursor:pointer;" title="View ${escHtml(s.wsite)} detail">
-      <td><strong>${escHtml(s.wsite)}</strong></td>
-      <td>${escHtml(s.central_site || '—')}</td>
-      <td style="color:var(--hpe-green-dark);">${hasChecks ? s.check_ok : '—'}</td>
-      <td style="color:${s.check_fail ? '#c0392b' : 'inherit'};">${hasChecks ? s.check_fail : '—'}</td>
-      <td style="color:var(--muted);">${hasChecks ? s.check_unknown : '—'}</td>
-      <td>${typeof s.wireless_clients === "number" ? s.wireless_clients : '—'}</td>
-      <td><span class="status-dot ${s.token_valid ? 'online' : 'offline'}"></span></td>
-      <td><button class="btn btn-small btn-secondary hcs-view-btn" data-wsite="${escHtml(s.wsite)}" type="button">View →</button></td>
-    </tr>`;
-  }).join('');
+  const summary = hubCentralMonitorSummary(hubCentralData);
+  const rows = summary.sites.map((site) => {
+    const assignedSpoke = site.assigned_spoke;
+    const offlineNote = site.alerts_suppressed ? "Suppressed while assigned spoke is offline" : "";
+    const checkBadge = site.alerts_suppressed
+      ? hubCentralBadge(site.check_status.label, "gray", offlineNote)
+      : hubCentralBadge(site.check_status.label, site.check_status.tone);
+    const clientBadge = site.alerts_suppressed
+      ? hubCentralBadge(site.client_status.label, "gray", offlineNote)
+      : hubCentralBadge(site.client_status.label, site.client_status.tone);
+    const spokeOnline = assignedSpoke
+      ? `<span class="status-dot ${assignedSpoke.spoke_online ? "online" : "offline"}"></span> ${assignedSpoke.spoke_online ? "Online" : "Offline"}`
+      : '<span class="status-dot" style="background:#95a5a6;"></span> —';
+    return `
+      <tr>
+        <td><strong>${escHtml(site.wsite)}</strong></td>
+        <td>${escHtml(site.central_site || "—")}</td>
+        <td>${escHtml(assignedSpoke?.display_name || "—")}</td>
+        <td>${spokeOnline}</td>
+        <td>${site.wireless_clients ?? "—"}</td>
+        <td>${checkBadge}</td>
+        <td>${clientBadge}</td>
+      </tr>`;
+  }).join("");
 
   container.innerHTML = `
+    ${hubCentralBannerHtml(summary)}
     <div class="setup-card">
       <table class="data-table">
-        <thead><tr><th>Site</th><th>Central Site</th><th>✓ OK</th><th>✗ Err</th><th>?</th><th>Wireless</th><th>Token</th><th></th></tr></thead>
-        <tbody>${rows}</tbody>
+        <thead><tr><th>Site</th><th>Central Site</th><th>Assigned Spoke</th><th>Spoke Online</th><th>Clients</th><th>Check Status</th><th>Client Count Status</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="7" class="empty-state">No Central sites configured.</td></tr>'}</tbody>
       </table>
     </div>`;
-
-  // Wire click handlers
-  container.querySelectorAll("tr[title]").forEach(tr => {
-    tr.addEventListener("click", () => openHubSiteDetail(tr.querySelector(".hcs-view-btn")?.dataset.wsite));
-  });
-  container.querySelectorAll(".hcs-view-btn").forEach(btn => {
-    btn.addEventListener("click", e => { e.stopPropagation(); openHubSiteDetail(btn.dataset.wsite); });
-  });
 }
 
 function openHubSiteDetail(wsite) {
@@ -13581,21 +13688,23 @@ function closeHubSiteDetail() {
 function renderHubCentralAlerts() {
   const container = $("#hcs-alerts-content");
   if (!container || !hubCentralData) return;
-  const alerts = (hubCentralData.spokes || []).flatMap(s => s.hardware_alerts || []);
-  if (!alerts.length) {
-    container.innerHTML = '<div class="empty-state">No active hardware alerts.</div>';
+  const summary = hubCentralMonitorSummary(hubCentralData);
+  if (!summary.checkFailures.length) {
+    container.innerHTML = `${hubCentralBannerHtml(summary)}<div class="empty-state">No monitored check failures.</div>`;
     return;
   }
-  const rows = alerts.map(a => `
+  const rows = summary.checkFailures.map((alert) => `
     <tr>
-      <td>${escHtml(a.name || a.id || '—')}</td>
-      <td>${a.total ?? 0}</td>
-      <td>${escHtml(Object.keys(a.sites || {}).join(', ') || '—')}</td>
+      <td>${escHtml(alert.check_name || alert.check_id || '—')}</td>
+      <td>${escHtml(alert.site || '—')}${alert.suppressed ? '<div style="font-size:0.78rem;color:var(--muted);">Assigned spoke offline</div>' : ''}</td>
+      <td>${alert.error_count ?? 0}</td>
+      <td>${alert.ts ? escHtml(new Date(alert.ts * 1000).toLocaleString()) : '—'}</td>
     </tr>`).join('');
   container.innerHTML = `
+    ${hubCentralBannerHtml(summary)}
     <div class="setup-card">
       <table class="data-table">
-        <thead><tr><th>Alert</th><th>Affected</th><th>Sites</th></tr></thead>
+        <thead><tr><th>Check Name</th><th>Site</th><th>Error Count</th><th>Timestamp</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
@@ -13604,25 +13713,31 @@ function renderHubCentralAlerts() {
 function renderHubCentralClients() {
   const container = $("#hcs-clients-content");
   if (!container || !hubCentralData) return;
-  const rows = (hubCentralData.spokes || []).flatMap(s =>
-    (s.sites || []).map(site => `
+  const summary = hubCentralMonitorSummary(hubCentralData);
+  const rows = summary.sites.map((site) => {
+    const info = site.client_count || {};
+    const statusBadge = site.alerts_suppressed
+      ? hubCentralBadge(site.client_status.label, 'gray', 'Suppressed while assigned spoke is offline')
+      : hubCentralBadge(site.client_status.label, site.client_status.tone);
+    return `
       <tr>
         <td>${escHtml(site.wsite)}</td>
-        <td>${escHtml(site.central_site || '—')}</td>
-        <td>${site.wireless_clients ?? '—'}</td>
-      </tr>`)
-  ).join('');
-  if (!rows) {
-    container.innerHTML = '<div class="empty-state">No client data available.</div>';
-    return;
-  }
-  container.innerHTML = `
-    <div class="setup-card">
-      <table class="data-table">
-        <thead><tr><th>Site</th><th>Central Site</th><th>Wireless Clients</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
+        <td>${info.current ?? site.wireless_clients ?? '—'}</td>
+        <td>${info.hourly_avg ?? '—'}</td>
+        <td>${Number.isFinite(Number(info.drop_pct)) ? `${Number(info.drop_pct).toFixed(1)}%` : '—'}</td>
+        <td>${statusBadge}</td>
+      </tr>`;
+  }).join('');
+  container.innerHTML = rows
+    ? `
+      ${hubCentralBannerHtml(summary)}
+      <div class="setup-card">
+        <table class="data-table">
+          <thead><tr><th>Site</th><th>Current Count</th><th>Hourly Avg</th><th>Drop %</th><th>Status</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`
+    : `${hubCentralBannerHtml(summary)}<div class="empty-state">No client data available.</div>`;
 }
 
 async function populateSpokeSelect(selectEl, tenantId, preferredSpokeId = "") {
@@ -14055,33 +14170,88 @@ async function activateHubTenantSetupSubtab(subtab = "ts-setup", force = false) 
   await initHubTenantSetupSubtab(hubTenantSetupActiveSubtab, force);
 }
 
-async function initTsSpokesTab(tenantId) {
-  if (!tenantId || !canManageTenant(tenantId)) return;
+async function loadTenantAssignedSites(tenantId) {
+  if (!tenantId) return [];
+  const currentMappings = tenantId === getActiveTenantId()
+    ? hubCentralData?.central_sites_config?.site_mappings
+    : null;
+  if (currentMappings && typeof currentMappings === 'object') {
+    return Object.keys(currentMappings).filter(Boolean).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+  }
+  const res = await apiFetch(`/api/aggregate/central-status?tenant_id=${encodeURIComponent(tenantId)}`);
+  const data = res?.ok ? await res.json().catch(() => null) : null;
+  const mappings = data?.central_sites_config?.site_mappings && typeof data.central_sites_config.site_mappings === 'object'
+    ? data.central_sites_config.site_mappings
+    : {};
+  return Object.keys(mappings).filter(Boolean).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+}
 
-  // Load pending spokes
+async function updateTsSpokeAssignedSite(tenantId, spokeId, assignedSite) {
+  const res = await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/assigned-site`, {
+    method: 'PATCH',
+    body: { assigned_site: assignedSite || '' },
+  });
+  const data = await readJson(res);
+  if (!res?.ok) throw new Error(data?.detail || 'Unable to update assigned site.');
+  return data || {};
+}
+
+async function initTsSpokesTab(tenantId) {
+  if (!tenantId) return;
+
   await loadTenantPendingSpokes();
 
-  // Load approved spokes
-  const tbody = document.getElementById("ts-spokes-approved-tbody");
+  const tbody = document.getElementById('ts-spokes-approved-tbody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="4" class="empty-state">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Loading…</td></tr>';
   try {
-    const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes`);
-    const spokes = res?.ok ? await res.json() : [];
-    const approved = spokes.filter(s => s.status === "approved");
+    const [spokeRes, assignedSites] = await Promise.all([
+      apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes`),
+      loadTenantAssignedSites(tenantId).catch(() => []),
+    ]);
+    const spokes = spokeRes?.ok ? await spokeRes.json() : [];
+    const approved = spokes.filter((spoke) => spoke.status === 'approved');
     if (!approved.length) {
-      tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No approved spokes yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No approved spokes yet.</td></tr>';
       return;
     }
-    tbody.innerHTML = approved.map(s => `
+    const siteOptions = [...new Set([...assignedSites, ...approved.map((spoke) => String(spoke.assigned_site || '').trim()).filter(Boolean)])]
+      .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+    const disabled = canManageTenant(tenantId) ? '' : ' disabled';
+    tbody.innerHTML = approved.map((spoke) => `
       <tr>
-        <td><strong>${escHtml(s.name || s.hostname)}</strong></td>
-        <td><code>${escHtml(s.hostname || s.id)}</code></td>
-        <td>${s.online ? '<span class="status-dot online"></span> Online' : '<span class="status-dot offline"></span> Offline'}</td>
-        <td>${escHtml(fmtDate(s.last_seen || s.updated_at || ""))}</td>
-      </tr>`).join("");
+        <td><strong>${escHtml(spoke.name || spoke.spoke_name || spoke.hostname || spoke.id)}</strong></td>
+        <td><code>${escHtml(spoke.hostname || spoke.id)}</code></td>
+        <td>${(typeof spoke.online === 'boolean' ? spoke.online : isOnline(spoke.last_seen)) ? '<span class="status-dot online"></span> Online' : '<span class="status-dot offline"></span> Offline'}</td>
+        <td>${escHtml(fmtDate(spoke.last_seen || spoke.updated_at || ''))}</td>
+        <td>
+          <select class="form-input" data-ts-assigned-site="${escHtml(spoke.id)}" data-prev-value="${escHtml(spoke.assigned_site || '')}" style="min-width:180px;"${disabled}>
+            <option value="">— unassigned —</option>
+            ${siteOptions.map((wsite) => `<option value="${escHtml(wsite)}"${String(spoke.assigned_site || '') === wsite ? ' selected' : ''}>${escHtml(wsite)}</option>`).join('')}
+          </select>
+        </td>
+      </tr>`).join('');
+    tbody.querySelectorAll('[data-ts-assigned-site]').forEach((selectEl) => {
+      selectEl.addEventListener('change', async () => {
+        const previousValue = selectEl.dataset.prevValue || '';
+        const nextValue = selectEl.value || '';
+        selectEl.disabled = true;
+        try {
+          const updated = await updateTsSpokeAssignedSite(tenantId, selectEl.dataset.tsAssignedSite, nextValue);
+          selectEl.dataset.prevValue = updated?.assigned_site || nextValue;
+          hubCentralData = null;
+          await loadHubCentralData(true).catch(() => {});
+          showToast(`Assigned site updated for ${updated?.spoke_name || updated?.hostname || 'spoke'}.`, 'ok');
+        } catch (error) {
+          selectEl.value = previousValue;
+          showToast(error.message || 'Unable to update assigned site.', 'error');
+        } finally {
+          selectEl.disabled = !canManageTenant(tenantId);
+        }
+      });
+    });
   } catch (_) {
-    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">Unable to load spokes.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Unable to load spokes.</td></tr>';
   }
 }
 

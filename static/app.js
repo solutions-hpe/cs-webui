@@ -1794,10 +1794,10 @@ function renderServerTab(data) {
   if (_otherTbody) {
     _otherTbody.innerHTML = _otherAll.length
       ? _otherAll.map(v => `<tr>
-          <td>${escHtml(String(v.vmid))}</td>
+          <td style="white-space:nowrap">${escHtml(String(v.vmid))}</td>
           <td>${escHtml(v.name || '—')}</td>
-          <td>${escHtml(v.type || 'qemu')}</td>
-          <td>${_vmStatusDot(v.status || 'unknown')}</td>
+          <td style="white-space:nowrap">${escHtml(v.type || 'qemu')}</td>
+          <td style="white-space:nowrap">${_vmStatusDot(v.status || 'unknown')}</td>
           <td></td>
         </tr>`).join('')
       : `<tr><td colspan="5" class="empty-state">No other VMs or containers.</td></tr>`;

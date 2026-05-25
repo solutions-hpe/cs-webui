@@ -185,12 +185,13 @@ Typical examples:
 
 Client-Sim is versioned per component, not as one monolithic platform version.
 
-| Component | Current scheme in repo | Notes |
+| Component | Current version | Notes |
 |---|---|---|
-| `cs-webui` | Repo `VERSION` file (for example `2.75`) | Pre-commit bumps the repo version on non-`main` commits |
-| `webui-hub` | Repo `VERSION` file (currently `1.20`) | Used by `/api/health` and deployment flow |
-| Spoke installer / Proxmox agent | Embedded script versions (currently `2.39`) | `install-lxc.sh` and `proxmox-agent.sh` track their own release number |
-| Client scripts | Per-script `version=.NN` headers | Example: `simulation.sh`, `startup.sh`, `update.sh` each advance independently |
+| `webui-hub` | `2.30` | Repo `VERSION` file; shown in `/api/health` and UI footer |
+| `cs-webui` | `1.69` | Repo `VERSION` file; pre-commit bumps on every commit |
+| Spoke server | `1.07` | `INSTALLER_VERSION` embedded in spoke; shown in UI footer |
+| Proxmox agent | installer-tracked | `install-proxmox-agent.sh` tracks its own release number |
+| Client scripts | per-script `version=.NN` | `simulation.sh`, `startup.sh`, `update.sh` each advance independently |
 
 Branch convention in active docs and installers:
 
@@ -323,6 +324,106 @@ Hub persistence is intentionally file-backed JSON rather than a database.
 
 ---
 
+## Aruba New Central (GreenLake) API
+
+### Overview
+
+The platform supports two generations of the Aruba Central API:
+
+- **Classic Central API** — standard Aruba Central API gateway, OAuth access+refresh token pair. Endpoint paths use `/monitoring/v2/...`.
+- **New Central (CNX / GreenLake) API** — HPE GreenLake-hosted platform. Uses `client_credentials` grant via the GreenLake authorization service. All tokens are short-lived (~15 min). Endpoint paths use `/network-monitoring/v1/...` and `/network-notifications/v1/...`.
+
+Hub detects the configured mode from `api_version` in the tenant's Aruba config. Spokes detect it from `central_config.api_version`.
+
+### Real-time alert and insight endpoints (new_central)
+
+The platform uses the following GreenLake API endpoints:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /network-notifications/v1/alerts` | Active network alerts (DNS, channel utilization, offline devices, etc.) |
+| `GET /network-notifications/v1/insights` | AI-driven insights with impacted site, device, and client counts |
+| `GET /network-monitoring/v1/devices` | Device inventory: APs, switches, gateways — name, model, serial, status, IP, firmware |
+| `GET /network-monitoring/v1/clients` | Connected client inventory: count per site, wired vs wireless breakdown |
+| `GET /network-monitoring/v1alpha1/sites-health` | Site health scores used by the spoke poll loop for monitored checks |
+
+All four browse endpoints return paginated results via a `next` cursor. All support OData-style `$filter` expressions (e.g. `status eq 'Active' and siteName eq 'DFW'`).
+
+**Authentication** uses the GreenLake authorization service:
+
+```
+POST https://global.api.greenlake.hpe.com/authorization/v2/oauth2/{workspace_id}/token
+grant_type=client_credentials
+```
+
+No explicit scope is sent — the token grants access to the workspace's Central API resources. Tokens are valid for approximately 899 seconds and are auto-refreshed by the spoke and hub poll loops.
+
+### Central API browse tab
+
+The Hub and Spoke UIs include a **Central API browse tab** (Setup → Central API) that displays live data from the four browse endpoints:
+
+| Subtab | Data source | Features |
+|---|---|---|
+| **Sites** | sites-health endpoint | Health score, wireless client count, Monitor button |
+| **Alerts** | `/network-notifications/v1/alerts` | Category filter pills (All / Clients / LAN / WLAN / WAN / System / Security), severity badge (Critical / Major / Minor / Info), device type column |
+| **Insights** | `/network-notifications/v1/insights` | AI insight description, impacted device and client counts per site |
+| **Clients** | `/network-monitoring/v1/clients` | Per-site totals with wired/wireless breakdown |
+| **Devices** | `/network-monitoring/v1/devices` | Name, serial, type, model, site, status, IP, firmware |
+
+Each row has a **Monitor** button that adds the item to the Monitored Items list for ongoing alerting. Once an item is already monitored, the button is replaced by a **✓ Monitored** badge so operators can see at a glance what is already being tracked without re-adding it.
+
+### Centralized vs distributed browse mode
+
+#### Centralized mode
+
+Hub calls all four browse endpoints directly using its own stored Aruba credentials. The result covers all sites the credential has access to. This is the default mode for hub-only deployments.
+
+```text
+Hub  ─── client_credentials token ───► GreenLake API (all sites)
+                                              │
+                                    alerts, insights, devices, clients
+                                              │
+                                      Hub assembles full view
+                                              │
+                                        Browser UI
+```
+
+#### Distributed mode
+
+Each spoke is assigned one or more **Central sites** via its site mapping (`wsite → Central site name`). In distributed mode:
+
+1. After each Central poll cycle, the spoke calls `_fetch_nc_browse_for_spoke()`.
+2. Each API call filters to the spoke's assigned site(s) only (e.g. `siteName eq 'DFW'`).
+3. The per-site results are stored in module-level variables (`central_browse_alerts`, `central_browse_insights`, `central_browse_devices_by_site`, `central_browse_clients_by_site`).
+4. These are included in the telemetry payload the spoke sends to Hub under `central.central_alerts`, `central.central_insights`, etc.
+5. Hub's `browse_all()` aggregates the browse data from all approved spokes into a single multi-site view.
+
+```text
+DFW Spoke ──► GreenLake API ($filter siteName eq 'DFW')
+                    │  alerts, insights, devices, clients for DFW only
+                    ▼
+MIA Spoke ──► GreenLake API ($filter siteName eq 'MIA')
+                    │  alerts, insights, devices, clients for MIA only
+                    ▼
+            Hub telemetry aggregation
+                    │  merges all spoke browse data
+                    ▼
+              Browser UI (full multi-site view)
+```
+
+This design minimises API calls per spoke (each fetches only its own site), avoids rate-limiting from parallel hub calls, and keeps spoke independence — each spoke continues to function even if others are offline.
+
+### Monitored Items
+
+Monitored Items are a tenant-level list of alert types, insights, or sites that the platform actively watches. They drive the spoke's Central poll loop checks and the Hub dashboard alert tiles.
+
+- Stored under `central_sites_config.monitored_checks` per tenant
+- Each item has a `type` (`alert` or `insight`), `id`, and `name`
+- The spoke's poll loop evaluates each monitored check each cycle and records `OK` or `ERROR` status
+- Hub aggregates check status across all spokes in its dashboard view
+
+---
+
 ## Current Architectural Summary
 
 - **Hub is optional for local operation**: a spoke can run standalone.
@@ -330,5 +431,7 @@ Hub persistence is intentionally file-backed JSON rather than a database.
 - **Hub is the multi-tenant aggregation and approval layer**.
 - **`cs-webui` is a single frontend served in two modes**.
 - **Persistence is file-based JSON throughout the control plane**.
-- **Command execution is pull-based at every boundary**: hub->spoke, spoke->agent, spoke->VM.
+- **Command execution is pull-based at every boundary**: hub→spoke, spoke→agent, spoke→VM.
+- **New Central (GreenLake) API** integration uses real `/network-notifications/v1/alerts`, `/network-notifications/v1/insights`, `/network-monitoring/v1/devices`, and `/network-monitoring/v1/clients` endpoints — no synthetic alert derivation from health scores.
+- **Distributed browse mode** lets each spoke own its site's data, with the hub assembling the multi-site aggregate view from spoke telemetry.
 

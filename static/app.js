@@ -14411,6 +14411,17 @@ async function loadTenantAssignedSites(tenantId) {
 
 let hubCentralBrowseData = null;
 let hubCaBrowseActiveTab = "ts-ca-sites";
+let hubCaBrowseMonitoredItems = []; // cached monitored items for button state
+
+function hubCaIsMonitored(type, name, site) {
+  const n = (name || "").toLowerCase().trim();
+  const s = (site || "").toLowerCase().trim();
+  return hubCaBrowseMonitoredItems.some((m) => {
+    const mn = (m.name || m.identifier || "").toLowerCase().trim();
+    const ms = (m.site || m.site_name || "").toLowerCase().trim();
+    return mn === n && (ms === s || !ms || !s);
+  });
+}
 let hubCaBrowseRefreshTimer = null;
 
 function hubCaBrowseCacheKey(tenantId = getActiveTenantId()) {
@@ -14526,6 +14537,11 @@ async function loadHubCaBrowseData(force = false) {
     hubCentralBrowseData = data || { sites: [], alerts: [], insights: [], clients: [], mode: "—" };
     saveHubCaBrowseCache(hubCentralBrowseData, tenantId);
     updateHubCaBrowsePills(hubCentralBrowseData);
+    // Refresh monitored items for button state
+    try {
+      const mRes = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/monitored-items`);
+      if (mRes?.ok) { const mData = await readJson(mRes); hubCaBrowseMonitoredItems = mData || []; }
+    } catch (_) { /* non-fatal */ }
     renderHubCaBrowseTab();
   } catch (error) {
     if (!hubCentralBrowseData) {
@@ -14546,7 +14562,8 @@ function renderHubCaBrowseTab() {
 
   if (tab === "ts-ca-alerts") renderHubCaAlertsTab(content, hubCentralBrowseData.alerts || [], search);
   else if (tab === "ts-ca-insights") renderHubCaInsightsTab(content, hubCentralBrowseData.insights || [], search);
-  else if (tab === "ts-ca-clients") renderHubCaClientsTab(content, hubCentralBrowseData.clients || [], search);
+  else if (tab === "ts-ca-clients") renderHubCaClientsTab(content, hubCentralBrowseData.clients_by_site || {}, hubCentralBrowseData.clients || [], search);
+  else if (tab === "ts-ca-devices") renderHubCaDevicesTab(content, hubCentralBrowseData.devices_by_site || {}, search);
   else renderHubCaSitesTab(content, hubCentralBrowseData.sites || [], search);
 
   if (hubCentralBrowseData.warning && !content.querySelector("tbody") && !content.querySelector(".ca-browse-warning")) {
@@ -14555,9 +14572,15 @@ function renderHubCaBrowseTab() {
 }
 
 function hubCaMonitorBtn(type, payload = {}) {
+  const name = payload.name || payload.hostname || payload.mac || "";
+  const site = payload.site || "";
+  const monitored = hubCaIsMonitored(type, name, site);
   const dataAttrs = Object.entries(payload)
     .map(([key, value]) => `data-ca-${key.replace(/_/g, "-")}="${escHtml(String(value ?? ""))}"`)
     .join(" ");
+  if (monitored) {
+    return `<span class="badge badge-blue" title="Already in Monitored Items">✓ Monitored</span>`;
+  }
   return `<button class="btn btn-small btn-primary ca-monitor-btn" type="button" data-ca-type="${escHtml(type)}" ${dataAttrs}>Monitor</button>`;
 }
 
@@ -14603,89 +14626,164 @@ function renderHubCaSitesTab(container, sites, search) {
 }
 
 function renderHubCaAlertsTab(container, alerts, search) {
-  const filtered = alerts.filter((alert) => !search || JSON.stringify(alert).toLowerCase().includes(search));
-  if (!filtered.length) {
-    container.innerHTML = `<div class="empty-state">${search ? "No alerts match your search." : "No active alerts."}</div>`;
-    return;
-  }
+  // Category filter state stored on container
+  const activeCat = container._caCatFilter || "All";
+  const categories = ["All", ...new Set(alerts.map((a) => a.category).filter(Boolean))].sort((a, b) => a === "All" ? -1 : a.localeCompare(b));
+
+  let filtered = alerts;
+  if (activeCat !== "All") filtered = filtered.filter((a) => a.category === activeCat);
+  if (search) filtered = filtered.filter((a) => JSON.stringify(a).toLowerCase().includes(search));
+
+  const sevBadge = (sev) => {
+    const s = (sev || "").toLowerCase();
+    const cls = s === "critical" || s === "red" || s === "error" ? "badge-failure"
+      : s === "major" || s === "orange" ? "badge-failure"
+      : s === "minor" || s === "warning" || s === "yellow" ? "badge-warning"
+      : "badge-info";
+    return `<span class="badge ${cls}">${escHtml(sev || "—")}</span>`;
+  };
+
+  const catPills = categories.map((cat) =>
+    `<button class="btn btn-small ${activeCat === cat ? "btn-primary" : "btn-secondary"} ca-cat-filter" data-cat="${escHtml(cat)}" style="margin:0 2px 4px;">${escHtml(cat)}</button>`
+  ).join("");
+
   const rows = filtered.map((alert) => {
-    const sev = alert.severity || "";
-    const badgeCls = sev === "error" || sev === "red" || sev === "critical" ? "badge-failure" : sev === "warning" || sev === "yellow" ? "badge-warning" : "badge-info";
-    const sevLabel = (sev || "—").replace(/\b\w/g, c => c.toUpperCase());
-    const catLabel = alert.category ? `<span style="font-size:11px;color:var(--muted);">${escHtml(alert.category)}</span>` : "";
-    const devLabel = alert.detail ? `<span style="font-size:11px;color:var(--muted);">${escHtml(alert.detail)}</span>` : "";
+    const tsStr = alert.ts ? (() => { try { return new Date(alert.ts).toLocaleString(); } catch (_) { return String(alert.ts); } })() : "—";
+    const catBadge = alert.category ? `<span class="badge badge-grey" style="font-size:10px;">${escHtml(alert.category)}</span>` : "";
+    const devType = alert.device_type ? `<span style="font-size:11px;color:var(--muted);">${escHtml(alert.device_type)}</span>` : "";
+    const detailStr = alert.detail ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${escHtml(alert.detail)}</div>` : "";
     return `<tr>
-      <td><strong>${escHtml(alert.name || "—")}</strong>${catLabel ? "<br>" + catLabel : ""}</td>
+      <td><strong>${escHtml(alert.name || "—")}</strong> ${catBadge}${detailStr}</td>
       <td>${escHtml(alert.site || "—")}</td>
-      <td><span class="badge ${badgeCls}">${escHtml(sevLabel)}</span></td>
-      <td>${devLabel}</td>
-      <td style="color:var(--muted);font-size:0.8rem;">${alert.ts ? escHtml(new Date(typeof alert.ts === "number" ? alert.ts * 1000 : alert.ts).toLocaleString()) : "—"}</td>
+      <td>${sevBadge(alert.severity)}</td>
+      <td>${devType}</td>
+      <td style="color:var(--muted);font-size:0.8rem;">${escHtml(tsStr)}</td>
       <td>${hubCaMonitorBtn("alert", { name: alert.name || "", site: alert.site || "" })}</td>
     </tr>`;
   }).join("");
+
   container.innerHTML = `
-    <div class="setup-card" style="overflow-x:auto;">
+    <div style="margin-bottom:8px;">${catPills}</div>
+    ${filtered.length ? `<div class="setup-card" style="overflow-x:auto;">
       <table class="data-table">
-        <thead><tr><th>Alert</th><th>Site</th><th>Severity</th><th>Device</th><th>Time</th><th></th></tr></thead>
+        <thead><tr><th>Alert</th><th>Site</th><th>Severity</th><th>Device Type</th><th>Time</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
-    </div>`;
+    </div>` : `<div class="empty-state">${search || activeCat !== "All" ? "No alerts match the filter." : "No active alerts."}</div>`}`;
+
+  container.querySelectorAll(".ca-cat-filter").forEach((btn) => {
+    btn.onclick = () => { container._caCatFilter = btn.dataset.cat; renderHubCaAlertsTab(container, alerts, search); };
+  });
   attachHubCaMonitorButtons(container);
 }
 
 function renderHubCaInsightsTab(container, insights, search) {
-  const filtered = insights.filter((insight) => !search || JSON.stringify(insight).toLowerCase().includes(search));
+  const filtered = insights.filter((i) => !search || JSON.stringify(i).toLowerCase().includes(search));
   if (!filtered.length) {
-    container.innerHTML = `<div class="empty-state">${search ? "No insights match your search." : "No insights returned from Central."}</div>`;
+    container.innerHTML = `<div class="empty-state">${search ? "No insights match your search." : "No AI insights returned from Central."}</div>`;
     return;
   }
   const rows = filtered.map((insight) => {
-    const statusBadge = insight.status === "read"
-      ? `<span class="badge badge-grey">Read</span>`
-      : `<span class="badge badge-blue">Unread</span>`;
-    const catLabel = (insight.category || "").replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase()) || "—";
-    const devCount = insight.device_count ? `<span style="font-size:12px;">${insight.device_count} device${insight.device_count !== 1 ? "s" : ""}</span>` : "";
-    const desc = insight.description ? `<div style="font-size:11px;color:#666;margin-top:2px;">${escHtml(insight.description)}</div>` : "";
+    const catLabel = (insight.category || "—").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    const devCount = insight.device_count ? `${insight.device_count} dev` : "";
+    const cliCount = insight.client_count ? `${insight.client_count} client${insight.client_count !== 1 ? "s" : ""}` : "";
+    const impacted = [devCount, cliCount].filter(Boolean).join(", ");
+    const desc = insight.description ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${escHtml(insight.description)}</div>` : "";
+    const tsStr = insight.ts ? (() => { try { return new Date(insight.ts).toLocaleString(); } catch (_) { return ""; } })() : "";
     return `<tr>
       <td><strong>${escHtml(insight.name || "—")}</strong>${desc}</td>
       <td>${escHtml(catLabel)}</td>
       <td>${escHtml(insight.site || "—")}</td>
-      <td>${devCount}</td>
-      <td>${statusBadge}</td>
+      <td style="font-size:11px;">${escHtml(impacted || "—")}</td>
+      <td style="color:var(--muted);font-size:0.8rem;">${escHtml(tsStr)}</td>
       <td>${hubCaMonitorBtn("insight", { name: insight.name || "", site: insight.site || "" })}</td>
     </tr>`;
   }).join("");
   container.innerHTML = `
     <div class="setup-card" style="overflow-x:auto;">
       <table class="data-table">
-        <thead><tr><th>Insight</th><th>Category</th><th>Site</th><th>Devices</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Insight</th><th>Category</th><th>Site</th><th>Impacted</th><th>Time</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
   attachHubCaMonitorButtons(container);
 }
 
-function renderHubCaClientsTab(container, clients, search) {
-  const filtered = clients.filter((client) => !search || JSON.stringify(client).toLowerCase().includes(search));
+function renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search) {
+  // New format: clientsBySite = {siteName: {total, wired, wireless}}
+  const entries = Object.entries(clientsBySite || {});
+  const useNew = entries.length > 0;
+
+  if (useNew) {
+    const filtered = entries.filter(([site]) => !search || site.toLowerCase().includes(search));
+    if (!filtered.length) {
+      container.innerHTML = `<div class="empty-state">${search ? "No clients match your search." : "No clients returned from Central."}</div>`;
+      return;
+    }
+    const rows = filtered.sort((a, b) => (b[1].total || 0) - (a[1].total || 0)).map(([site, counts]) => `
+      <tr>
+        <td>${escHtml(site)}</td>
+        <td>${counts.total ?? "—"}</td>
+        <td>${counts.wireless ?? "—"}</td>
+        <td>${counts.wired ?? "—"}</td>
+        <td>${hubCaMonitorBtn("client", { name: `Client Count: ${site}`, site })}</td>
+      </tr>`).join("");
+    container.innerHTML = `
+      <div class="setup-card" style="overflow-x:auto;">
+        <table class="data-table">
+          <thead><tr><th>Site</th><th>Total</th><th>Wireless</th><th>Wired</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  } else {
+    // Legacy fallback (old format)
+    const filtered = (clientsLegacy || []).filter((c) => !search || JSON.stringify(c).toLowerCase().includes(search));
+    if (!filtered.length) {
+      container.innerHTML = `<div class="empty-state">${search ? "No clients match your search." : "No clients returned from Central."}</div>`;
+      return;
+    }
+    const rows = filtered.map((c) => `<tr>
+      <td>${escHtml(c.hostname || "—")}</td><td>${escHtml(c.mac || "—")}</td>
+      <td>${escHtml(c.ip || "—")}</td><td>${escHtml(c.site || "—")}</td>
+      <td>${escHtml(c.status || "—")}</td>
+    </tr>`).join("");
+    container.innerHTML = `<div class="setup-card" style="overflow-x:auto;"><table class="data-table">
+      <thead><tr><th>Hostname</th><th>MAC</th><th>IP</th><th>Site</th><th>Status</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>`;
+  }
+  attachHubCaMonitorButtons(container);
+}
+
+function renderHubCaDevicesTab(container, devicesBySite, search) {
+  const allDevices = Object.entries(devicesBySite || []).flatMap(([site, devs]) =>
+    devs.map((d) => ({ ...d, site }))
+  );
+  const filtered = allDevices.filter((d) =>
+    !search || JSON.stringify(d).toLowerCase().includes(search)
+  );
   if (!filtered.length) {
-    container.innerHTML = `<div class="empty-state">${search ? "No clients match your search." : "No clients returned from Central."}</div>`;
+    container.innerHTML = `<div class="empty-state">${search ? "No devices match your search." : "No devices returned from Central."}</div>`;
     return;
   }
-  const rows = filtered.map((client) => `
+  const statusBadge = (s) => {
+    const cls = (s || "").toUpperCase() === "OFFLINE" ? "badge-failure" : "badge-ok";
+    return `<span class="badge ${cls}">${escHtml(s || "—")}</span>`;
+  };
+  const rows = filtered.map((d) => `
     <tr>
-      <td>${escHtml(client.hostname || "—")}</td>
-      <td><code style="font-size:11px;">${escHtml(client.mac || "—")}</code></td>
-      <td>${escHtml(client.ip || "—")}</td>
-      <td>${escHtml(client.site || "—")}</td>
-      <td>${escHtml(client.ap || "—")}</td>
-      <td>${escHtml(client.ssid || "—")}</td>
-      <td>${escHtml(client.status || "—")}</td>
-      <td>${hubCaMonitorBtn("client", { mac: client.mac || "", hostname: client.hostname || "", site: client.site || "" })}</td>
+      <td><strong>${escHtml(d.name || "—")}</strong><br><span style="font-size:11px;color:var(--muted);">${escHtml(d.serial || "")}</span></td>
+      <td>${escHtml(d.type || "—")}</td>
+      <td>${escHtml(d.model || "—")}</td>
+      <td>${escHtml(d.site || "—")}</td>
+      <td>${statusBadge(d.status)}</td>
+      <td>${escHtml(d.ip || "—")}</td>
+      <td>${escHtml(d.firmware || "—")}</td>
+      <td>${hubCaMonitorBtn("alert", { name: `${d.type || "Device"} Offline`, site: d.site || "" })}</td>
     </tr>`).join("");
   container.innerHTML = `
     <div class="setup-card" style="overflow-x:auto;">
       <table class="data-table">
-        <thead><tr><th>Hostname</th><th>MAC</th><th>IP</th><th>Site</th><th>AP</th><th>SSID</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Device</th><th>Type</th><th>Model</th><th>Site</th><th>Status</th><th>IP</th><th>Firmware</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;

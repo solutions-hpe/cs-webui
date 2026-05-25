@@ -1907,6 +1907,7 @@
           <button class="setup-subtab simtop-subtab active" data-simtop="simtop-checks" role="tab">Checks</button>
           <button class="setup-subtab simtop-subtab" data-simtop="simtop-hardware" role="tab">Hardware</button>
           <button class="setup-subtab simtop-subtab" data-simtop="simtop-clients" role="tab">Client Count</button>
+          <button class="setup-subtab simtop-subtab" data-simtop="simtop-insights" role="tab">Insights</button>
         </nav>
 
         <!-- Checks sub-panel -->
@@ -1959,6 +1960,7 @@
               <div class="sim-clients-loading">Loading…</div>
             </div>
           </div>
+          <div id="spoke-monitored-checks-content" style="margin-top:1rem;"></div>
         </div>
 
         <!-- Hardware sub-panel -->
@@ -1977,6 +1979,7 @@
             </div>
             <div id="hw-site-list" class="sim-site-list"></div>
           </div>
+          <div id="spoke-monitored-hardware-content" style="margin-top:1rem;"></div>
         </div>
 
         <!-- Client Count sub-panel -->
@@ -1994,6 +1997,14 @@
               <div id="cc-detail-badge" class="sim-status-badge sim-unknown">—</div>
             </div>
             <div id="cc-site-detail" class="sim-site-list"></div>
+          </div>
+          <div id="spoke-monitored-clients-content" style="margin-top:1rem;"></div>
+        </div>
+
+        <!-- Insights sub-panel -->
+        <div id="simtop-insights" class="setup-subpanel hidden">
+          <div id="spoke-monitored-insights-content">
+            <div class="central-empty">No monitored insights configured.</div>
           </div>
         </div>
       </main>

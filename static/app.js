@@ -13874,6 +13874,7 @@ function setHubTenantSetupPanels(subtab = hubTenantSetupActiveSubtab) {
     "ts-security-panel",
     "ts-notifications-panel",
     "ts-troubleshoot-panel",
+    "ts-spokes-panel",
   ].forEach((panelId) => {
     document.getElementById(panelId)?.classList.toggle("hidden", panelId !== `${subtab}-panel`);
   });
@@ -14240,6 +14241,9 @@ async function initHubTenantSetupSubtab(subtab = hubTenantSetupActiveSubtab, for
   if (subtab === "ts-troubleshoot") {
     await initTsTroubleshootTab(tenantId);
   }
+  if (subtab === "ts-spokes") {
+    await initTsSpokesTab(tenantId);
+  }
 }
 
 async function activateHubTenantSetupSubtab(subtab = "ts-setup", force = false) {
@@ -14247,6 +14251,38 @@ async function activateHubTenantSetupSubtab(subtab = "ts-setup", force = false) 
   setHubTenantSetupPanels(hubTenantSetupActiveSubtab);
   await initHubTenantSetupSubtab(hubTenantSetupActiveSubtab, force);
 }
+
+async function initTsSpokesTab(tenantId) {
+  if (!tenantId || !canManageTenant(tenantId)) return;
+
+  // Load pending spokes
+  await loadTenantPendingSpokes();
+
+  // Load approved spokes
+  const tbody = document.getElementById("ts-spokes-approved-tbody");
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="4" class="empty-state">Loading…</td></tr>';
+  try {
+    const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes`);
+    const spokes = res?.ok ? await res.json() : [];
+    const approved = spokes.filter(s => s.status === "approved");
+    if (!approved.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No approved spokes yet.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = approved.map(s => `
+      <tr>
+        <td><strong>${escHtml(s.name || s.hostname)}</strong></td>
+        <td><code>${escHtml(s.hostname || s.id)}</code></td>
+        <td>${s.online ? '<span class="status-dot online"></span> Online' : '<span class="status-dot offline"></span> Offline'}</td>
+        <td>${escHtml(fmtDate(s.last_seen || s.updated_at || ""))}</td>
+      </tr>`).join("");
+  } catch (_) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">Unable to load spokes.</td></tr>';
+  }
+}
+
+
 
 async function loadSetup() {
   await loadHubSettings();
@@ -15874,6 +15910,16 @@ function renderTenantPendingSpokes(items) {
   wireTable(
     document.getElementById("ts-pending-tbody"),
     document.getElementById("ts-pending-key-banner")
+  );
+
+  // Spokes subtab panel elements
+  const spokesSection = document.getElementById("ts-spokes-pending-section");
+  const noPending = document.getElementById("ts-spokes-no-pending");
+  if (spokesSection) spokesSection.style.display = items.length > 0 ? "" : "none";
+  if (noPending) noPending.style.display = items.length === 0 ? "" : "none";
+  wireTable(
+    document.getElementById("ts-spokes-pending-tbody"),
+    document.getElementById("ts-spokes-key-banner")
   );
 }
 

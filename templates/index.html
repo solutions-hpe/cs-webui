@@ -128,7 +128,6 @@
       </div>
       <div id="tenant-context-nav" class="tenant-context-nav hidden">
         <div class="tenant-context-nav-row1">
-          <button class="tab tab-back" data-tab="hub-dashboard" type="button">← Tenants</button>
           <button class="tab superadmin-tab hidden tab-back" data-tab="hub-superadmin" type="button">Superadmin</button>
           <span class="tab-nav-sep" aria-hidden="true"></span>
           <button class="tab auth-tab hidden tab-back tab-nav-right" data-tab="hub-setup" type="button">⚙ Hub Setup</button>
@@ -458,6 +457,7 @@
         <button class="setup-subtab hub-ts-subtab" data-subtab="ts-security" type="button">Security</button>
         <button class="setup-subtab hub-ts-subtab" data-subtab="ts-notifications" type="button">Notifications</button>
         <button class="setup-subtab hub-ts-subtab" data-subtab="ts-troubleshoot" type="button">Troubleshooting</button>
+        <button class="setup-subtab hub-ts-subtab" data-subtab="ts-spokes" type="button">Spokes</button>
       </nav>
       <div id="ts-setup-panel">
         <div id="hub-tenant-setup-content"></div>
@@ -752,6 +752,28 @@
             </tbody>
           </table>
           <div id="ts-troubleshoot-msg" class="settings-message hidden" style="margin-top:12px;"></div>
+        </div>
+      </div>
+
+      <div id="ts-spokes-panel" class="hidden">
+        <div class="page-toolbar"><span class="server-node-name">Spoke Management</span></div>
+        <div style="padding:0 16px;">
+          <section class="setup-card" id="ts-spokes-pending-section" style="display:none;">
+            <div class="setup-card-header"><h2>⏳ Pending Spokes</h2><p>Spokes pre-registered for this tenant waiting for approval.</p></div>
+            <div id="ts-spokes-key-banner" class="key-once-banner hidden"></div>
+            <table class="data-table">
+              <thead><tr><th>Name</th><th>Hostname</th><th>Registered</th><th>Action</th></tr></thead>
+              <tbody id="ts-spokes-pending-tbody"></tbody>
+            </table>
+          </section>
+          <div id="ts-spokes-no-pending" class="empty-state" style="display:none; padding:24px 0;">No pending spokes for this tenant.</div>
+          <section class="setup-card" style="margin-top:16px;">
+            <div class="setup-card-header"><h2>✓ Approved Spokes</h2></div>
+            <table class="data-table">
+              <thead><tr><th>Name</th><th>Hostname</th><th>Status</th><th>Last Seen</th></tr></thead>
+              <tbody id="ts-spokes-approved-tbody"></tbody>
+            </table>
+          </section>
         </div>
       </div>
     </main>

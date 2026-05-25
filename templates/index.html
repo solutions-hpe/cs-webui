@@ -148,7 +148,6 @@
       <button class="tab" role="tab" aria-selected="false" data-tab="dashboard" type="button">Clients</button>
       <button class="tab" role="tab" aria-selected="false" data-tab="central" type="button">Central</button>
       <button class="tab tab-btn" id="tab-server-btn" role="tab" aria-selected="false" data-tab="server" style="display:none;" type="button">VM Server</button>
-      <button class="tab tab-btn" id="tab-api-server-btn" role="tab" aria-selected="false" data-tab="api-server" type="button">API Server</button>
       <span class="tab-nav-sep" aria-hidden="true"></span>
       <button class="tab tab-nav-right" role="tab" aria-selected="false" data-tab="config" type="button">⚙ Config</button>
       <button class="tab" role="tab" aria-selected="false" data-tab="setup" type="button">⚙ Setup</button>
@@ -1878,31 +1877,7 @@
         <!-- Agent Log sub-tab -->
       </main>
 
-      <!-- ── API Server tab ── -->
-      <main id="tab-api-server" class="page tab-content hidden">
-        <div class="page-toolbar"><span class="server-node-name">API Server</span></div>
-        <div class="tile">
-          <h3>Background Services</h3>
-          <div class="tile-scroll">
-            <table id="services-table" class="data-table">
-              <thead>
-                <tr>
-                  <th>Service</th>
-                  <th>Status</th>
-                  <th>Last Run</th>
-                  <th>Run Count</th>
-                  <th>Errors</th>
-                  <th>Last Error</th>
-                </tr>
-              </thead>
-              <tbody id="services-tbody">
-                <tr><td colspan="6" class="empty-msg">Loading…</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </main>
-      <main id="tab-simulations" class="page tab-content">
+      <!-- ── Simulations tab ── -->
         <nav class="setup-subnav" role="tablist">
           <button class="setup-subtab simtop-subtab active" data-simtop="simtop-checks" role="tab">Checks</button>
           <button class="setup-subtab simtop-subtab" data-simtop="simtop-hardware" role="tab">Hardware</button>

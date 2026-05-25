@@ -7967,7 +7967,7 @@ const autoRefreshActiveTabs = new Set(["dashboard", "simulations", "clients", "c
 const autoRefreshActiveSuperadminTabs = new Set(["sa-gkill"]);
 let superadminActiveSubtab = "sa-pending";
 let tenantDetailState = { open: false, tenantId: null, activeTab: "dashboard", data: {} };
-const hubAdminTabIds = new Set(["dashboard", "spokes", "setup", "superadmin"]);
+const hubAdminTabIds = new Set(["dashboard", "setup", "superadmin"]);
 let tenantUserCounts = {};
 let dashboardTenantRows = [];
 let aggregateDashboardData = null;
@@ -10265,7 +10265,7 @@ function applyAuthUI() {
     hubVmServerSelectedSpoke = null;
     resetTenantDetail();
     syncTenantContextChrome();
-    if (activeTab !== "dashboard") showTab("dashboard");
+    if (activeTab === "spokes" || activeTab !== "dashboard") showTab("dashboard");
     return;
   }
   closeLoginModal();
@@ -10395,6 +10395,9 @@ function logout(showMessage = true) {
 
 async function setCurrentTenant(tenantId, reload = true) {
   currentTenantId = tenantId;
+  if (!currentTenantId && activeTab === "spokes") {
+    activeTab = "dashboard";
+  }
   aggregateDashboardData = null;
   hubCentralData = null;
   hubSimOpenCheckId = null;
@@ -10419,6 +10422,10 @@ function showTab(rawTabId, opts = {}) {
   const tabId = rawTabId.startsWith('hub-') ? rawTabId.slice(4) : rawTabId;
   if (["simulations", "clients", "vm-server", "central", "spokes", "reseed", "setup", "tenant-setup", "config", "commands", "superadmin"].includes(tabId) && !currentUser) {
     openLoginModal();
+    return;
+  }
+  if (tabId === "spokes" && (!tenantContextActive || !currentTenantId)) {
+    showTab("dashboard", { source: "admin" });
     return;
   }
   if (opts.source === "admin") {

@@ -13292,6 +13292,7 @@ function renderHubCentral() {
         <div class="tenant-detail-note"><strong>Status:</strong> ${webhookRegistered ? "Registered" : "Not registered"}</div>
         <div class="tenant-detail-note"><strong>Webhook endpoint:</strong> <code>${escHtml(webhook.endpoint_url || defaultCentralWebhookStatus().endpoint_url)}</code></div>
         ${webhook.webhook_id ? `<div class="tenant-detail-note"><strong>Webhook ID:</strong> <code>${escHtml(webhook.webhook_id)}</code></div>` : ""}
+        ${webhook.webhook_api_key ? `<div class="tenant-detail-note"><strong>API Key</strong> <span style="font-size:11px;color:var(--muted);">(paste this into Central → Webhooks → Authorization)</span><br><span style="display:inline-flex;align-items:center;gap:8px;margin-top:4px;"><code id="webhook-api-key-display" style="user-select:all;">${escHtml(webhook.webhook_api_key)}</code><button class="btn btn-secondary btn-small" type="button" onclick="navigator.clipboard.writeText(${JSON.stringify(webhook.webhook_api_key)}).then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)})">Copy</button></span></div>` : ""}
         <div class="form-actions">
           <button id="register-central-webhook-btn" class="btn btn-primary" type="button"${disabled}${webhookRegistered ? " disabled" : ""}>Register</button>
           <button id="deregister-central-webhook-btn" class="btn btn-secondary" type="button"${disabled}${webhookRegistered ? "" : " disabled"}>Deregister</button>

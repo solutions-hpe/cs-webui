@@ -446,7 +446,6 @@
         <button class="setup-subtab hub-ts-subtab active" data-subtab="ts-setup" type="button">Setup</button>
         <button class="setup-subtab hub-ts-subtab" data-subtab="ts-central-api" type="button">Central API</button>
         <button class="setup-subtab hub-ts-subtab" data-subtab="ts-proxmox" type="button">Proxmox</button>
-        <button class="setup-subtab hub-ts-subtab" data-subtab="ts-github" type="button">GitHub</button>
         <button class="setup-subtab hub-ts-subtab" data-subtab="ts-security" type="button">Security</button>
         <button class="setup-subtab hub-ts-subtab" data-subtab="ts-notifications" type="button">Notifications</button>
         <button class="setup-subtab hub-ts-subtab" data-subtab="ts-troubleshoot" type="button">Troubleshooting</button>
@@ -606,30 +605,6 @@
                 <div id="ts-proxmox-override-msg" class="settings-message hidden"></div>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-      <div id="ts-github-panel" class="hidden">
-        <div class="page-toolbar">
-          <span class="server-node-name">GitHub Settings</span>
-          <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-            <label class="form-label" style="margin:0;">Spoke:</label>
-            <select id="ts-github-spoke-select" class="form-input" style="width:200px;"></select>
-            <button id="ts-github-save-btn" class="btn btn-primary btn-small" type="button">💾 Push to Spoke</button>
-          </div>
-        </div>
-        <div class="setup-card" style="margin:16px;">
-          <div class="setup-card-header"><h2>Repository Settings</h2></div>
-          <div class="setup-form">
-            <div class="form-group">
-              <label class="form-label" for="ts-branch-input">Branch</label>
-              <input id="ts-branch-input" class="form-input" type="text" placeholder="e.g. main, dev" autocomplete="off" spellcheck="false">
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="ts-github-token-input">GitHub Token</label>
-              <input id="ts-github-token-input" class="form-input" type="password" placeholder="Paste token — leave blank to keep current" autocomplete="new-password" data-secret-field="true">
-            </div>
-            <div id="ts-github-msg" class="settings-message hidden"></div>
           </div>
         </div>
       </div>

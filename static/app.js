@@ -11070,7 +11070,7 @@ function renderTenantSetupPanel(data) {
         </div>
       </section>
       <section class="setup-card">
-        <div class="setup-card-header"><h2>GitHub / Repo</h2><p>Credentials and source repo used for simulation.conf editing.</p></div>
+        <div class="setup-card-header"><h2>GitHub / Repo</h2><p>Credentials and source repo for simulation.conf editing. Saving pushes the branch and token to approved spokes.</p></div>
         <div class="setup-form">
           <div class="form-group"><label class="form-label" for="tenant-sim-repo-url">Simulation Repo URL</label><input id="tenant-sim-repo-url" type="url" class="form-input" value="${escHtml(github.sim_repo_url || "")}" placeholder="https://github.com/owner/repo.git"${disabled}></div>
           <div class="form-group"><label class="form-label" for="tenant-sim-repo-branch">Simulation Repo Branch</label><input id="tenant-sim-repo-branch" type="text" class="form-input" value="${escHtml(github.sim_repo_branch || "main")}" placeholder="main"${disabled}></div>
@@ -11102,16 +11102,6 @@ function renderTenantSetupPanel(data) {
             <tr><td>SMTP Host</td><td>${escHtml(notifications.smtp_host || "—")}</td></tr>
             <tr><td>SMTP User</td><td>${escHtml(notifications.smtp_user || "—")}</td></tr>
             <tr><td>Recipients</td><td>${escHtml((notifications.to_emails || []).join(", ") || "—")}</td></tr>
-          </tbody>
-        </table>
-      </section>
-      <section class="setup-card">
-        <div class="setup-card-header"><h2>GitHub</h2><p>Saving these settings pushes the repo branch and token to approved spokes.</p></div>
-        <table class="data-table">
-          <tbody>
-            <tr><td>Repo URL</td><td>${escHtml(github.sim_repo_url || "—")}</td></tr>
-            <tr><td>Repo Branch</td><td>${escHtml(github.sim_repo_branch || "—")}</td></tr>
-            <tr><td>GitHub Token</td><td>${escHtml(github.github_token_configured ? "Configured" : "Not configured")}</td></tr>
           </tbody>
         </table>
       </section>

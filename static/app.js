@@ -11361,7 +11361,7 @@ async function loadDashboard(force = false) {
   $("#dashboard-add-tenant-btn")?.classList.toggle("hidden", !currentUser?.is_superadmin);
   if (!currentUser) {
     if (grid) grid.innerHTML = "";
-    if (empty) empty.innerHTML = "";
+    if (empty) { empty.innerHTML = ""; empty.classList.add("hidden"); }
     return;
   }
   if (!grid || !empty) return;
@@ -11372,22 +11372,38 @@ async function loadDashboard(force = false) {
     empty.classList.remove("hidden");
     return;
   }
-  const rows = await Promise.all(tenants.map(async tenant => {
-    const spokes = await ensureTenantSpokesFor(tenant.id, force);
-    const summary = summarizeTenantSpokes(spokes || []);
-    return {
+  try {
+    // Render immediately from the tenants list (no per-tenant fetch needed for basic list).
+    const rows = tenants.map(tenant => ({
       id: tenant.id,
       name: tenant.name || tenant.id,
-      summary,
-      alert: summarizeTenantAlerts(summary, null),
-    };
-  }));
-  rows.sort((left, right) => String(left.name || left.id).localeCompare(String(right.name || right.id), undefined, { numeric: true, sensitivity: "base" }));
-  dashboardTenantRows = rows;
-  if (canManageTenant()) loadTenantPendingSpokes();
-  empty.classList.add("hidden");
-  empty.innerHTML = "";
-  grid.innerHTML = renderDashboardTenantTable(rows);
+      summary: summarizeTenantSpokes(spokeCache[tenant.id] || []),
+      alert: summarizeTenantAlerts(summarizeTenantSpokes(spokeCache[tenant.id] || []), null),
+    }));
+    rows.sort((left, right) => String(left.name || left.id).localeCompare(String(right.name || right.id), undefined, { numeric: true, sensitivity: "base" }));
+    dashboardTenantRows = rows;
+    if (canManageTenant()) loadTenantPendingSpokes();
+    empty.classList.add("hidden");
+    empty.innerHTML = "";
+    grid.innerHTML = renderDashboardTenantTable(rows);
+    // Refresh spoke data in background and re-render with counts.
+    if (force) {
+      Promise.all(tenants.map(tenant => ensureTenantSpokesFor(tenant.id, true))).then(() => {
+        const refreshed = tenants.map(tenant => ({
+          id: tenant.id,
+          name: tenant.name || tenant.id,
+          summary: summarizeTenantSpokes(spokeCache[tenant.id] || []),
+          alert: summarizeTenantAlerts(summarizeTenantSpokes(spokeCache[tenant.id] || []), null),
+        }));
+        refreshed.sort((left, right) => String(left.name || left.id).localeCompare(String(right.name || right.id), undefined, { numeric: true, sensitivity: "base" }));
+        dashboardTenantRows = refreshed;
+        if (grid) grid.innerHTML = renderDashboardTenantTable(refreshed);
+      }).catch(() => {});
+    }
+  } catch (err) {
+    console.error("loadDashboard error", err);
+    grid.innerHTML = `<div class="empty-state">Error loading tenant list: ${escHtml(err?.message || "Unknown error")}</div>`;
+  }
 }
 
 async function loadHubSimulations(force = false) {

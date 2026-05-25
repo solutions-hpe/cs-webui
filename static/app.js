@@ -11756,7 +11756,7 @@ function renderHubVmServer() {
             <span class="form-label">Concurrency</span>
             <input id="hub-fleet-reclone-concurrency" class="form-input" type="number" min="1" max="10" value="${escHtml(String(hubVmServerFleetConcurrencyDraft || 3))}"${canManageTenant(tenantId) ? "" : " disabled"}>
           </label>
-          <button id="hub-fleet-reclone-btn" class="btn btn-primary" type="button"${disabled ? " disabled" : ""}>🔄 Reclone All Spokes</button>
+          <button id="hub-fleet-reclone-btn" class="btn btn-primary" type="button"${disabled ? " disabled" : ""}>🔄 Reclone Fleet</button>
           ${fleet.failed > 0 && !fleet.any_running && canManageTenant(tenantId) ? `<button id="hub-fleet-reclone-clear-btn" class="btn btn-secondary" type="button">✕ Clear Error</button>` : ""}
         </div>
       </section>

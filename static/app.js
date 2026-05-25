@@ -1020,6 +1020,25 @@ function updateRelayIndicatorVisibility(settings = currentSettings) {
 function showHubManagedBanner() {
   if (!hubManagedBanner || WEBUI_MODE !== 'spoke') return;
   hubManagedBanner.classList.remove('d-none');
+  const unlockBtn = document.getElementById('hub-managed-unlock-btn');
+  if (unlockBtn && !unlockBtn._bound) {
+    unlockBtn._bound = true;
+    unlockBtn.addEventListener('click', async () => {
+      if (!confirm('Revert to local control?\n\nThis clears hub_managed and your hub API key. Use this if the hub tenant was deleted or the hub is permanently unreachable.')) return;
+      unlockBtn.disabled = true;
+      unlockBtn.textContent = 'Reverting…';
+      try {
+        const res = await fetch('/api/relay/revert-local', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+        showToast('✓ Reverted to local control', 'success');
+      } catch (err) {
+        showToast(`Failed to revert: ${err.message}`, 'error');
+        unlockBtn.disabled = false;
+        unlockBtn.textContent = 'Revert to Local Control';
+      }
+    });
+  }
 }
 
 function hideHubManagedBanner() {

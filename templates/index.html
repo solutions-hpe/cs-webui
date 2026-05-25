@@ -2115,8 +2115,9 @@
       <main id="tab-setup" class="page tab-content hidden" role="tabpanel">
         <div id="settings-form">
           <div id="hub-managed-banner" class="hub-managed-banner d-none">
-          <span>🔒 Settings managed by hub — local changes are locked</span>
-        </div>
+            <span>🔒 Settings managed by hub — local changes are locked</span>
+            <button id="hub-managed-unlock-btn" class="btn btn-secondary btn-small" type="button" title="Revert to local management — use if hub tenant was deleted or hub is unreachable" style="margin-left:12px;">Revert to Local Control</button>
+          </div>
         <nav class="setup-subnav" role="tablist">
           <button class="setup-subtab" data-subtab="setup-github" role="tab">GitHub</button>
           <button class="setup-subtab" data-subtab="setup-hub" role="tab">Hub</button>

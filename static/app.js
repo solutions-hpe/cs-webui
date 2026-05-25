@@ -7996,6 +7996,8 @@ let hubVmServerFleetPollTimer = null;
 let hubVmServerFleetConcurrencyDraft = 3;
 let hubVmServerFleetConcurrencyTenant = null;
 let hubClientTypeFilter = "all";
+let dashboardTenantRows = [];
+const tenantDashboardSort = { key: "name", direction: "asc" };
 
 const PROCESSING_FEATURES = ["aruba_polling", "teams_webhook", "email", "heartbeat", "gkill", "schedules", "repo_sync"];
 const spokeUiState = { expandedByTenant: {}, search: "" };
@@ -8286,6 +8288,84 @@ async function loadAggregateData(path) {
   const res = await apiFetch(aggregateEndpoint(path));
   if (!res || !res.ok) return null;
   return res.json().catch(() => null);
+}
+
+function compareTenantDashboardValues(a, b) {
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  return String(a || "").localeCompare(String(b || ""), undefined, { numeric: true, sensitivity: "base" });
+}
+
+function tenantDashboardSortValue(row, key) {
+  if (key === "approvedCount") return row.summary?.approvedCount ?? -1;
+  if (key === "clientCount") return row.summary?.clientCount ?? -1;
+  if (key === "vmCount") return row.summary?.vmCount ?? -1;
+  if (key === "lastSync") {
+    const v = row.summary?.lastSync ?? row.lastSync;
+    return v ? new Date(v).getTime() : 0;
+  }
+  return String(row[key] || "").toLowerCase();
+}
+
+function sortDashboardTenantRows(rows) {
+  const { key, direction } = tenantDashboardSort;
+  const sorted = [...rows].sort((left, right) => compareTenantDashboardValues(
+    tenantDashboardSortValue(left, key),
+    tenantDashboardSortValue(right, key),
+  ));
+  return direction === "desc" ? sorted.reverse() : sorted;
+}
+
+function renderDashboardTenantSortHeader(label, key) {
+  const active = tenantDashboardSort.key === key;
+  const indicator = active ? (tenantDashboardSort.direction === "asc" ? "▲" : "▼") : "↕";
+  const ariaSort = active ? (tenantDashboardSort.direction === "asc" ? "ascending" : "descending") : "none";
+  return `<button class="tenant-table-sort${active ? " active" : ""}" data-dashboard-tenant-sort="${escHtml(key)}" aria-sort="${ariaSort}" type="button"><span>${escHtml(label)}</span><span class="tenant-table-sort-indicator" aria-hidden="true">${indicator}</span></button>`;
+}
+
+function renderTenantDashboardEmptyState() {
+  const canAddTenant = Boolean(currentUser?.is_superadmin);
+  return canAddTenant
+    ? 'No tenants yet. Create your first tenant to get started.<div class="tenant-empty-action"><button class="btn btn-primary btn-small" data-add-tenant type="button">Add Tenant</button></div>'
+    : 'No tenants are available yet. Contact a hub administrator to add one.';
+}
+
+function renderDashboardTenantTable(rows) {
+  const sortedRows = sortDashboardTenantRows(rows);
+  const body = sortedRows.length ? sortedRows.map(row => {
+    const summary = row.summary || {};
+    const alert = row.alert || {};
+    const lastSync = summary.lastSync ?? row.lastSync;
+    return `
+    <tr class="tenant-list-row" data-enter-tenant="${escHtml(row.id)}" tabindex="0" role="button">
+      <td>${statusDot((summary.onlineCount ?? 0) > 0 || (summary.approvedCount ?? 0) === 0)}</td>
+      <td><strong>${escHtml(row.name || row.id)}</strong><div class="tenant-card-subtitle">${escHtml(row.id)}</div></td>
+      <td>${summary.approvedCount ?? '—'}</td>
+      <td>${summary.clientCount ?? '—'}</td>
+      <td>${lastSync ? escHtml(relativeTime(lastSync)) : '<span class="muted">—</span>'}</td>
+      <td>${alert.text ? `<span class="tenant-alert-pill ${alert.tone}">${escHtml(alert.text)}</span>` : ''}</td>
+      <td class="tenant-card-cta">Open →</td>
+    </tr>`;
+  }).join("") : '<tr><td colspan="7" class="empty-state">No tenants available.</td></tr>';
+  return `
+    <section class="setup-card tenant-list-card">
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>${renderDashboardTenantSortHeader("Tenant", "name")}</th>
+              <th>${renderDashboardTenantSortHeader("Spokes", "approvedCount")}</th>
+              <th>${renderDashboardTenantSortHeader("Clients", "clientCount")}</th>
+              <th>${renderDashboardTenantSortHeader("Last Sync", "lastSync")}</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>
+    </section>
+  `;
 }
 
 function hubSimulationBadgeClass(simulation) {
@@ -11276,17 +11356,38 @@ async function openTenantDetail(tenantId, tabId = "dashboard", force = false) {
 }
 
 async function loadDashboard(force = false) {
+  const grid = $("#dashboard-grid");
   const empty = $("#dashboard-empty");
   $("#dashboard-add-tenant-btn")?.classList.toggle("hidden", !currentUser?.is_superadmin);
-  if (!empty) return;
   if (!currentUser) {
-    empty.innerHTML = "";
+    if (grid) grid.innerHTML = "";
+    if (empty) empty.innerHTML = "";
     return;
   }
-  empty.innerHTML = currentUser.is_superadmin
-    ? 'Select a tenant context to continue. Superadmins can manage tenants from the Superadmin tab.'
-    : 'Select a tenant context to continue.';
-  empty.classList.remove("hidden");
+  if (!grid || !empty) return;
+  if (!tenants.length) {
+    dashboardTenantRows = [];
+    grid.innerHTML = "";
+    empty.innerHTML = renderTenantDashboardEmptyState();
+    empty.classList.remove("hidden");
+    return;
+  }
+  const rows = await Promise.all(tenants.map(async tenant => {
+    const spokes = await ensureTenantSpokesFor(tenant.id, force);
+    const summary = summarizeTenantSpokes(spokes || []);
+    return {
+      id: tenant.id,
+      name: tenant.name || tenant.id,
+      summary,
+      alert: summarizeTenantAlerts(summary, null),
+    };
+  }));
+  rows.sort((left, right) => String(left.name || left.id).localeCompare(String(right.name || right.id), undefined, { numeric: true, sensitivity: "base" }));
+  dashboardTenantRows = rows;
+  if (canManageTenant()) loadTenantPendingSpokes();
+  empty.classList.add("hidden");
+  empty.innerHTML = "";
+  grid.innerHTML = renderDashboardTenantTable(rows);
 }
 
 async function loadHubSimulations(force = false) {
@@ -16418,6 +16519,23 @@ function bindEvents() {
 
     if (event.target.closest("[data-add-tenant]")) {
       openSuperadminTenantForm();
+      return;
+    }
+
+    const enterTenantButton = event.target.closest("[data-enter-tenant]");
+    if (enterTenantButton) {
+      enterTenantContext(enterTenantButton.dataset.enterTenant, "simulations", true);
+      return;
+    }
+
+    const tenantSortButton = event.target.closest("[data-dashboard-tenant-sort]");
+    if (tenantSortButton) {
+      const key = tenantSortButton.dataset.dashboardTenantSort;
+      if (key) {
+        tenantDashboardSort.direction = tenantDashboardSort.key === key && tenantDashboardSort.direction === "asc" ? "desc" : "asc";
+        tenantDashboardSort.key = key;
+        $("#dashboard-grid") && ($("#dashboard-grid").innerHTML = renderDashboardTenantTable(dashboardTenantRows));
+      }
       return;
     }
 

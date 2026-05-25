@@ -8000,6 +8000,13 @@ let dashboardTenantRows = [];
 const tenantDashboardSort = { key: "name", direction: "asc" };
 
 const PROCESSING_FEATURES = ["aruba_polling", "teams_webhook", "email", "heartbeat", "gkill", "schedules", "repo_sync"];
+const FAILURE_SIMS = new Set(['dns_fail', 'ssidpw_fail', 'auth_fail', 'dhcp_fail', 'port_flap', 'assoc_fail']);
+const TRAFFIC_SIMS = new Set(['iperf', 'download', 'www_traffic', 'ping_test']);
+const IMPACT_LABELS = {
+  dns_fail: '⚠ DNS Failure', ssidpw_fail: '⚠ Auth Failure', auth_fail: '⚠ Auth Failure',
+  dhcp_fail: '⚠ DHCP Failure', assoc_fail: '⚠ Assoc Failure', port_flap: '⚠ Port Flap',
+  iperf: 'ℹ iPerf Traffic', download: 'ℹ Download Traffic', www_traffic: 'ℹ Web Traffic', ping_test: 'ℹ Ping Traffic',
+};
 const spokeUiState = { expandedByTenant: {}, search: "" };
 const renderTokens = {};
 const scheduledReloads = {};
@@ -8657,15 +8664,17 @@ function hubCentralMonitorSummary(data = hubCentralData) {
   const spokes = (Array.isArray(source.spokes) ? source.spokes : []).map((spoke) => ({
     ...spoke,
     display_name: spokeDisplayName(spoke, "Spoke"),
-    assigned_site: String(spoke?.assigned_site || "").trim(),
+    assigned_sites: Array.isArray(spoke?.assigned_sites) ? spoke.assigned_sites.map((s) => String(s).trim()).filter(Boolean)
+      : (spoke?.assigned_site ? [String(spoke.assigned_site).trim()] : []),
     spoke_online: typeof spoke?.spoke_online === "boolean" ? spoke.spoke_online : Boolean(spoke?.online),
   }));
   const assignedBySite = new Map();
   for (const spoke of spokes) {
-    if (!spoke.assigned_site) continue;
-    const existing = assignedBySite.get(spoke.assigned_site);
-    if (!existing || (spoke.spoke_online && !existing.spoke_online) || spoke.display_name.localeCompare(existing.display_name, undefined, { sensitivity: "base" }) < 0) {
-      assignedBySite.set(spoke.assigned_site, spoke);
+    for (const site of spoke.assigned_sites) {
+      const existing = assignedBySite.get(site);
+      if (!existing || (spoke.spoke_online && !existing.spoke_online) || spoke.display_name.localeCompare(existing.display_name, undefined, { sensitivity: "base" }) < 0) {
+        assignedBySite.set(site, spoke);
+      }
     }
   }
   const knownSites = new Set([
@@ -14283,13 +14292,13 @@ async function loadTenantAssignedSites(tenantId) {
   return Object.keys(mappings).filter(Boolean).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
 }
 
-async function updateTsSpokeAssignedSite(tenantId, spokeId, assignedSite) {
+async function updateTsSpokeAssignedSites(tenantId, spokeId, assignedSites) {
   const res = await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/assigned-site`, {
     method: 'PATCH',
-    body: { assigned_site: assignedSite || '' },
+    body: { assigned_sites: assignedSites },
   });
   const data = await readJson(res);
-  if (!res?.ok) throw new Error(data?.detail || 'Unable to update assigned site.');
+  if (!res?.ok) throw new Error(data?.detail || 'Unable to update assigned sites.');
   return data || {};
 }
 
@@ -14302,7 +14311,7 @@ async function initTsSpokesTab(tenantId) {
   if (!tbody) return;
   tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Loading…</td></tr>';
   try {
-    const [spokeRes, assignedSites] = await Promise.all([
+    const [spokeRes, availableSites] = await Promise.all([
       apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes`),
       loadTenantAssignedSites(tenantId).catch(() => []),
     ]);
@@ -14312,41 +14321,88 @@ async function initTsSpokesTab(tenantId) {
       tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No approved spokes yet.</td></tr>';
       return;
     }
-    const siteOptions = [...new Set([...assignedSites, ...approved.map((spoke) => String(spoke.assigned_site || '').trim()).filter(Boolean)])]
-      .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
-    const disabled = canManageTenant(tenantId) ? '' : ' disabled';
+    const canManage = canManageTenant(tenantId);
+
+    function renderSpokeRow(spoke, container) {
+      const assignedSites = Array.isArray(spoke.assigned_sites) ? [...spoke.assigned_sites]
+        : (spoke.assigned_site ? [spoke.assigned_site] : []);
+      const unassigned = availableSites.filter((s) => !assignedSites.includes(s));
+
+      const chipsHtml = assignedSites.map((site) => `
+        <span class="site-chip" style="display:inline-flex;align-items:center;gap:4px;background:var(--badge-bg,#e8f0fe);color:var(--badge-text,#174ea6);border-radius:4px;padding:2px 6px;font-size:12px;white-space:nowrap;">
+          ${escHtml(site)}
+          ${canManage ? `<button type="button" data-remove-site="${escHtml(site)}" style="background:none;border:none;cursor:pointer;font-size:14px;line-height:1;padding:0;color:var(--muted);" title="Remove ${escHtml(site)}">×</button>` : ''}
+        </span>`).join('');
+
+      const dropdownHtml = canManage && unassigned.length ? `
+        <select class="form-input site-add-select" style="min-width:160px;font-size:12px;" title="Add site assignment">
+          <option value="">+ add site…</option>
+          ${unassigned.map((s) => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('')}
+        </select>` : '';
+
+      container.innerHTML = `
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;">
+          ${chipsHtml || '<span style="color:var(--muted);font-size:12px;">— unassigned —</span>'}
+          ${dropdownHtml}
+        </div>`;
+
+      if (canManage) {
+        container.querySelectorAll('[data-remove-site]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const site = btn.dataset.removeSite;
+            const next = assignedSites.filter((s) => s !== site);
+            btn.disabled = true;
+            try {
+              const updated = await updateTsSpokeAssignedSites(tenantId, spoke.id, next);
+              spoke.assigned_sites = updated.assigned_sites || next;
+              hubCentralData = null;
+              renderSpokeRow(spoke, container);
+              await loadHubCentralData(true).catch(() => {});
+              showToast(`Removed ${site} from ${spoke.spoke_name || spoke.hostname}.`, 'ok');
+            } catch (err) {
+              showToast(err.message || 'Unable to update assigned sites.', 'error');
+              btn.disabled = false;
+            }
+          });
+        });
+
+        const addSelect = container.querySelector('.site-add-select');
+        if (addSelect) {
+          addSelect.addEventListener('change', async () => {
+            const site = addSelect.value;
+            if (!site) return;
+            const next = [...assignedSites, site];
+            addSelect.disabled = true;
+            try {
+              const updated = await updateTsSpokeAssignedSites(tenantId, spoke.id, next);
+              spoke.assigned_sites = updated.assigned_sites || next;
+              hubCentralData = null;
+              renderSpokeRow(spoke, container);
+              await loadHubCentralData(true).catch(() => {});
+              showToast(`Assigned ${site} to ${spoke.spoke_name || spoke.hostname}.`, 'ok');
+            } catch (err) {
+              showToast(err.message || 'Unable to update assigned sites.', 'error');
+              addSelect.disabled = false;
+              addSelect.value = '';
+            }
+          });
+        }
+      }
+    }
+
     tbody.innerHTML = approved.map((spoke) => `
       <tr>
         <td><strong>${escHtml(spoke.name || spoke.spoke_name || spoke.hostname || spoke.id)}</strong></td>
         <td><code>${escHtml(spoke.hostname || spoke.id)}</code></td>
         <td>${(typeof spoke.online === 'boolean' ? spoke.online : isOnline(spoke.last_seen)) ? '<span class="status-dot online"></span> Online' : '<span class="status-dot offline"></span> Offline'}</td>
         <td>${escHtml(fmtDate(spoke.last_seen || spoke.updated_at || ''))}</td>
-        <td>
-          <select class="form-input" data-ts-assigned-site="${escHtml(spoke.id)}" data-prev-value="${escHtml(spoke.assigned_site || '')}" style="min-width:180px;"${disabled}>
-            <option value="">— unassigned —</option>
-            ${siteOptions.map((wsite) => `<option value="${escHtml(wsite)}"${String(spoke.assigned_site || '') === wsite ? ' selected' : ''}>${escHtml(wsite)}</option>`).join('')}
-          </select>
-        </td>
+        <td id="spoke-sites-${escHtml(spoke.id)}"></td>
       </tr>`).join('');
-    tbody.querySelectorAll('[data-ts-assigned-site]').forEach((selectEl) => {
-      selectEl.addEventListener('change', async () => {
-        const previousValue = selectEl.dataset.prevValue || '';
-        const nextValue = selectEl.value || '';
-        selectEl.disabled = true;
-        try {
-          const updated = await updateTsSpokeAssignedSite(tenantId, selectEl.dataset.tsAssignedSite, nextValue);
-          selectEl.dataset.prevValue = updated?.assigned_site || nextValue;
-          hubCentralData = null;
-          await loadHubCentralData(true).catch(() => {});
-          showToast(`Assigned site updated for ${updated?.spoke_name || updated?.hostname || 'spoke'}.`, 'ok');
-        } catch (error) {
-          selectEl.value = previousValue;
-          showToast(error.message || 'Unable to update assigned site.', 'error');
-        } finally {
-          selectEl.disabled = !canManageTenant(tenantId);
-        }
-      });
-    });
+
+    for (const spoke of approved) {
+      const cell = document.getElementById(`spoke-sites-${spoke.id}`);
+      if (cell) renderSpokeRow(spoke, cell);
+    }
   } catch (_) {
     tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Unable to load spokes.</td></tr>';
   }

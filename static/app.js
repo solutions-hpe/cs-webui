@@ -14417,6 +14417,7 @@ function hubCaIsMonitored(type, name, site) {
   const n = (name || "").toLowerCase().trim();
   const s = (site || "").toLowerCase().trim();
   return hubCaBrowseMonitoredItems.some((m) => {
+    if (type && m.type && m.type !== type) return false;
     const mn = (m.name || m.identifier || "").toLowerCase().trim();
     const ms = (m.site || m.site_name || "").toLowerCase().trim();
     return mn === n && (ms === s || !ms || !s);
@@ -14537,11 +14538,11 @@ async function loadHubCaBrowseData(force = false) {
     hubCentralBrowseData = data || { sites: [], alerts: [], insights: [], clients: [], mode: "—" };
     saveHubCaBrowseCache(hubCentralBrowseData, tenantId);
     updateHubCaBrowsePills(hubCentralBrowseData);
-    // Refresh monitored items for button state
-    try {
-      const mRes = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/monitored-items`);
-      if (mRes?.ok) { const mData = await readJson(mRes); hubCaBrowseMonitoredItems = mData || []; }
-    } catch (_) { /* non-fatal */ }
+      // Refresh monitored items for button state — API returns { items: [...] }
+      try {
+        const mRes = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/monitored-items`);
+        if (mRes?.ok) { const mData = await readJson(mRes); hubCaBrowseMonitoredItems = mData?.items || []; }
+      } catch (_) { /* non-fatal */ }
     renderHubCaBrowseTab();
   } catch (error) {
     if (!hubCentralBrowseData) {

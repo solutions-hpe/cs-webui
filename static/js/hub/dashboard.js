@@ -6715,7 +6715,11 @@ async function initTsCentralApiTab(force = false) {
 async function loadHubCaBrowseData(force = false) {
   const tenantId = getActiveTenantId();
   const content = $("#ts-ca-content");
-  if (!tenantId || !content) return;
+  console.log("[loadHubCaBrowseData] tenantId:", tenantId, "content:", content, "force:", force);
+  if (!tenantId || !content) {
+    console.warn("[loadHubCaBrowseData] Early return - missing tenantId or content element");
+    return;
+  }
 
   const cached = loadHubCaBrowseCache(tenantId);
   if (cached && !force) {

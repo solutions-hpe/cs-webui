@@ -11680,8 +11680,8 @@ function renderTenantConfigPanel(data) {
     renderConfigSummaryRow("Site Mappings", { value: siteMappings.length ? `${siteMappings.length} mapped sites` : "—", detail: `${approved.filter(spoke => Object.keys(spoke.config?.site_mappings || {}).length > 0).length}/${approved.length || 0} spokes` }),
   ].join("");
 
-  const processingRows = data.processing?.islands?.length ? PROCESSING_FEATURES.map(feature => {
-    const counts = data.processing.islands.reduce((acc, item) => {
+  const processingRows = data.processing?.spokes?.length ? PROCESSING_FEATURES.map(feature => {
+    const counts = data.processing.spokes.reduce((acc, item) => {
       const mode = item.effective_modes?.[feature] || item.global_mode || data.processing.default_mode || "centralized";
       acc[mode] = (acc[mode] || 0) + 1;
       return acc;
@@ -15762,7 +15762,7 @@ async function loadSpokeProcessingMode() {
   const res = await apiFetch(`/api/${encodeURIComponent(activeSpokeModal.tenant_id)}/processing-summary`);
   if (!res || !res.ok) return;
   const summary = await res.json();
-  const spokeSummary = summary.islands.find(item => item.spoke_id === activeSpokeModal.spoke.id);
+  const spokeSummary = summary.spokes.find(item => item.spoke_id === activeSpokeModal.spoke.id);
   if (!spokeSummary) return;
   $("#mode-global") && ($("#mode-global").value = spokeSummary.global_mode || "centralized");
   const grid = $("#mode-features-grid");

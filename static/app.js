@@ -5659,8 +5659,90 @@ function connectWebSocket() {
 // ── Simulations top-level tabs ──────────────────────────────────────────
 const simTopPanels = ['simtop-checks', 'simtop-hardware', 'simtop-clients', 'simtop-sites', 'simtop-alerts', 'simtop-insights'];
 
+// Hub-synced monitored items for spoke — populated by pollSpokeHubMonitoredItems()
+let _spokeHubMonitoredItems = { items: [], has_sites: false, assigned_sites: [] };
+
+async function pollSpokeHubMonitoredItems() {
+  try {
+    const res = await apiFetch('/api/relay/monitored-items');
+    if (res?.ok) {
+      const data = await readJson(res);
+      if (data && Array.isArray(data.items)) {
+        _spokeHubMonitoredItems = data;
+        renderSpokeStatusTab();
+        renderSpokeMonitoredItems();
+      }
+    }
+  } catch (_) {}
+}
+
+function renderSpokeStatusTab() {
+  const container = document.getElementById('spoke-status-content');
+  if (!container) return;
+
+  const now = new Date().toLocaleTimeString();
+  const refreshEl = document.getElementById('spoke-status-last-refreshed');
+  if (refreshEl) refreshEl.textContent = `Last refreshed: ${now}`;
+
+  if (!_spokeHubMonitoredItems.has_sites) {
+    container.innerHTML = `<div class="central-empty">No site assigned to this spoke. Assign a site in the hub to sync monitoring data.</div>`;
+    return;
+  }
+
+  const tonePriority = { red: 0, yellow: 1, orange: 1, green: 2, gray: 3 };
+  const sortByTone = (a, b) => (tonePriority[a._tone] ?? 3) - (tonePriority[b._tone] ?? 3);
+
+  const dot = (tone) => {
+    const cls = tone === 'green' ? 'dot-pass' : tone === 'red' ? 'dot-fail' : tone === 'yellow' || tone === 'orange' ? 'dot-warn' : 'dot-unknown';
+    return `<span class="check-dot ${cls}"></span>`;
+  };
+  const badge = (tone, label) => {
+    const cls = tone === 'green' ? 'sim-pass' : tone === 'red' ? 'sim-fail' : tone === 'yellow' || tone === 'orange' ? 'sim-warn' : 'sim-unknown';
+    return `<span class="check-badge ${cls}">${escHtml(label)}</span>`;
+  };
+
+  const makeSection = (title, rows) => {
+    if (!rows.length) return `
+      <div class="setup-card" style="margin-bottom:0.75rem;">
+        <div style="font-weight:600;font-size:0.85rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:0.5rem;">${escHtml(title)}</div>
+        <div class="central-empty" style="padding:0.4rem 0;font-size:0.85rem;">None configured.</div>
+      </div>`;
+    const rowsHtml = rows.map((r) => `
+      <div class="check-row" style="cursor:default;">
+        ${dot(r._tone)}
+        <span class="check-name">${r._name}</span>
+        ${badge(r._tone, r._label)}
+      </div>`).join('');
+    return `
+      <div class="setup-card" style="margin-bottom:0.75rem;">
+        <div style="font-weight:600;font-size:0.85rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:0.5rem;">${escHtml(title)}</div>
+        <div class="sim-checks-list" style="border:none;padding:0;">${rowsHtml}</div>
+      </div>`;
+  };
+
+  const items = _spokeHubMonitoredItems.items || [];
+  const monRows = (type) => items
+    .filter((item) => item.type === type)
+    .map((item) => {
+      const isOk = item.status === 'ok' || !item.consecutive_failures;
+      const tone = isOk ? 'green' : 'red';
+      const label = isOk ? 'OK' : `Missing (${item.consecutive_failures || 0})`;
+      return { _tone: tone, _label: label, _name: escHtml(item.name || item.identifier || '—') };
+    })
+    .sort(sortByTone);
+
+  container.innerHTML =
+    makeSection('Sites', monRows('site')) +
+    makeSection('Alerts', monRows('alert')) +
+    makeSection('Insights', monRows('insight')) +
+    makeSection('Clients', monRows('client'));
+}
+
 function renderSpokeMonitoredItems() {
-  const checks = (currentSettings.monitored_checks || []);
+  // Use hub-synced items if available, fall back to local monitored_checks
+  const checks = _spokeHubMonitoredItems.has_sites
+    ? (_spokeHubMonitoredItems.items || [])
+    : (currentSettings.monitored_checks || []);
   const DEST = {
     site:    'spoke-monitored-sites-content',
     alert:   'spoke-monitored-alerts-content',
@@ -5715,6 +5797,7 @@ function activateSimTopTab(tabId = 'simtop-checks') {
     panel.classList.toggle('active', id === tabId);
     panel.classList.toggle('hidden', id !== tabId);
   });
+  if (tabId === 'simtop-checks') renderSpokeStatusTab();
   if (tabId === 'simtop-hardware') renderHwPanel();
   if (tabId === 'simtop-clients') renderCcPanel();
   renderSpokeMonitoredItems();
@@ -7568,6 +7651,11 @@ async function bootSpokeRuntime() {
   _spokeBooted = true;
   connectWebSocket();
   loadSimulations();
+  // Poll hub for monitored items every relay cycle (default 60s)
+  pollSpokeHubMonitoredItems();
+  setInterval(() => pollSpokeHubMonitoredItems(), 60_000);
+  // Wire spoke Status tab refresh button
+  document.getElementById('spoke-status-refresh-btn')?.addEventListener('click', () => pollSpokeHubMonitoredItems());
   try {
     const init = consumeInitPayload() || await requestJson('/api/init');
     if (init.proxmox) {

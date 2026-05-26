@@ -6715,6 +6715,7 @@ async function loadHubCaBrowseData(force = false) {
 
   const cached = loadHubCaBrowseCache(tenantId);
   if (cached && !force) {
+    content.innerHTML = '<div class="empty-state">Loading cached data…</div>';
     hubCentralBrowseData = cached;
     updateHubCaBrowsePills(cached);
     // Always refresh monitored items so button state is correct even on cache hits
@@ -7065,7 +7066,7 @@ async function openHubCaMonitorModal(type, payload) {
   if (!modal || !spokeSelect || !confirmBtn) return;
 
   if (title) title.textContent = `Monitor Site: ${payload?.name || "—"}`;
-  if (sub) sub.textContent = `Choose which spoke should monitor "${payload?.name || "—"}". The site will be added to that spoke's site mappings.`;
+  if (sub) sub.textContent = `Select which spoke should monitor this site. It will be added to that spoke's site mappings.`;
   if (msg) {
     msg.textContent = "";
     msg.style.color = "";
@@ -7147,11 +7148,17 @@ async function openHubCaMonitorModal(type, payload) {
       if (!saveRes?.ok) throw new Error(saveData?.detail || "Unable to save Central site mappings.");
 
       closeHubCaMonitorModal();
-      hubCentralData = null;
+      // Update hubCentralData with the fresh site_mappings so button state updates immediately
+      if (hubCentralData && typeof hubCentralData.central_sites_config === "object") {
+        hubCentralData.central_sites_config.site_mappings = siteMappings;
+      } else if (hubCentralData) {
+        hubCentralData.central_sites_config = { site_mappings: siteMappings };
+      }
       showToast(`"${payload.name}" added to monitoring.`, "ok");
-      // Load central data first (for site_mappings), then browse (for button state)
-      await loadHubCentralData(true).catch(() => {});
-      await loadHubCaBrowseData(true).catch(() => {});
+      // Re-render the browse tab to update button state
+      renderHubCaBrowseTab();
+      // Load fresh data in the background
+      loadHubCentralData(true).catch(() => {});
     } catch (error) {
       if (msg) {
         msg.textContent = error.message || "Error adding site to monitoring.";

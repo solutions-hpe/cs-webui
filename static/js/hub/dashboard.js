@@ -3357,12 +3357,97 @@ async function saveTenantGithubSettings() {
 }
 window.saveTenantGithubSettings = saveTenantGithubSettings;
 
+async function _loadTsOnboardingStatus(tenantId) {
+  const listEl = $("#ts-onboarding-psk-list");
+  const statusEl = $("#ts-onboarding-status");
+  const res = await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/onboarding-psk`);
+  if (!res?.ok) {
+    const detail = await readJson(res);
+    if (statusEl) statusEl.textContent = detail?.detail || "Unable to load PSK status.";
+    return;
+  }
+  const d = await res.json();
+  const psks = d.psks || [];
+  if (statusEl) statusEl.textContent = psks.length ? "" : "No PSKs configured — spokes require manual approval.";
+  if (!listEl) return;
+  if (psks.length === 0) {
+    listEl.innerHTML = "";
+    return;
+  }
+  listEl.innerHTML = psks.map((psk) => `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <code style="flex:1;font-size:12px;word-break:break-all;background:var(--bg-2,#f4f4f4);padding:4px 6px;border-radius:4px;">${escHtml(psk)}</code>
+      <button class="btn btn-sm btn-secondary ts-psk-copy-btn" data-psk="${escHtml(psk)}" type="button">Copy</button>
+      <button class="btn btn-sm btn-danger ts-psk-revoke-btn" data-psk="${escHtml(psk)}" type="button">Revoke</button>
+    </div>
+    <div class="form-hint" style="margin-bottom:8px;font-size:11px;">sudo bash &lt;(curl -fsSL https://raw.githubusercontent.com/solutions-hpe/client-sim/main/install-lxc.sh) --hub-url ${escHtml(window.location.origin)} --hub-tenant ${escHtml(tenantId)} --hub-psk ${escHtml(psk)}</div>
+  `).join("");
+  listEl.querySelectorAll(".ts-psk-copy-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      navigator.clipboard.writeText(btn.dataset.psk).then(() => {
+        btn.textContent = "Copied!";
+        setTimeout(() => { btn.textContent = "Copy"; }, 2000);
+      });
+    });
+  });
+  listEl.querySelectorAll(".ts-psk-revoke-btn").forEach((btn) => {
+    btn.addEventListener("click", () => _revokeTsOnboardingPsk(tenantId, btn.dataset.psk));
+  });
+}
+
+async function _generateTsOnboardingPsk(tenantId) {
+  const btn = $("#ts-onboarding-generate-btn");
+  const statusEl = $("#ts-onboarding-status");
+  if (btn) { btn.disabled = true; btn.textContent = "Adding…"; }
+  try {
+    const res = await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/onboarding-psk`, { method: "POST" });
+    if (!res?.ok) {
+      const detail = await readJson(res);
+      if (statusEl) statusEl.textContent = detail?.detail || "Unable to generate PSK.";
+      return;
+    }
+    await _loadTsOnboardingStatus(tenantId);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Add PSK"; }
+  }
+}
+
+async function _revokeTsOnboardingPsk(tenantId, psk) {
+  const statusEl = $("#ts-onboarding-status");
+  try {
+    const res = await apiFetch(`/api/tenant/${encodeURIComponent(tenantId)}/onboarding-psk`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ psk }),
+    });
+    if (!res?.ok) {
+      const d = await readJson(res);
+      if (statusEl) statusEl.textContent = d?.detail || "Failed to revoke PSK.";
+      return;
+    }
+    await _loadTsOnboardingStatus(tenantId);
+  } catch (e) {
+    if (statusEl) statusEl.textContent = "Failed to revoke PSK.";
+  }
+}
+
 function hydrateTenantSetupPanel(data = {}) {
   const github = data?.settings?.github || {};
   const configured = isConfiguredSecretValue(github.github_token_configured);
   const fields = getTenantGithubSettingsElements();
   setSecretInputConfigured(fields.token, configured);
   if (fields.tokenStatus) fields.tokenStatus.textContent = configured ? "Token configured" : "Token not configured";
+  
+  // Wire up PSK onboarding controls
+  const tenantId = data?.tenantId || currentTenantId;
+  const generateBtn = $("#ts-onboarding-generate-btn");
+  if (tenantId && canManageTenant(tenantId) && generateBtn) {
+    _loadTsOnboardingStatus(tenantId);
+    if (!generateBtn._bound) {
+      generateBtn._bound = true;
+      generateBtn.addEventListener("click", () => _generateTsOnboardingPsk(tenantId));
+    }
+  }
 }
 
 async function loadTenantDetailData(force = false) {
@@ -3609,6 +3694,17 @@ function renderTenantSetupPanel(data) {
           <thead><tr><th>Name</th><th>Hostname</th><th>Registered</th><th>Action</th></tr></thead>
           <tbody id="ts-pending-tbody"></tbody>
         </table>
+      </section>
+      <section class="setup-card">
+        <div class="setup-card-header">
+          <h2>Spoke Onboarding</h2>
+          <p>Generate a Pre-Shared Key to allow spokes to self-register without manual approval.</p>
+        </div>
+        <div id="ts-onboarding-psk-list"></div>
+        <div class="form-actions" style="margin-top:8px;">
+          <button id="ts-onboarding-generate-btn" class="btn btn-sm btn-secondary" type="button">Add PSK</button>
+        </div>
+        <p id="ts-onboarding-status" class="form-hint" style="margin-top:6px;"></p>
       </section>` : ""}
     </div>
   `;

@@ -3734,6 +3734,10 @@ async function loadHubSimulations(force = false) {
     const data = force || !cached ? await loadAggregateData("central") : cached;
     hubCentralData = data || { mode: "distributed", hub_central_config: {}, spokes: [] };
     aggregateCentralData = hubCentralData;
+    // Load monitored items if not yet loaded (needed for Status tab)
+    if (_hubMonitoredItemsData === null || force) {
+      await loadAndRenderHubMonitoredItems(force);
+    }
     if (hubSimActiveTab === "hub-simtop-hardware") {
       renderHubHwPanel();
       if (hubHwOpenCheckId) openHubHwDetail(hubHwOpenCheckId);

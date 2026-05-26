@@ -3643,12 +3643,41 @@ function renderTenantSetupPanel(data) {
   const disabled = canManageTenant(tenantId) ? '' : ' disabled';
   const apiBase = `${window.location.origin}/api/${tenantId}/spokes/{spoke_id}`;
   const accessNote = data.settingsError ? `<div class="tenant-detail-note">${escHtml(data.settingsError)}</div>` : "";
+  
+  // Config panel data
+  const spokes = data.spokes || [];
+  const approved = spokes.filter(spoke => spoke.status === "approved");
+  const siteMappings = uniqueValues(approved.map(spoke => Object.keys(spoke.config?.site_mappings || {})).flat());
+  const relayRows = [
+    renderConfigSummaryRow("Relay Enabled", summarizeConfigField(spokes, "relay_enabled")),
+    renderConfigSummaryRow("Relay Server URL", summarizeConfigField(spokes, "relay_server_url")),
+    renderConfigSummaryRow("Relay Poll Interval", summarizeConfigField(spokes, "relay_poll_interval")),
+    renderConfigSummaryRow("Relay Tenant Hint", summarizeConfigField(spokes, "relay_tenant_hint")),
+    renderConfigSummaryRow("Repo URL", summarizeConfigField(spokes, "repo_url")),
+    renderConfigSummaryRow("Repo Branch", summarizeConfigField(spokes, "repo_branch")),
+    renderConfigSummaryRow("Site Mappings", { value: siteMappings.length ? `${siteMappings.length} mapped sites` : "—", detail: `${approved.filter(spoke => Object.keys(spoke.config?.site_mappings || {}).length > 0).length}/${approved.length || 0} spokes` }),
+  ].join("");
+
+  const processingRows = data.processing?.spokes?.length ? PROCESSING_FEATURES.map(feature => {
+    const counts = data.processing.spokes.reduce((acc, item) => {
+      const mode = item.effective_modes?.[feature] || item.global_mode || data.processing.default_mode || "centralized";
+      acc[mode] = (acc[mode] || 0) + 1;
+      return acc;
+    }, {});
+    return `
+      <tr>
+        <td>${escHtml(feature.replace(/_/g, " "))}</td>
+        <td>${escHtml(data.processing.default_mode || "centralized")}</td>
+        <td>${escHtml(Object.entries(counts).map(([mode, count]) => `${mode}:${count}`).join(" • "))}</td>
+      </tr>
+    `;
+  }).join("") : '<tr><td colspan="3" class="empty-state">No processing summary available.</td></tr>';
 
   return `
     ${accessNote}
     <div class="tenant-detail-grid">
       <section class="setup-card">
-        <div class="setup-card-header"><h2>Tenant Setup</h2><p>Hub-managed settings for this tenant.</p></div>
+        <div class="setup-card-header"><h2>Tenant Info</h2><p>Hub-managed settings for this tenant.</p></div>
         <div class="setup-status-grid">
           <div class="setup-status-item"><span class="setup-status-label">Tenant Name</span><span class="setup-status-value">${escHtml(tenant.name || tenantId)}</span></div>
           <div class="setup-status-item"><span class="setup-status-label">Tenant ID</span><span class="setup-status-value"><code>${escHtml(tenant.id || tenantId)}</code></span></div>
@@ -3709,41 +3738,6 @@ function renderTenantSetupPanel(data) {
           <div id="processing-modes-msg" class="form-msg"></div>
         </div>
       </section>
-    </div>
-  `;
-}
-
-function renderTenantConfigPanel(data) {
-  const spokes = data.spokes || [];
-  const approved = spokes.filter(spoke => spoke.status === "approved");
-  const siteMappings = uniqueValues(approved.map(spoke => Object.keys(spoke.config?.site_mappings || {})).flat());
-  const relayRows = [
-    renderConfigSummaryRow("Relay Enabled", summarizeConfigField(spokes, "relay_enabled")),
-    renderConfigSummaryRow("Relay Server URL", summarizeConfigField(spokes, "relay_server_url")),
-    renderConfigSummaryRow("Relay Poll Interval", summarizeConfigField(spokes, "relay_poll_interval")),
-    renderConfigSummaryRow("Relay Tenant Hint", summarizeConfigField(spokes, "relay_tenant_hint")),
-    renderConfigSummaryRow("Repo URL", summarizeConfigField(spokes, "repo_url")),
-    renderConfigSummaryRow("Repo Branch", summarizeConfigField(spokes, "repo_branch")),
-    renderConfigSummaryRow("Site Mappings", { value: siteMappings.length ? `${siteMappings.length} mapped sites` : "—", detail: `${approved.filter(spoke => Object.keys(spoke.config?.site_mappings || {}).length > 0).length}/${approved.length || 0} spokes` }),
-  ].join("");
-
-  const processingRows = data.processing?.spokes?.length ? PROCESSING_FEATURES.map(feature => {
-    const counts = data.processing.spokes.reduce((acc, item) => {
-      const mode = item.effective_modes?.[feature] || item.global_mode || data.processing.default_mode || "centralized";
-      acc[mode] = (acc[mode] || 0) + 1;
-      return acc;
-    }, {});
-    return `
-      <tr>
-        <td>${escHtml(feature.replace(/_/g, " "))}</td>
-        <td>${escHtml(data.processing.default_mode || "centralized")}</td>
-        <td>${escHtml(Object.entries(counts).map(([mode, count]) => `${mode}:${count}`).join(" • "))}</td>
-      </tr>
-    `;
-  }).join("") : '<tr><td colspan="3" class="empty-state">No processing summary available.</td></tr>';
-
-  return `
-    <div class="tenant-detail-grid">
       <section class="setup-card">
         <div class="setup-card-header"><h2>Aggregated Spoke Config</h2><p>Common runtime configuration across spokes in this tenant.</p></div>
         <table class="data-table">
@@ -3775,10 +3769,9 @@ function renderTenantDetail(data = tenantDetailState.data[tenantDetailState.tena
   $("#tenant-detail-spokes-panel") && ($("#tenant-detail-spokes-panel").innerHTML = renderTenantSpokesPanel(data));
   $("#tenant-detail-commands-panel") && ($("#tenant-detail-commands-panel").innerHTML = renderTenantCommandsPanel(data));
   $("#tenant-detail-setup-panel") && ($("#tenant-detail-setup-panel").innerHTML = renderTenantSetupPanel(data));
-  $("#tenant-detail-config-panel") && ($("#tenant-detail-config-panel").innerHTML = renderTenantConfigPanel(data));
   hydrateTenantSetupPanel(data);  // For Setup tab and Spokes tab PSK onboarding
 
-  ["dashboard", "spokes", "commands", "setup", "config"].forEach(tabId => {
+  ["dashboard", "spokes", "commands", "setup"].forEach(tabId => {
     $(`.tenant-detail-tab[data-tenant-detail-tab="${tabId}"]`)?.classList.toggle("active", tenantDetailState.activeTab === tabId);
     $("#tenant-detail-" + tabId + "-panel")?.classList.toggle("hidden", tenantDetailState.activeTab !== tabId);
   });
@@ -3794,7 +3787,7 @@ async function openTenantDetail(tenantId, tabId = "dashboard", force = false) {
   tenantDetailState.activeTab = tabId;
   setTenantDetailVisible(true);
   updateHubRefreshPausedState();
-  ["dashboard", "spokes", "commands", "setup", "config"].forEach(panelId => {
+  ["dashboard", "spokes", "commands", "setup"].forEach(panelId => {
     const panel = $("#tenant-detail-" + panelId + "-panel");
     if (panel) panel.innerHTML = '<div class="empty-state">Loading…</div>';
   });

@@ -6875,22 +6875,29 @@ function renderHubCaInsightsTab(container, insights, search) {
     const devCount = insight.device_count ? `${insight.device_count} dev` : "";
     const cliCount = insight.client_count ? `${insight.client_count} client${insight.client_count !== 1 ? "s" : ""}` : "";
     const impacted = [devCount, cliCount].filter(Boolean).join(", ");
-    const desc = insight.description ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${escHtml(insight.description)}</div>` : "";
+    const tooltip = insight.description ? ` title="${escHtml(insight.description)}"` : "";
     const tsStr = insight.ts ? (() => { try { return new Date(insight.ts).toLocaleString(); } catch (_) { return ""; } })() : "";
     return `<tr>
-      <td><strong>${escHtml(insight.name || "—")}</strong>${desc}</td>
-      <td>${escHtml(catLabel)}</td>
-      <td>${escHtml(insight.site || "—")}</td>
-      <td style="font-size:11px;">${escHtml(impacted || "—")}</td>
-      <td style="color:var(--muted);font-size:0.8rem;">${escHtml(tsStr)}</td>
-      <td>${hubCaMonitorBtn("insight", { name: insight.name || "", site: insight.site || "" })}</td>
+      <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"${tooltip}><strong>${escHtml(insight.name || "—")}</strong></td>
+      <td style="white-space:nowrap;">${escHtml(catLabel)}</td>
+      <td style="white-space:nowrap;">${escHtml(insight.site || "—")}</td>
+      <td style="white-space:nowrap;font-size:11px;">${escHtml(impacted || "—")}</td>
+      <td style="white-space:nowrap;color:var(--muted);font-size:0.8rem;">${escHtml(tsStr)}</td>
+      <td style="white-space:nowrap;">${hubCaMonitorBtn("insight", { name: insight.name || "", site: insight.site || "" })}</td>
     </tr>`;
   }).join("");
   container.innerHTML = `
-    <div class="setup-card" style="overflow-x:auto;">
-      <table class="data-table">
-        <thead><tr><th>Insight</th><th>Category</th><th>Site</th><th>Impacted</th><th>Time</th><th></th></tr></thead>
-        <tbody>${rows}</tbody>
+    <div class="setup-card" style="padding:0;overflow-x:auto;">
+      <table class="data-table" style="margin:0;width:100%;">
+        <thead><tr>
+          <th style="padding:6px 10px;">Insight</th>
+          <th style="padding:6px 10px;white-space:nowrap;">Category</th>
+          <th style="padding:6px 10px;white-space:nowrap;">Site</th>
+          <th style="padding:6px 10px;white-space:nowrap;">Impacted</th>
+          <th style="padding:6px 10px;white-space:nowrap;">Time</th>
+          <th style="padding:6px 10px;"></th>
+        </tr></thead>
+        <tbody style="font-size:0.85rem;">${rows}</tbody>
       </table>
     </div>`;
   attachHubCaMonitorButtons(container);

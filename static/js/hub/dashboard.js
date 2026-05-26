@@ -1136,6 +1136,12 @@ function renderHubMonitoredItems(items = [], tenantId = "") {
 
   const makeTable = (typeItems, type) => {
     if (!typeItems.length) return "";
+    // Only show Identifier column if at least one item has a distinct identifier
+    const showIdent = typeItems.some((item) => {
+      const n = (item.name || item.identifier || "").trim();
+      const id = (item.identifier || "").trim();
+      return id && id !== n;
+    });
     const rows = typeItems.map((item) => {
       const isOk = item.status === "ok" || !item.consecutive_failures;
       const failures = item.consecutive_failures || 0;
@@ -1146,13 +1152,12 @@ function renderHubMonitoredItems(items = [], tenantId = "") {
       const statusBadge = isOk
         ? `<span style="display:inline-flex;align-items:center;gap:5px;color:#01A982;font-weight:600;font-size:0.82rem;" title="${escHtml(dotTitle)}"><span style="width:8px;height:8px;border-radius:50%;background:#01A982;flex-shrink:0;"></span>Reporting</span>`
         : `<span style="display:inline-flex;align-items:center;gap:5px;color:#FC5A5A;font-weight:600;font-size:0.82rem;" title="${escHtml(dotTitle)}"><span style="width:8px;height:8px;border-radius:50%;background:#FC5A5A;flex-shrink:0;"></span>Missing (${failures})</span>`;
-      // Only show Identifier column when it differs from Name
       const name = item.name || item.identifier || "—";
       const ident = item.identifier || "—";
-      const identCell = ident !== name ? `<td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;">${escHtml(ident)}</td>` : `<td></td>`;
+      const identCell = showIdent ? `<td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;">${escHtml(ident)}</td>` : "";
       return `
         <tr>
-          <td style="white-space:nowrap;"><strong>${escHtml(name)}</strong></td>
+          <td style="white-space:nowrap;font-weight:600;">${escHtml(name)}</td>
           ${identCell}
           <td style="white-space:nowrap;">${statusBadge}</td>
           <td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;">${escHtml(lastSeen)}</td>
@@ -1162,6 +1167,7 @@ function renderHubMonitoredItems(items = [], tenantId = "") {
           </td>
         </tr>`;
     }).join("");
+    const identHeader = showIdent ? `<th style="padding:5px 10px;">Identifier</th>` : "";
     return `
       <div class="setup-card" style="margin-bottom:1rem;padding:0;">
         <div style="padding:10px 16px 6px;border-bottom:1px solid var(--border);">
@@ -1171,7 +1177,7 @@ function renderHubMonitoredItems(items = [], tenantId = "") {
           <table class="data-table" style="margin:0;width:100%;">
             <thead><tr>
               <th style="padding:5px 10px;">Name</th>
-              <th style="padding:5px 10px;">Identifier</th>
+              ${identHeader}
               <th style="padding:5px 10px;">Status</th>
               <th style="padding:5px 10px;white-space:nowrap;">Last Seen</th>
               <th style="padding:5px 10px;"></th>

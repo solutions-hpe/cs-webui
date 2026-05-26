@@ -6730,11 +6730,12 @@ async function loadHubCaBrowseData(force = false) {
     renderHubCaBrowseTab();
     scheduleHubCaBrowseRefresh();
     return;
-  } else if (!cached) {
-    hubCentralBrowseData = null;
-    resetHubCaBrowsePills();
-    content.innerHTML = '<div class="empty-state">Loading Central data…</div>';
   }
+  
+  // Clear template placeholder and show loading message
+  hubCentralBrowseData = null;
+  resetHubCaBrowsePills();
+  content.innerHTML = '<div class="empty-state">Loading Central data…</div>';
 
   try {
     const params = new URLSearchParams({ tenant_id: tenantId });

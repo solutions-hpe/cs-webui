@@ -14927,26 +14927,34 @@ function renderHubCaAlertsTab(container, alerts, search) {
     `<button class="btn btn-small ${activeCat === cat ? "btn-primary" : "btn-secondary"} ca-cat-filter" data-cat="${escHtml(cat)}" style="margin:0 2px 4px;">${escHtml(cat)}</button>`
   ).join("");
 
+  const tdP = "padding:6px 10px;";
   const rows = filtered.map((alert) => {
     const tsStr = alert.ts ? (() => { try { return new Date(alert.ts).toLocaleString(); } catch (_) { return String(alert.ts); } })() : "—";
-    const catBadge = alert.category ? `<span class="badge badge-grey" style="font-size:10px;">${escHtml(alert.category)}</span>` : "";
-    const devType = alert.device_type ? `<span style="font-size:11px;color:var(--muted);">${escHtml(alert.device_type)}</span>` : "";
-    const detailStr = alert.detail ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${escHtml(alert.detail)}</div>` : "";
+    const catBadge = alert.category ? `<span class="badge badge-grey" style="font-size:10px;margin-left:4px;">${escHtml(alert.category)}</span>` : "";
+    const devType = alert.device_type ? escHtml(alert.device_type) : "—";
+    const detailStr = alert.detail ? `<div style="font-size:11px;color:var(--muted);line-height:1.3;">${escHtml(alert.detail)}</div>` : "";
     return `<tr>
-      <td><strong>${escHtml(alert.name || "—")}</strong> ${catBadge}${detailStr}</td>
-      <td>${escHtml(alert.site || "—")}</td>
-      <td>${sevBadge(alert.severity)}</td>
-      <td>${devType}</td>
-      <td style="color:var(--muted);font-size:0.8rem;">${escHtml(tsStr)}</td>
-      <td>${hubCaMonitorBtn("alert", { name: alert.name || "", site: alert.site || "" })}</td>
+      <td style="width:45%;${tdP}"><strong>${escHtml(alert.name || "—")}</strong>${catBadge}${detailStr}</td>
+      <td style="white-space:nowrap;${tdP}">${escHtml(alert.site || "—")}</td>
+      <td style="white-space:nowrap;${tdP}">${sevBadge(alert.severity)}</td>
+      <td style="font-size:11px;color:var(--muted);white-space:nowrap;${tdP}">${devType}</td>
+      <td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;${tdP}">${escHtml(tsStr)}</td>
+      <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("alert", { name: alert.name || "", site: alert.site || "" })}</td>
     </tr>`;
   }).join("");
 
   container.innerHTML = `
-    <div style="margin-bottom:8px;">${catPills}</div>
-    ${filtered.length ? `<div class="setup-card" style="overflow-x:auto;">
-      <table class="data-table">
-        <thead><tr><th>Alert</th><th>Site</th><th>Severity</th><th>Device Type</th><th>Time</th><th></th></tr></thead>
+    <div style="margin-bottom:4px;">${catPills}</div>
+    ${filtered.length ? `<div class="setup-card" style="overflow-x:auto;padding:0;">
+      <table class="data-table" style="font-size:0.82rem;margin:0;width:100%;">
+        <thead><tr>
+          <th style="width:45%;padding:5px 10px;">Alert</th>
+          <th style="padding:5px 10px;">Site</th>
+          <th style="padding:5px 10px;">Severity</th>
+          <th style="padding:5px 10px;">Device Type</th>
+          <th style="padding:5px 10px;">Time</th>
+          <th style="padding:5px 10px;"></th>
+        </tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>` : `<div class="empty-state">${search || activeCat !== "All" ? "No alerts match the filter." : "No active alerts."}</div>`}`;

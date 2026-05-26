@@ -1,6 +1,7 @@
 // Spoke application module extracted from static/app.js.
 
 import { WEBUI_MODE } from '../state.js';
+import { escHtml, showInlineMessage } from '../utils.js';
 
 function consumeInitPayload() {
   const init = window.__CS_WEBUI_INIT__ || null;
@@ -1006,23 +1007,6 @@ function unlockSettingsInputs() {
 
 function setInputValueIfIdle(input, value) {
   if (input && !input.matches(':focus')) input.value = value || '';
-}
-
-function showInlineMessage(element, text, isError, timeout = 5000) {
-  if (!element) return;
-  clearTimeout(element._timer);
-  if (!text) {
-    element.textContent = '';
-    element.className = 'settings-message hidden';
-    return;
-  }
-  element.textContent = text;
-  element.className = `settings-message ${isError ? 'error' : 'success'}`;
-  if (timeout > 0) {
-    element._timer = setTimeout(() => {
-      element.className = 'settings-message hidden';
-    }, timeout);
-  }
 }
 
 function normalizeSpokeAuthProvider(provider) {
@@ -2715,14 +2699,6 @@ async function requestJson(url, options = {}) {
   return payload;
 }
 
-function escHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\x22/g, '&quot;')
-    .replace(/\x27/g, '&#39;');
-}
 
 function parseJsonList(value) {
   if (Array.isArray(value)) return value;

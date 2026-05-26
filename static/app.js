@@ -8880,6 +8880,59 @@ function hubAggregateClientCount(spokes) {
   });
 }
 
+function renderHubSitesTab() {
+  const container = document.getElementById("hub-monitored-sites-content");
+  if (!container) return;
+
+  const now = new Date().toLocaleTimeString();
+  const refreshEl = document.getElementById("hub-monitored-sites-refreshed");
+  if (refreshEl) refreshEl.textContent = `Last refreshed: ${now}`;
+
+  const summary = hubCentralMonitorSummary(hubCentralData);
+  const sites = summary?.sites || [];
+
+  if (!sites.length) {
+    container.innerHTML = `<div class="central-empty">No sites assigned to spokes yet. Assign sites in Setup → Central API → Sites.</div>`;
+    return;
+  }
+
+  const rows = sites.map((site) => {
+    const spokeName = site.assigned_spoke ? escHtml(site.assigned_spoke.display_name || "—") : '<span style="color:var(--muted)">Unassigned</span>';
+    const spokeOnline = site.assigned_spoke?.spoke_online;
+    const spokeStatus = site.assigned_spoke
+      ? (spokeOnline
+          ? `<span class="badge badge-success">Online</span>`
+          : `<span class="badge badge-failure">Offline</span>`)
+      : `<span class="badge" style="background:var(--muted-bg);color:var(--muted);">—</span>`;
+    const checkTone = site.check_status?.tone || "gray";
+    const checkLabel = site.check_status?.label || "UNKNOWN";
+    const checkBadge = checkTone === "green"
+      ? `<span class="badge badge-success">${escHtml(checkLabel)}</span>`
+      : checkTone === "red"
+        ? `<span class="badge badge-failure">${escHtml(checkLabel)}</span>`
+        : `<span class="badge" style="background:var(--muted-bg);color:var(--muted);">${escHtml(checkLabel)}</span>`;
+    const centralSite = site.central_site ? escHtml(site.central_site) : `<span style="color:var(--muted)">—</span>`;
+    return `
+      <tr>
+        <td><strong>${escHtml(site.wsite)}</strong></td>
+        <td>${centralSite}</td>
+        <td>${spokeName}</td>
+        <td>${spokeStatus}</td>
+        <td>${checkBadge}</td>
+      </tr>`;
+  }).join("");
+
+  container.innerHTML = `
+    <div class="setup-card" style="margin-bottom:1rem;">
+      <div style="overflow-x:auto;">
+        <table class="data-table">
+          <thead><tr><th>Site</th><th>Central Site</th><th>Assigned Spoke</th><th>Spoke</th><th>Checks</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
 function activateHubSimTopTab(tabId = "hub-simtop-checks") {
   document.querySelectorAll(".hub-simtop-subtab").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.hubsimtop === tabId);
@@ -8894,7 +8947,8 @@ function activateHubSimTopTab(tabId = "hub-simtop-checks") {
   if (tabId === "hub-simtop-checks") renderHubSimChecksList();
   if (tabId === "hub-simtop-hardware") { renderHubHwPanel(); }
   if (tabId === "hub-simtop-clients") { renderHubCcPanel(); }
-  if (tabId === "hub-simtop-sites" || tabId === "hub-simtop-alerts" || tabId === "hub-simtop-insights") loadAndRenderHubMonitoredItems();
+  if (tabId === "hub-simtop-sites") renderHubSitesTab();
+  if (tabId === "hub-simtop-alerts" || tabId === "hub-simtop-insights") loadAndRenderHubMonitoredItems();
 }
 
 function renderHubSimChecksList() {
@@ -17528,7 +17582,7 @@ function bindEvents() {
   });
   $("#hub-sim-refresh-btn")?.addEventListener("click", () => loadHubSimulations(true));
   $("#hub-monitored-refresh-btn")?.addEventListener("click", () => loadAndRenderHubMonitoredItems(true));
-  $("#hub-monitored-sites-refresh-btn")?.addEventListener("click", () => loadAndRenderHubMonitoredItems(true));
+  $("#hub-monitored-sites-refresh-btn")?.addEventListener("click", () => renderHubSitesTab());
   $("#hub-monitored-alerts-refresh-btn")?.addEventListener("click", () => loadAndRenderHubMonitoredItems(true));
   $("#refresh-clients-btn")?.addEventListener("click", () => loadClients(true));
   $("#refresh-hub-central-btn")?.addEventListener("click", () => loadHubCentralData(true));

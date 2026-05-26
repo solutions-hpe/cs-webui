@@ -3549,6 +3549,7 @@ function renderTenantDashboardPanel(data, summary) {
 }
 
 function renderTenantSpokesPanel(data) {
+  const tenantId = data.tenantId;
   const rows = [...data.spokes]
     .sort((a, b) => spokePrimaryLabel(a).localeCompare(spokePrimaryLabel(b)))
     .map(spoke => `
@@ -3565,13 +3566,35 @@ function renderTenantSpokesPanel(data) {
     .join("");
 
   return `
-    <section class="setup-card">
-      <div class="setup-card-header"><h2>Tenant Spokes</h2><p>Status, heartbeat, and telemetry summary for every spoke assigned to this tenant.</p></div>
-      <table class="data-table">
-        <thead><tr><th>Spoke</th><th>Status</th><th>Spoke ID</th><th>Last Sync</th><th>Clients</th><th>VMs</th><th></th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="7" class="empty-state">No spokes assigned to this tenant.</td></tr>'}</tbody>
-      </table>
-    </section>
+    <div class="tenant-detail-grid">
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>Tenant Spokes</h2><p>Status, heartbeat, and telemetry summary for every spoke assigned to this tenant.</p></div>
+        <table class="data-table">
+          <thead><tr><th>Spoke</th><th>Status</th><th>Spoke ID</th><th>Last Sync</th><th>Clients</th><th>VMs</th><th></th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="7" class="empty-state">No spokes assigned to this tenant.</td></tr>'}</tbody>
+        </table>
+      </section>
+      ${canManageTenant(tenantId) ? `
+      <section class="setup-card" id="ts-pending-card" style="display:none;">
+        <div class="setup-card-header"><h2>⏳ Pending Spokes</h2><p>Spokes waiting to be approved for this tenant.</p></div>
+        <div id="ts-pending-key-banner" class="key-once-banner hidden"></div>
+        <table class="data-table">
+          <thead><tr><th>Name</th><th>Hostname</th><th>Registered</th><th>Action</th></tr></thead>
+          <tbody id="ts-pending-tbody"></tbody>
+        </table>
+      </section>
+      <section class="setup-card">
+        <div class="setup-card-header">
+          <h2>Spoke Onboarding</h2>
+          <p>Generate a Pre-Shared Key to allow spokes to self-register without manual approval.</p>
+        </div>
+        <div id="ts-onboarding-psk-list"></div>
+        <div class="form-actions" style="margin-top:8px;">
+          <button id="ts-onboarding-generate-btn" class="btn btn-sm btn-secondary" type="button">Add PSK</button>
+        </div>
+        <p id="ts-onboarding-status" class="form-hint" style="margin-top:6px;"></p>
+      </section>` : ""}
+    </div>
   `;
 }
 
@@ -3686,26 +3709,6 @@ function renderTenantSetupPanel(data) {
           <div id="processing-modes-msg" class="form-msg"></div>
         </div>
       </section>
-      ${canManageTenant(tenantId) ? `
-      <section class="setup-card" id="ts-pending-card" style="display:none;">
-        <div class="setup-card-header"><h2>⏳ Pending Spokes</h2><p>Spokes waiting to be approved for this tenant.</p></div>
-        <div id="ts-pending-key-banner" class="key-once-banner hidden"></div>
-        <table class="data-table">
-          <thead><tr><th>Name</th><th>Hostname</th><th>Registered</th><th>Action</th></tr></thead>
-          <tbody id="ts-pending-tbody"></tbody>
-        </table>
-      </section>
-      <section class="setup-card">
-        <div class="setup-card-header">
-          <h2>Spoke Onboarding</h2>
-          <p>Generate a Pre-Shared Key to allow spokes to self-register without manual approval.</p>
-        </div>
-        <div id="ts-onboarding-psk-list"></div>
-        <div class="form-actions" style="margin-top:8px;">
-          <button id="ts-onboarding-generate-btn" class="btn btn-sm btn-secondary" type="button">Add PSK</button>
-        </div>
-        <p id="ts-onboarding-status" class="form-hint" style="margin-top:6px;"></p>
-      </section>` : ""}
     </div>
   `;
 }
@@ -3773,7 +3776,7 @@ function renderTenantDetail(data = tenantDetailState.data[tenantDetailState.tena
   $("#tenant-detail-commands-panel") && ($("#tenant-detail-commands-panel").innerHTML = renderTenantCommandsPanel(data));
   $("#tenant-detail-setup-panel") && ($("#tenant-detail-setup-panel").innerHTML = renderTenantSetupPanel(data));
   $("#tenant-detail-config-panel") && ($("#tenant-detail-config-panel").innerHTML = renderTenantConfigPanel(data));
-  hydrateTenantSetupPanel(data);
+  hydrateTenantSetupPanel(data);  // For Setup tab and Spokes tab PSK onboarding
 
   ["dashboard", "spokes", "commands", "setup", "config"].forEach(tabId => {
     $(`.tenant-detail-tab[data-tenant-detail-tab="${tabId}"]`)?.classList.toggle("active", tenantDetailState.activeTab === tabId);

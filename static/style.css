@@ -1096,6 +1096,9 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 /* Central empty state */
 .central-empty { text-align: center; color: var(--muted); font-style: italic; padding: 48px 16px; }
 
+.hub-central-note { margin: 16px 0 0; }
+.hub-central-browser-actions { justify-content: flex-start; margin-top: 12px; }
+
 /* Setup section spacing */
 .setup-section-gap { margin-top: 24px; }
 

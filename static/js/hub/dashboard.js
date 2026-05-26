@@ -35,6 +35,7 @@ let aggregateUsbProvisioningStatus = null;
 let aggregateCentralData = null;
 let centralWebhookStatus = null;
 let hubCentralData = null;
+let hubCentralTopSubtab = "hcm-config";
 let hubCentralActiveSubtab = "hcs-sites";
 let hubTenantSetupActiveSubtab = "ts-central-api";
 let hubCentralSiteOpen = null;
@@ -1655,7 +1656,7 @@ async function refreshAfterSpokeApproval(tenantId = currentTenantId) {
       await loadHubSimulations(true);
       await loadClients(true);
       await loadVmServer(true);
-      await loadCentral(true);
+      await loadHubCentralMonitoring(true);
       await loadSpokes(true);
       await loadTenantSetup(true);
       await loadConfig(true);
@@ -2881,7 +2882,7 @@ async function refreshCurrentView(force = false) {
   } else if (activeTab === "vm-server") {
     await loadVmServer(force);
   } else if (activeTab === "central") {
-    await loadHubCentralData(force);
+    await loadHubCentralMonitoring(force);
   } else if (activeTab === "spokes") {
     await loadSpokes(force);
   } else if (activeTab === "reseed") {
@@ -3786,6 +3787,10 @@ function renderTenantSetupPanel(data) {
           <thead><tr><th>Setting</th><th>Observed Value</th><th>Coverage</th></tr></thead>
           <tbody>${relayRows}</tbody>
         </table>
+      </section>
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>Config File Editor</h2><p>Edit simulation.conf and push changes to GitHub repository.</p></div>
+        <div id="setup-sim-config-editor"></div>
       </section>
     </div>
   `;
@@ -6082,12 +6087,102 @@ function loadHubCentralCache() {
   catch (_) { return null; }
 }
 
+function hubCentralConfigSummary() {
+  const data = aggregateCentralData && typeof aggregateCentralData === "object"
+    ? aggregateCentralData
+    : { mode: "distributed", hub_central_config: {}, spokes: [] };
+  const config = data.hub_central_config && typeof data.hub_central_config === "object"
+    ? data.hub_central_config
+    : {};
+  const tenant = tenants.find((item) => item.id === getActiveTenantId()) || {};
+  const summary = hubCentralMonitorSummary(hubCentralData || data);
+  const configured = Boolean(
+    config.configured
+    || String(config.cluster_url || "").trim()
+    || String(config.client_id || "").trim()
+    || String(config.customer_id || tenant.aruba_cid || "").trim()
+    || isConfiguredSecretValue(config.access_token_configured)
+    || isConfiguredSecretValue(config.client_secret_configured)
+  );
+  const spokes = Array.isArray(data.spokes) ? data.spokes : [];
+  const connectedCount = spokes.filter((item) => item.central_status?.token_valid).length;
+  return { data, config, tenant, summary, configured, spokes, connectedCount };
+}
+
+function updateHubCentralMonitoringPills() {
+  const configuredPill = $("#hcm-configured-pill");
+  const versionPill = $("#hcm-version-pill");
+  const sitesPill = $("#hcm-sites-pill");
+  if (!configuredPill && !versionPill && !sitesPill) return;
+  const { config, summary, configured } = hubCentralConfigSummary();
+  if (configuredPill) configuredPill.textContent = `Configured: ${configured ? "Yes" : "No"}`;
+  if (versionPill) versionPill.textContent = `API: ${config.api_version || "—"}`;
+  if (sitesPill) sitesPill.textContent = `${summary.sites.length} sites`;
+}
+
+function renderHubCentralMonitoringConfig() {
+  const configContainer = $("#hcm-config-content");
+  const contextContainer = $("#hcm-context-content");
+  if (!configContainer || !contextContainer) return;
+  const row = (label, value, muted = false) => `
+    <div class="setup-status-item">
+      <span class="setup-status-label">${escHtml(label)}</span>
+      <span class="setup-status-value${muted ? " muted" : ""}">${escHtml(value)}</span>
+    </div>`;
+
+  if (!currentUser || !currentTenantId) {
+    configContainer.innerHTML = [
+      row("Configured", "Sign in and select a tenant.", true),
+      row("Cluster URL", "—", true),
+      row("Client ID", "—", true),
+      row("Customer ID", "—", true),
+      row("API Version", "—", true),
+    ].join("");
+    contextContainer.innerHTML = [
+      row("Selected Tenant", "—", true),
+      row("Mode", "—", true),
+      row("Connected Spokes", "—", true),
+      row("Monitored Sites", "—", true),
+    ].join("");
+    updateHubCentralMonitoringPills();
+    return;
+  }
+
+  const { data, config, tenant, summary, configured, spokes, connectedCount } = hubCentralConfigSummary();
+  configContainer.innerHTML = [
+    row("Configured", configured ? "Yes" : "No"),
+    row("Cluster URL", config.cluster_url || "—", !config.cluster_url),
+    row("Client ID", config.client_id || "—", !config.client_id),
+    row("Customer ID", config.customer_id || tenant.aruba_cid || "—", !(config.customer_id || tenant.aruba_cid)),
+    row("API Version", config.api_version || "—", !config.api_version),
+  ].join("");
+  contextContainer.innerHTML = [
+    row("Selected Tenant", tenant.name || currentTenantId),
+    row("Mode", data.mode || "distributed"),
+    row("Connected Spokes", `${connectedCount}/${spokes.length}`),
+    row("Monitored Sites", String(summary.sites.length)),
+  ].join("");
+  updateHubCentralMonitoringPills();
+}
+
+function activateHubCentralTopSubtab(subtab = "hcm-config") {
+  hubCentralTopSubtab = subtab || "hcm-config";
+  $$(".hub-central-top-subtab").forEach((button) => button.classList.toggle("active", button.dataset.subtab === hubCentralTopSubtab));
+  ["hcm-config-panel", "hcm-browse-panel"].forEach((panelId) => {
+    document.getElementById(panelId)?.classList.toggle("hidden", panelId !== `${hubCentralTopSubtab}-panel`);
+  });
+  if (hubCentralTopSubtab === "hcm-browse") {
+    if (!hubCentralData && currentTenantId && currentUser) loadHubCentralData().catch(() => {});
+    else renderHubCentralStatus();
+    return;
+  }
+  if (!aggregateCentralData && currentTenantId && currentUser) loadHubCentralMonitoring().catch(() => {});
+  else renderHubCentralMonitoringConfig();
+}
+
 function applyHubCentralData(data) {
   hubCentralData = data;
-  const spokes = Array.isArray(data?.spokes) ? data.spokes : [];
-  const siteCount = hubCentralMonitorSummary(data).sites.length;
-  $("#hcs-spokes-pill") && ($("#hcs-spokes-pill").textContent = `${spokes.length} spokes`);
-  $("#hcs-sites-pill") && ($("#hcs-sites-pill").textContent = `${siteCount} sites`);
+  updateHubCentralMonitoringPills();
   renderHubCentralStatus();
 }
 
@@ -6095,6 +6190,8 @@ async function loadHubCentralData(force = false) {
   const container = $("#hcs-overview");
   if (!container) return;
   if (!currentTenantId || !currentUser) {
+    hubCentralData = null;
+    updateHubCentralMonitoringPills();
     container.innerHTML = '<div class="empty-state">Sign in and select a tenant.</div>';
     return;
   }
@@ -6143,6 +6240,28 @@ async function loadHubCentralData(force = false) {
   saveCaches(data);
 }
 
+async function loadHubCentralMonitoring(force = false) {
+  const configContainer = $("#hcm-config-content");
+  const contextContainer = $("#hcm-context-content");
+  if (!configContainer || !contextContainer) return;
+  if (!currentTenantId || !currentUser) {
+    aggregateCentralData = null;
+    renderHubCentralMonitoringConfig();
+    if (hubCentralTopSubtab === "hcm-browse") await loadHubCentralData(force);
+    return;
+  }
+  if (force || !aggregateCentralData) {
+    configContainer.innerHTML = '<div class="empty-state">Loading…</div>';
+    contextContainer.innerHTML = '<div class="empty-state">Loading…</div>';
+  }
+  const [centralData] = await Promise.all([
+    force || !aggregateCentralData ? loadAggregateData("central") : Promise.resolve(aggregateCentralData),
+    loadHubCentralData(force).catch(() => null),
+  ]);
+  aggregateCentralData = centralData || aggregateCentralData || { mode: "distributed", hub_central_config: {}, spokes: [] };
+  renderHubCentralMonitoringConfig();
+}
+
 function renderHubCentralStatus() {
   if (hubCentralActiveSubtab === "hcs-sites") renderHubCentralSites();
   else if (hubCentralActiveSubtab === "hcs-alerts") renderHubCentralAlerts();
@@ -6158,11 +6277,11 @@ function renderHubCentralSites() {
     const state = typeof hubTokenState === "object" ? (hubTokenState?.state || "unknown") : (hubTokenState || "unknown");
     const detail = typeof hubTokenState === "object" ? (hubTokenState?.detail || "") : "";
     const stateLabels = {
-      not_configured: "Central API credentials are not configured. Go to Tenant Setup → Central to add them.",
+      not_configured: "Central API credentials are not configured. Go to Tenant Setup → Central API to add them.",
       stale: "Central polling data is stale (no successful poll in the last 5 minutes). The hub may still be starting up.",
-      error: `Central API authentication failed. ${detail ? `Error: ${detail}` : "Check credentials in Tenant Setup → Central and use the Test Connection button."}`,
+      error: `Central API authentication failed. ${detail ? `Error: ${detail}` : "Check credentials in Tenant Setup → Central API and use the Test Connection button."}`,
     };
-    const message = stateLabels[state] || `Central API status: ${state}. Check credentials in Tenant Setup → Central.`;
+    const message = stateLabels[state] || `Central API status: ${state}. Check credentials in Tenant Setup → Central API.`;
     container.innerHTML = `<div class="empty-state" style="color:#c0392b;">${escHtml(message)}</div>`;
     return;
   }
@@ -9479,7 +9598,7 @@ function connectHubWebSocket() {
       if (activeTab === "simulations") scheduleReload("ws-simulations", () => loadHubSimulations(true));
       if (activeTab === "clients") scheduleReload("ws-clients", () => loadClients(true));
       if (activeTab === "vm-server") scheduleReload("ws-vm-server", () => loadVmServer(true));
-      if (activeTab === "central") scheduleReload("ws-hub-central", () => loadHubCentralData(true));
+      if (activeTab === "central") scheduleReload("ws-hub-central", () => loadHubCentralMonitoring(true));
       if (activeTab === "spokes") scheduleReload("ws-spokes", () => loadSpokes(true));
       if (activeTab === "reseed") scheduleReload("ws-reseed", () => ensureSpokes(true).then(() => renderHubReseedPanel()));
       if (activeTab === "tenant-setup") scheduleReload("ws-tenant-setup", () => loadTenantSetup(true));
@@ -9717,6 +9836,12 @@ function bindEvents() {
       return;
     }
 
+    const hCentralTopBtn = event.target.closest(".hub-central-top-subtab");
+    if (hCentralTopBtn) {
+      activateHubCentralTopSubtab(hCentralTopBtn.dataset.subtab);
+      return;
+    }
+
     const hCentralBtn = event.target.closest(".hub-central-subtab");
     if (hCentralBtn) {
       hubCentralActiveSubtab = hCentralBtn.dataset.subtab;
@@ -9729,6 +9854,12 @@ function bindEvents() {
       } else {
         renderHubCentralStatus();
       }
+      return;
+    }
+
+    if (event.target.closest("[data-open-central-browser]")) {
+      showTab("hub-tenant-setup", { source: "tenant" });
+      activateHubTenantSetupSubtab("ts-central-api", true).catch(() => {});
       return;
     }
 
@@ -9881,7 +10012,7 @@ function bindEvents() {
   $("#hub-status-refresh-btn")?.addEventListener("click", () => { loadAndRenderHubMonitoredItems(true).then(() => renderHubStatusTab()); });
   $("#hub-monitored-alerts-refresh-btn")?.addEventListener("click", () => loadAndRenderHubMonitoredItems(true));
   $("#refresh-clients-btn")?.addEventListener("click", () => loadClients(true));
-  $("#refresh-hub-central-btn")?.addEventListener("click", () => loadHubCentralData(true));
+  $("#refresh-hub-central-btn")?.addEventListener("click", () => loadHubCentralMonitoring(true));
   $("#refresh-vm-server-btn")?.addEventListener("click", () => loadVmServer(true));
   $("#refresh-spokes-btn")?.addEventListener("click", () => loadSpokes(true));
   $("#refresh-commands-btn")?.addEventListener("click", loadCommands);
@@ -9967,6 +10098,7 @@ export {
   renderHubSitesTab,
   renderHubCentral,
   loadHubCentralData,
+  loadHubCentralMonitoring,
   loadHubConfig,
   loadTenantPendingSpokes,
   loadSetup,

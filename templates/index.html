@@ -134,7 +134,7 @@
         <div class="tenant-context-nav-row2">
           <button class="tab active" data-tab="hub-simulations" type="button">Simulations</button>
           <button class="tab" data-tab="hub-clients" type="button">Clients</button>
-          <button class="tab" data-tab="hub-central" type="button">Central</button>
+          <button class="tab" data-tab="hub-central" type="button">Central Monitoring</button>
           <button class="tab" data-tab="hub-vm-server" type="button">VM Server</button>
           <span class="tab-nav-sep" aria-hidden="true"></span>
           <button class="tab tab-nav-right" role="tab" aria-selected="false" data-tab="hub-tenant-setup" type="button">⚙ Setup</button>
@@ -332,36 +332,74 @@
     <main id="tab-hub-central" class="page tab-content hidden">
       <div class="page-toolbar">
         <div class="toolbar-stats">
-          <span class="stat-pill" id="hcs-spokes-pill">— spokes</span>
-          <span class="stat-pill" id="hcs-sites-pill">— sites</span>
+          <span class="stat-pill" id="hcm-configured-pill">Configured: —</span>
+          <span class="stat-pill" id="hcm-version-pill">API: —</span>
+          <span class="stat-pill" id="hcm-sites-pill">— sites</span>
         </div>
         <div class="toolbar-actions">
           <button id="refresh-hub-central-btn" class="btn btn-primary btn-small" type="button">Refresh</button>
         </div>
       </div>
       <nav class="setup-subnav" role="tablist">
-        <button class="setup-subtab hub-central-subtab active" data-subtab="hcs-sites" role="tab" type="button">Sites</button>
-        <button class="setup-subtab hub-central-subtab" data-subtab="hcs-alerts" role="tab" type="button">Alerts</button>
-        <button class="setup-subtab hub-central-subtab" data-subtab="hcs-clients" role="tab" type="button">Clients</button>
+        <button class="setup-subtab hub-central-top-subtab active" data-subtab="hcm-config" role="tab" type="button">Configuration</button>
+        <button class="setup-subtab hub-central-top-subtab" data-subtab="hcm-browse" role="tab" type="button">Browse Data</button>
       </nav>
-      <div id="hcs-sites-panel">
-        <div id="hcs-overview"></div>
-        <div id="hcs-site-detail" class="hidden">
-          <div class="page-toolbar" style="margin-bottom:12px;">
-            <button id="hcs-detail-back" class="btn btn-secondary btn-small" type="button">← Back</button>
-            <div style="flex:1;">
-              <div id="hcs-detail-title" style="font-weight:700;font-size:1.1rem;"></div>
-              <div id="hcs-detail-sub" style="color:var(--muted);font-size:0.85rem;"></div>
+      <div id="hcm-config-panel">
+        <div class="tenant-detail-grid">
+          <section class="setup-card">
+            <div class="setup-card-header"><h2>Central Monitoring</h2><p>Hub-level Central API configuration for the selected tenant.</p></div>
+            <div id="hcm-config-content" class="setup-status-grid">
+              <div class="setup-status-item"><span class="setup-status-label">Configured</span><span class="setup-status-value">—</span></div>
+              <div class="setup-status-item"><span class="setup-status-label">Cluster URL</span><span class="setup-status-value">—</span></div>
+              <div class="setup-status-item"><span class="setup-status-label">Client ID</span><span class="setup-status-value">—</span></div>
+              <div class="setup-status-item"><span class="setup-status-label">Customer ID</span><span class="setup-status-value">—</span></div>
+              <div class="setup-status-item"><span class="setup-status-label">API Version</span><span class="setup-status-value">—</span></div>
             </div>
-          </div>
-          <div id="hcs-detail-content"></div>
+          </section>
+          <section class="setup-card">
+            <div class="setup-card-header"><h2>Monitoring Context</h2><p>Keep Central API browsing available from the main hub workflow.</p></div>
+            <div id="hcm-context-content" class="setup-status-grid">
+              <div class="setup-status-item"><span class="setup-status-label">Selected Tenant</span><span class="setup-status-value">—</span></div>
+              <div class="setup-status-item"><span class="setup-status-label">Mode</span><span class="setup-status-value">—</span></div>
+              <div class="setup-status-item"><span class="setup-status-label">Connected Spokes</span><span class="setup-status-value">—</span></div>
+              <div class="setup-status-item"><span class="setup-status-label">Monitored Sites</span><span class="setup-status-value">—</span></div>
+            </div>
+            <div class="tenant-detail-note hub-central-note">Use <strong>Browse Data</strong> for the monitored hub views, or open the full <strong>Tenant Setup → Central API</strong> browser for sites, alerts, insights, clients, and devices.</div>
+            <div class="form-actions hub-central-browser-actions">
+              <button class="btn btn-secondary btn-small" data-open-central-browser="true" type="button">Open Central API Browser</button>
+            </div>
+          </section>
         </div>
       </div>
-      <div id="hcs-alerts-panel" class="hidden">
-        <div id="hcs-alerts-content"></div>
-      </div>
-      <div id="hcs-clients-panel" class="hidden">
-        <div id="hcs-clients-content"></div>
+      <div id="hcm-browse-panel" class="hidden">
+        <div class="tenant-detail-note hub-central-note">Browse monitored Central data here. For the full Setup browser, including insights and devices, use <strong>Open Central API Browser</strong>.</div>
+        <div class="form-actions hub-central-browser-actions">
+          <button class="btn btn-secondary btn-small" data-open-central-browser="true" type="button">Open Central API Browser</button>
+        </div>
+        <nav class="setup-subnav" role="tablist">
+          <button class="setup-subtab hub-central-subtab active" data-subtab="hcs-sites" role="tab" type="button">Sites</button>
+          <button class="setup-subtab hub-central-subtab" data-subtab="hcs-alerts" role="tab" type="button">Alerts</button>
+          <button class="setup-subtab hub-central-subtab" data-subtab="hcs-clients" role="tab" type="button">Clients</button>
+        </nav>
+        <div id="hcs-sites-panel">
+          <div id="hcs-overview"></div>
+          <div id="hcs-site-detail" class="hidden">
+            <div class="page-toolbar" style="margin-bottom:12px;">
+              <button id="hcs-detail-back" class="btn btn-secondary btn-small" type="button">← Back</button>
+              <div style="flex:1;">
+                <div id="hcs-detail-title" style="font-weight:700;font-size:1.1rem;"></div>
+                <div id="hcs-detail-sub" style="color:var(--muted);font-size:0.85rem;"></div>
+              </div>
+            </div>
+            <div id="hcs-detail-content"></div>
+          </div>
+        </div>
+        <div id="hcs-alerts-panel" class="hidden">
+          <div id="hcs-alerts-content"></div>
+        </div>
+        <div id="hcs-clients-panel" class="hidden">
+          <div id="hcs-clients-content"></div>
+        </div>
       </div>
     </main>
 

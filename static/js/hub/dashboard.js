@@ -3676,7 +3676,14 @@ function renderTenantSetupPanel(data) {
 
   return `
     ${accessNote}
-    <div class="tenant-detail-grid">
+    <div class="setup-subtabs">
+      <button class="setup-subtab active" onclick="switchSetupSubTab('info')">Info</button>
+      <button class="setup-subtab" onclick="switchSetupSubTab('api')">API</button>
+      <button class="setup-subtab" onclick="switchSetupSubTab('notifications')">Notifications</button>
+      <button class="setup-subtab" onclick="switchSetupSubTab('processing')">Processing</button>
+      <button class="setup-subtab" onclick="switchSetupSubTab('config')">Config</button>
+    </div>
+    <div id="setup-subtab-info" class="setup-subtab-content tenant-detail-grid">
       <section class="setup-card">
         <div class="setup-card-header"><h2>Tenant Info</h2><p>Hub-managed settings for this tenant.</p></div>
         <div class="setup-status-grid">
@@ -3686,6 +3693,8 @@ function renderTenantSetupPanel(data) {
           <div class="setup-status-item"><span class="setup-status-label">Created</span><span class="setup-status-value">${escHtml(fmtDate(tenant.created_at))}</span></div>
         </div>
       </section>
+    </div>
+    <div id="setup-subtab-api" class="setup-subtab-content tenant-detail-grid hidden">
       <section class="setup-card">
         <div class="setup-card-header"><h2>Central Monitoring</h2><p>Configure Central API credentials for this tenant.</p></div>
         <table class="data-table">
@@ -3717,6 +3726,8 @@ function renderTenantSetupPanel(data) {
           <div id="tenant-github-msg" class="form-msg"></div>
         </div>
       </section>
+    </div>
+    <div id="setup-subtab-notifications" class="setup-subtab-content tenant-detail-grid hidden">
       <section class="setup-card">
         <div class="setup-card-header"><h2>Notifications</h2></div>
         <table class="data-table">
@@ -3729,6 +3740,8 @@ function renderTenantSetupPanel(data) {
           </tbody>
         </table>
       </section>
+    </div>
+    <div id="setup-subtab-processing" class="setup-subtab-content tenant-detail-grid hidden">
       <section class="setup-card">
         <div class="setup-card-header"><h2>Processing Modes</h2><p>Choose which credentials stay centralized on the hub versus distributed to spokes.</p></div>
         <div class="setup-form processing-modes-section mt-3">
@@ -3759,13 +3772,6 @@ function renderTenantSetupPanel(data) {
         </div>
       </section>
       <section class="setup-card">
-        <div class="setup-card-header"><h2>Aggregated Spoke Config</h2><p>Common runtime configuration across spokes in this tenant.</p></div>
-        <table class="data-table">
-          <thead><tr><th>Setting</th><th>Observed Value</th><th>Coverage</th></tr></thead>
-          <tbody>${relayRows}</tbody>
-        </table>
-      </section>
-      <section class="setup-card">
         <div class="setup-card-header"><h2>Processing Defaults</h2><p>Tenant default mode plus effective spoke distribution per feature.</p></div>
         <table class="data-table">
           <thead><tr><th>Feature</th><th>Tenant Default</th><th>Effective Modes</th></tr></thead>
@@ -3773,7 +3779,29 @@ function renderTenantSetupPanel(data) {
         </table>
       </section>
     </div>
+    <div id="setup-subtab-config" class="setup-subtab-content tenant-detail-grid hidden">
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>Aggregated Spoke Config</h2><p>Common runtime configuration across spokes in this tenant.</p></div>
+        <table class="data-table">
+          <thead><tr><th>Setting</th><th>Observed Value</th><th>Coverage</th></tr></thead>
+          <tbody>${relayRows}</tbody>
+        </table>
+      </section>
+    </div>
   `;
+}
+
+function switchSetupSubTab(subtabId) {
+  const subtabs = document.querySelectorAll('.setup-subtab');
+  const contents = document.querySelectorAll('.setup-subtab-content');
+  
+  subtabs.forEach(tab => {
+    tab.classList.toggle('active', tab.textContent.toLowerCase() === subtabId);
+  });
+  
+  contents.forEach(content => {
+    content.classList.toggle('hidden', !content.id.endsWith(subtabId));
+  });
 }
 
 function renderTenantDetail(data = tenantDetailState.data[tenantDetailState.tenantId]) {

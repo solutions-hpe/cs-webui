@@ -2625,3 +2625,42 @@ body.mode-spoke .hub-only  { display: none !important; }
 /* ── Hub VM Server spoke list — compact card overrides ─────────── */
 .hub-vmserver-spoke-card { padding: 10px 20px; }
 .hub-vmserver-spoke-card .panel-header { margin-bottom: 2px; }
+
+/* ── Setup sub-tabs ─────────────────────────────────────────────── */
+.setup-subtabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 1.5rem;
+  padding: 0 1rem;
+}
+
+.setup-subtab {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  padding: 10px 18px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.setup-subtab:hover { color: var(--text); }
+
+.setup-subtab.active {
+  color: var(--hpe-green);
+  border-bottom-color: var(--hpe-green);
+}
+
+.setup-subtab-content {
+  animation: fadeIn 0.2s ease-in;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

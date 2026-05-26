@@ -3807,6 +3807,176 @@ function switchSetupSubTab(subtabId) {
   contents.forEach(content => {
     content.classList.toggle('hidden', !content.id.endsWith(subtabId));
   });
+  
+  // Load simulation config when Config sub-tab is shown
+  if (subtabId === 'config') {
+    renderSetupSimulationConfigEditor();
+  }
+}
+
+function renderSetupSimulationConfigEditor() {
+  const container = $("#setup-sim-config-editor");
+  if (!container) return;
+  const tenantId = currentTenantId || getActiveTenantId();
+  if (!tenantId) {
+    container.innerHTML = '<div class="empty-state">No tenant selected.</div>';
+    return;
+  }
+  const disabled = canManageTenant(tenantId) ? "" : " disabled";
+  const fetched = hubSimulationConfState.fetchedAt ? fmtDate(hubSimulationConfState.fetchedAt) : "—";
+  
+  if (hubSimulationConfState.loading) {
+    container.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+        <div>
+          <div style="font-weight:600;">configs/simulation.conf</div>
+          <div class="muted" style="font-size:0.85rem;">Last fetched from GitHub: ${escHtml(fetched)}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button id="setup-sim-config-refresh-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+          <button id="setup-sim-config-save-btn" class="btn btn-primary btn-small" type="button"${disabled}>Save to GitHub</button>
+        </div>
+      </div>
+      <div id="setup-sim-config-msg" class="form-msg" style="margin-bottom:10px;"></div>
+      <div class="empty-state">Loading simulation.conf from GitHub…</div>
+    `;
+    return;
+  }
+  
+  if (hubSimulationConfState.error) {
+    container.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+        <div>
+          <div style="font-weight:600;">configs/simulation.conf</div>
+          <div class="muted" style="font-size:0.85rem;">Last fetched from GitHub: ${escHtml(fetched)}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button id="setup-sim-config-refresh-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+          <button id="setup-sim-config-save-btn" class="btn btn-primary btn-small" type="button"${disabled}>Save to GitHub</button>
+        </div>
+      </div>
+      <div id="setup-sim-config-msg" class="form-msg" style="margin-bottom:10px;"></div>
+      <div class="empty-state">${escHtml(hubSimulationConfState.error)}</div>
+    `;
+    wireSetupSimConfigButtons(tenantId);
+    return;
+  }
+  
+  const sections = hubSimulationConfState.sections || {};
+  const orderedSections = ["simulation", "server", "address"].filter((section) => Object.prototype.hasOwnProperty.call(sections, section));
+  const slotSections = HUB_SIM_FIXED_SECTION_ORDER.filter((section) => /^s\d+$/.test(section));
+  
+  container.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+      <div>
+        <div style="font-weight:600;">configs/simulation.conf</div>
+        <div class="muted" style="font-size:0.85rem;">Last fetched from GitHub: ${escHtml(fetched)}</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <button id="setup-sim-config-refresh-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+        <button id="setup-sim-config-save-btn" class="btn btn-primary btn-small" type="button"${disabled}>Save to GitHub</button>
+      </div>
+    </div>
+    <div id="setup-sim-config-msg" class="form-msg" style="margin-bottom:10px;"></div>
+    <div id="setup-sim-config-form">
+      ${orderedSections.map((section, index) => renderHubSimulationSection(section, sections[section] || {}, { open: index === 0 })).join("")}
+      ${slotSections.map((section, index) => renderHubSimulationSection(section, sections[section] || {}, { open: index === 0 && orderedSections.length === 0 })).join("")}
+    </div>
+  `;
+  
+  wireSetupSimConfigButtons(tenantId);
+}
+
+function wireSetupSimConfigButtons(tenantId) {
+  const refreshBtn = $("#setup-sim-config-refresh-btn");
+  const saveBtn = $("#setup-sim-config-save-btn");
+  
+  if (refreshBtn && !refreshBtn._bound) {
+    refreshBtn._bound = true;
+    refreshBtn.addEventListener("click", async () => {
+      await loadSetupSimulationConf(tenantId, true);
+    });
+  }
+  
+  if (saveBtn && !saveBtn._bound) {
+    saveBtn._bound = true;
+    saveBtn.addEventListener("click", async () => {
+      await saveSetupSimulationConf(tenantId);
+    });
+  }
+}
+
+async function loadSetupSimulationConf(tenantId, force = false) {
+  if (!tenantId || !currentUser) return null;
+  if (hubSimulationConfState.tenantId !== tenantId) resetHubSimulationConfState(tenantId);
+  if (!force && hubSimulationConfState.loaded) {
+    renderSetupSimulationConfigEditor();
+    return hubSimulationConfState;
+  }
+  hubSimulationConfState.loading = true;
+  hubSimulationConfState.error = "";
+  renderSetupSimulationConfigEditor();
+  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/config/simulation-conf`);
+  const data = await readJson(res);
+  if (!res || !res.ok) {
+    hubSimulationConfState.loading = false;
+    hubSimulationConfState.loaded = false;
+    hubSimulationConfState.error = data?.detail || "Unable to load simulation.conf from GitHub.";
+    renderSetupSimulationConfigEditor();
+    return null;
+  }
+  const parsed = parseHubSimulationIni(data?.content || "");
+  hubSimulationConfState = {
+    tenantId,
+    loaded: true,
+    loading: false,
+    rawContent: data?.content || "",
+    sha: data?.sha || "",
+    fetchedAt: data?.fetched_at || "",
+    sections: parsed.sections,
+    sectionOrder: parsed.sectionOrder,
+    keyOrder: parsed.keyOrder,
+    error: "",
+  };
+  renderSetupSimulationConfigEditor();
+  return hubSimulationConfState;
+}
+
+function collectSetupSimulationConfContent() {
+  const form = $("#setup-sim-config-form");
+  if (!form) return hubSimulationConfState.rawContent || "";
+  const sections = JSON.parse(JSON.stringify(hubSimulationConfState.sections || {}));
+  form.querySelectorAll("[data-section][data-key]").forEach((input) => {
+    const section = input.dataset.section;
+    const key = input.dataset.key;
+    if (!sections[section]) sections[section] = {};
+    if (input.type === "checkbox") {
+      sections[section][key] = input.checked ? (input.dataset.on || "on") : (input.dataset.off || "off");
+      return;
+    }
+    sections[section][key] = input.value.trim();
+  });
+  return serializeHubSimulationIni(sections, hubSimulationConfState.sectionOrder, hubSimulationConfState.keyOrder);
+}
+
+async function saveSetupSimulationConf(tenantId) {
+  if (!canManageTenant(tenantId)) {
+    setFormMessage("setup-sim-config-msg", "Tenant Viewer access is read-only.", false);
+    return;
+  }
+  if (!tenantId) return;
+  setFormMessage("setup-sim-config-msg", "Saving to GitHub…", true);
+  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/config/simulation-conf`, {
+    method: "PUT",
+    body: { content: collectSetupSimulationConfContent() },
+  });
+  const data = await readJson(res);
+  if (!res || !res.ok) {
+    setFormMessage("setup-sim-config-msg", data?.detail || "Unable to save simulation.conf.", false);
+    return;
+  }
+  await loadSetupSimulationConf(tenantId, true);
+  setFormMessage("setup-sim-config-msg", `Saved to GitHub. Repo sync queued for ${data?.synced_spokes ?? 0} spoke(s).`, true);
 }
 
 function renderTenantDetail(data = tenantDetailState.data[tenantDetailState.tenantId]) {

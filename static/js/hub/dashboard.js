@@ -6998,7 +6998,7 @@ async function openHubCaMonitorModal(type, payload) {
     }
     const name = payload?.name || payload?.hostname || payload?.mac || "—";
     const identifier = type === "client"
-      ? (payload?.mac || payload?.hostname || "")
+      ? (payload?.mac || payload?.hostname || payload?.site || payload?.name || "")
       : (payload?.name || "");
     if (!identifier) {
       showToast("Cannot monitor: missing identifier.", "error");

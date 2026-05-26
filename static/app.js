@@ -8880,8 +8880,85 @@ function hubAggregateClientCount(spokes) {
   });
 }
 
+function renderHubStatusTab() {
+  const container = document.getElementById("hub-status-content");
+  if (!container) return;
+
+  const now = new Date().toLocaleTimeString();
+  const refreshEl = document.getElementById("hub-status-last-refreshed");
+  if (refreshEl) refreshEl.textContent = `Last refreshed: ${now}`;
+
+  // Priority order: red=0, yellow=1, green=2, gray=3
+  const tonePriority = { red: 0, yellow: 1, orange: 1, green: 2, gray: 3 };
+  const sortByTone = (a, b) => (tonePriority[a._tone] ?? 3) - (tonePriority[b._tone] ?? 3);
+
+  const dot = (tone) => {
+    const cls = tone === "green" ? "dot-pass" : tone === "red" ? "dot-fail" : tone === "yellow" || tone === "orange" ? "dot-warn" : "dot-unknown";
+    return `<span class="check-dot ${cls}"></span>`;
+  };
+  const badge = (tone, label) => {
+    const cls = tone === "green" ? "sim-pass" : tone === "red" ? "sim-fail" : tone === "yellow" || tone === "orange" ? "sim-warn" : "sim-unknown";
+    return `<span class="check-badge ${cls}">${escHtml(label)}</span>`;
+  };
+
+  const makeSection = (title, rows) => {
+    if (!rows.length) return `
+      <div class="setup-card" style="margin-bottom:0.75rem;">
+        <div style="font-weight:600;font-size:0.85rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:0.5rem;">${escHtml(title)}</div>
+        <div class="central-empty" style="padding:0.4rem 0;font-size:0.85rem;">None configured.</div>
+      </div>`;
+    const rowsHtml = rows.map((r) => `
+      <div class="check-row" style="cursor:default;">
+        ${dot(r._tone)}
+        <span class="check-name">${r._name}</span>
+        ${badge(r._tone, r._label)}
+        ${r._detail ? `<span class="check-detail">${r._detail}</span>` : ""}
+      </div>`).join("");
+    return `
+      <div class="setup-card" style="margin-bottom:0.75rem;">
+        <div style="font-weight:600;font-size:0.85rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:0.5rem;">${escHtml(title)}</div>
+        <div class="sim-checks-list" style="border:none;padding:0;">${rowsHtml}</div>
+      </div>`;
+  };
+
+  // — Sites (from hubCentralData assigned sites) —
+  const summary = hubCentralMonitorSummary(hubCentralData);
+  const siteRows = (summary?.sites || []).map((site) => {
+    const tone = site.check_status?.tone || "gray";
+    const label = site.check_status?.label || "UNKNOWN";
+    const spokeName = site.assigned_spoke?.display_name || "Unassigned";
+    return { _tone: tone, _label: label, _name: escHtml(site.wsite), _detail: escHtml(spokeName) };
+  }).sort(sortByTone);
+
+  // — Hardware (from hubAggregateHardware) —
+  const hwChecks = hubAggregateHardware(hubCentralData?.spokes || []);
+  const hwRows = hwChecks.map((hw) => {
+    const tone = hw.total > 0 ? "red" : "green";
+    const label = hw.total > 0 ? `${hw.total} DOWN` : "CLEAR";
+    return { _tone: tone, _label: label, _name: escHtml(hw.name), _detail: "" };
+  }).sort(sortByTone);
+
+  // — Monitored items (alerts, insights, clients) from cached data —
+  const items = Array.isArray(_hubMonitoredItemsData) ? _hubMonitoredItemsData : [];
+  const monRows = (type) => items
+    .filter((item) => item.type === type)
+    .map((item) => {
+      const isOk = item.status === "ok" || !item.consecutive_failures;
+      const tone = isOk ? "green" : "red";
+      const label = isOk ? "OK" : `Missing (${item.consecutive_failures || 0})`;
+      return { _tone: tone, _label: label, _name: escHtml(item.name || item.identifier || "—"), _detail: "" };
+    })
+    .sort(sortByTone);
+
+  container.innerHTML =
+    makeSection("Sites", siteRows) +
+    makeSection("Hardware", hwRows) +
+    makeSection("Alerts", monRows("alert")) +
+    makeSection("Insights", monRows("insight")) +
+    makeSection("Clients", monRows("client"));
+}
+
 function renderHubSitesTab() {
-  const container = document.getElementById("hub-monitored-sites-content");
   if (!container) return;
 
   const now = new Date().toLocaleTimeString();
@@ -8944,9 +9021,9 @@ function activateHubSimTopTab(tabId = "hub-simtop-checks") {
     panel.classList.toggle("hidden", id !== tabId);
   });
   hubSimActiveTab = tabId;
-  if (tabId === "hub-simtop-checks") renderHubSimChecksList();
+  if (tabId === "hub-simtop-checks") renderHubStatusTab();
   if (tabId === "hub-simtop-hardware") { renderHubHwPanel(); }
-  if (tabId === "hub-simtop-clients") { renderHubCcPanel(); }
+  if (tabId === "hub-simtop-clients") loadAndRenderHubMonitoredItems();
   if (tabId === "hub-simtop-sites") renderHubSitesTab();
   if (tabId === "hub-simtop-alerts" || tabId === "hub-simtop-insights") loadAndRenderHubMonitoredItems();
 }
@@ -9060,7 +9137,7 @@ function renderHubMonitoredItems(items = [], tenantId = "") {
   const EMPTY  = { site: "No monitored sites configured.", alert: "No monitored alerts configured.", insight: "No monitored insights configured.", client: "No monitored clients configured." };
 
   const now = new Date().toLocaleTimeString();
-  ["hub-monitored-last-refreshed", "hub-monitored-sites-refreshed", "hub-monitored-alerts-refreshed"].forEach((id) => {
+  ["hub-monitored-last-refreshed", "hub-monitored-sites-refreshed", "hub-monitored-alerts-refreshed", "hub-monitored-clients-refreshed"].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.textContent = `Last refreshed: ${now}`;
   });
@@ -11644,11 +11721,8 @@ async function loadDashboard(force = false) {
 async function loadHubSimulations(force = false) {
   if (!currentTenantId || !currentUser) {
     hubCentralData = null;
-    const refreshEl = document.getElementById("hub-sim-last-refreshed");
-    if (refreshEl) refreshEl.textContent = "Last refreshed: —";
-    renderHubSimChecksList();
+    renderHubStatusTab();
     renderHubHwPanel();
-    renderHubCcPanel();
     return;
   }
   try {
@@ -11656,17 +11730,13 @@ async function loadHubSimulations(force = false) {
     const data = force || !cached ? await loadAggregateData("central") : cached;
     hubCentralData = data || { mode: "distributed", hub_central_config: {}, spokes: [] };
     aggregateCentralData = hubCentralData;
-    const refreshEl = document.getElementById("hub-sim-last-refreshed");
-    if (refreshEl) refreshEl.textContent = `Last refreshed: ${new Date().toLocaleTimeString()}`;
     if (hubSimActiveTab === "hub-simtop-hardware") {
       renderHubHwPanel();
       if (hubHwOpenCheckId) openHubHwDetail(hubHwOpenCheckId);
-    } else if (hubSimActiveTab === "hub-simtop-clients") {
-      renderHubCcPanel();
-      if (hubCcOpenWsite) openHubCcDetail(hubCcOpenWsite);
+    } else if (hubSimActiveTab === "hub-simtop-sites") {
+      renderHubSitesTab();
     } else {
-      renderHubSimChecksList();
-      if (hubSimOpenCheckId) openHubSimDetail(hubSimOpenCheckId);
+      renderHubStatusTab();
     }
   } catch (err) {
     const emptyEl = document.getElementById("hub-sim-checks-empty");
@@ -17583,6 +17653,8 @@ function bindEvents() {
   $("#hub-sim-refresh-btn")?.addEventListener("click", () => loadHubSimulations(true));
   $("#hub-monitored-refresh-btn")?.addEventListener("click", () => loadAndRenderHubMonitoredItems(true));
   $("#hub-monitored-sites-refresh-btn")?.addEventListener("click", () => renderHubSitesTab());
+  $("#hub-monitored-clients-refresh-btn")?.addEventListener("click", () => loadAndRenderHubMonitoredItems(true));
+  $("#hub-status-refresh-btn")?.addEventListener("click", () => { loadAndRenderHubMonitoredItems(true).then(() => renderHubStatusTab()); });
   $("#hub-monitored-alerts-refresh-btn")?.addEventListener("click", () => loadAndRenderHubMonitoredItems(true));
   $("#refresh-clients-btn")?.addEventListener("click", () => loadClients(true));
   $("#refresh-hub-central-btn")?.addEventListener("click", () => loadHubCentralData(true));

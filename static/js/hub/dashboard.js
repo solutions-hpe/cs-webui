@@ -1138,35 +1138,45 @@ function renderHubMonitoredItems(items = [], tenantId = "") {
     if (!typeItems.length) return "";
     const rows = typeItems.map((item) => {
       const isOk = item.status === "ok" || !item.consecutive_failures;
-      const dotClass = isOk ? "check-dot dot-pass" : "check-dot dot-fail";
-      const dotTitle = isOk
-        ? `Last seen: ${item.last_seen ? new Date(item.last_seen * 1000).toLocaleString() : "—"}`
-        : `Missing for ${item.consecutive_failures} consecutive check${item.consecutive_failures === 1 ? "" : "s"}`;
-      const lastSeen = item.last_seen ? new Date(item.last_seen * 1000).toLocaleString() : "—";
       const failures = item.consecutive_failures || 0;
+      const lastSeen = item.last_seen ? new Date(item.last_seen * 1000).toLocaleString() : "—";
+      const dotTitle = isOk
+        ? `Last seen: ${lastSeen}`
+        : `Missing for ${failures} consecutive check${failures === 1 ? "" : "s"}`;
       const statusBadge = isOk
-        ? `<span class="badge badge-success">Reporting</span>`
-        : `<span class="badge badge-failure">Missing (${failures})</span>`;
+        ? `<span style="display:inline-flex;align-items:center;gap:5px;color:#01A982;font-weight:600;font-size:0.82rem;" title="${escHtml(dotTitle)}"><span style="width:8px;height:8px;border-radius:50%;background:#01A982;flex-shrink:0;"></span>Reporting</span>`
+        : `<span style="display:inline-flex;align-items:center;gap:5px;color:#FC5A5A;font-weight:600;font-size:0.82rem;" title="${escHtml(dotTitle)}"><span style="width:8px;height:8px;border-radius:50%;background:#FC5A5A;flex-shrink:0;"></span>Missing (${failures})</span>`;
+      // Only show Identifier column when it differs from Name
+      const name = item.name || item.identifier || "—";
+      const ident = item.identifier || "—";
+      const identCell = ident !== name ? `<td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;">${escHtml(ident)}</td>` : `<td></td>`;
       return `
         <tr>
-          <td><span class="${dotClass}" title="${escHtml(dotTitle)}"></span></td>
-          <td><strong>${escHtml(item.name || item.identifier || "—")}</strong></td>
-          <td>${escHtml(item.identifier || "—")}</td>
-          <td>${statusBadge}</td>
-          <td style="color:var(--muted);font-size:0.8rem;">${escHtml(lastSeen)}</td>
-          <td>
+          <td style="white-space:nowrap;"><strong>${escHtml(name)}</strong></td>
+          ${identCell}
+          <td style="white-space:nowrap;">${statusBadge}</td>
+          <td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;">${escHtml(lastSeen)}</td>
+          <td style="white-space:nowrap;">
             <button class="btn btn-small btn-secondary hub-monitored-remove-btn"
               data-item-id="${escHtml(item.id)}" type="button">Remove</button>
           </td>
         </tr>`;
     }).join("");
     return `
-      <div class="setup-card" style="margin-bottom:1rem;">
-        <h4 style="margin:0 0 0.5rem 0;color:var(--muted);font-size:0.85rem;text-transform:uppercase;letter-spacing:0.05em;">${escHtml(LABELS[type])}</h4>
+      <div class="setup-card" style="margin-bottom:1rem;padding:0;">
+        <div style="padding:10px 16px 6px;border-bottom:1px solid var(--border);">
+          <h4 style="margin:0;color:var(--muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:0.05em;">${escHtml(LABELS[type])}</h4>
+        </div>
         <div style="overflow-x:auto;">
-          <table class="data-table">
-            <thead><tr><th></th><th>Name</th><th>Identifier</th><th>Status</th><th>Last Seen</th><th></th></tr></thead>
-            <tbody>${rows}</tbody>
+          <table class="data-table" style="margin:0;width:100%;">
+            <thead><tr>
+              <th style="padding:5px 10px;">Name</th>
+              <th style="padding:5px 10px;">Identifier</th>
+              <th style="padding:5px 10px;">Status</th>
+              <th style="padding:5px 10px;white-space:nowrap;">Last Seen</th>
+              <th style="padding:5px 10px;"></th>
+            </tr></thead>
+            <tbody style="font-size:0.85rem;">${rows}</tbody>
           </table>
         </div>
       </div>`;

@@ -3634,6 +3634,7 @@ function renderTenantSetupPanel(data) {
   const tenantId = data.tenantId;
   const tenant = data.settings?.tenant || getTenantMeta(tenantId);
   const aruba = data.settings?.aruba || {};
+  const github = data.settings?.github || {};
   const notifications = data.settings?.notifications || {};
   const processingModes = {
     central_api: data.settings?.processing_modes?.central_api || 'centralized',
@@ -3686,7 +3687,7 @@ function renderTenantSetupPanel(data) {
         </div>
       </section>
       <section class="setup-card">
-        <div class="setup-card-header"><h2>Aruba Central</h2></div>
+        <div class="setup-card-header"><h2>Aruba Central API</h2><p>Configure Central API credentials for this tenant.</p></div>
         <table class="data-table">
           <tbody>
             <tr><td>Configured</td><td>${escHtml(aruba.configured ? "Yes" : "No")}</td></tr>
@@ -3696,6 +3697,25 @@ function renderTenantSetupPanel(data) {
             <tr><td>API Version</td><td>${escHtml(aruba.api_version || "—")}</td></tr>
           </tbody>
         </table>
+      </section>
+      <section class="setup-card">
+        <div class="setup-card-header"><h2>GitHub API</h2><p>Configure GitHub repository and token for simulation configs.</p></div>
+        <div class="setup-form">
+          <div class="form-group">
+            <label class="form-label" for="tenant-github-sim-repo-url">Simulation Repo URL</label>
+            <input id="tenant-github-sim-repo-url" type="url" class="form-input" value="${escHtml(github.sim_repo_url || "")}" placeholder="https://github.com/owner/repo.git" onblur="window.saveTenantGithubSettings && window.saveTenantGithubSettings()"${disabled}>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="tenant-github-sim-repo-branch">Simulation Repo Branch</label>
+            <input id="tenant-github-sim-repo-branch" type="text" class="form-input" value="${escHtml(github.sim_repo_branch || "main")}" placeholder="main" onblur="window.saveTenantGithubSettings && window.saveTenantGithubSettings()"${disabled}>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="tenant-github-token">GitHub Token</label>
+            <input id="tenant-github-token" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true" onblur="window.saveTenantGithubSettings && window.saveTenantGithubSettings()"${disabled}>
+            <span class="form-hint" id="tenant-github-token-status">${escHtml(github.github_token_configured ? "Token configured" : "Token not configured")}</span>
+          </div>
+          <div id="tenant-github-msg" class="form-msg"></div>
+        </div>
       </section>
       <section class="setup-card">
         <div class="setup-card-header"><h2>Notifications</h2></div>

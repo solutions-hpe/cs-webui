@@ -2470,7 +2470,13 @@ details[open] > summary.panel-header { margin-bottom: 16px; }
 .tenant-detail-subnav { margin-bottom: 16px; }
 .tenant-detail-panel { margin-bottom: 16px; }
 .tenant-detail-inline-stats { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
-.tenant-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.tenant-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+
+/* Prevent mid-word line breaks in the compact tenant-detail summary tables */
+.tenant-detail-grid .data-table th,
+.tenant-detail-grid .data-table td { white-space: nowrap; word-break: normal; }
+/* Allow the middle value column (observed value / effective modes) to wrap long URLs at character boundaries */
+.tenant-detail-grid .data-table td:nth-child(2) { white-space: normal; word-break: break-all; }
 .tenant-metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .tenant-metric-card { border: 1px solid var(--border); border-radius: 8px; background: var(--panel); padding: 16px; display: flex; flex-direction: column; gap: 8px; }
 .tenant-metric-label { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }

@@ -488,27 +488,25 @@
           <div class="empty-state">Select Central API tab to browse.</div>
         </div>
         <div id="ts-ca-monitor-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:center;justify-content:center;">
-          <div style="background:var(--panel);border-radius:10px;padding:0;min-width:360px;max-width:500px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.35);overflow:hidden;" onclick="event.stopPropagation()">
+          <div style="background:var(--panel);border-radius:10px;padding:0;min-width:380px;max-width:480px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.35);overflow:hidden;" onclick="event.stopPropagation()">
             <!-- Header -->
-            <div style="display:flex;align-items:flex-start;justify-content:space-between;padding:20px 20px 0;">
-              <div style="flex:1;min-width:0;">
-                <h3 style="margin:0 0 4px;font-size:1.05rem;" id="ts-ca-modal-title">Monitor Site</h3>
-                <p style="color:var(--muted);font-size:0.82rem;margin:0;line-height:1.4;" id="ts-ca-modal-sub"></p>
-              </div>
-              <button id="ts-ca-modal-close" class="btn btn-ghost btn-small" type="button" style="margin-left:12px;flex-shrink:0;font-size:1.1rem;line-height:1;padding:4px 8px;" title="Close">✕</button>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);">
+              <h3 style="margin:0;font-size:1rem;" id="ts-ca-modal-title">Monitor Site</h3>
+              <button id="ts-ca-modal-close" class="btn btn-ghost btn-small" type="button" style="font-size:1.1rem;line-height:1;padding:4px 8px;" title="Close">✕</button>
             </div>
             <!-- Body -->
-            <div style="padding:16px 20px;">
+            <div style="padding:20px;">
+              <p style="margin:0 0 16px;color:var(--muted);font-size:0.85rem;line-height:1.5;" id="ts-ca-modal-sub"></p>
               <div class="form-group" style="margin:0;">
-                <label class="form-label">Assign to Spoke</label>
+                <label class="form-label" style="font-size:0.82rem;margin-bottom:6px;display:block;">Assign to Spoke</label>
                 <select id="ts-ca-modal-spoke" class="form-input"></select>
               </div>
             </div>
             <!-- Footer -->
-            <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 20px 20px;border-top:1px solid var(--border);">
-              <span id="ts-ca-modal-msg" class="form-msg" style="flex:1;margin:0;"></span>
-              <button id="ts-ca-modal-cancel" class="btn btn-secondary" type="button">Cancel</button>
-              <button id="ts-ca-modal-confirm" class="btn btn-primary" type="button">Add to Monitoring</button>
+            <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 20px 16px;border-top:1px solid var(--border);">
+              <span id="ts-ca-modal-msg" class="form-msg" style="flex:1;margin:0;font-size:0.82rem;"></span>
+              <button id="ts-ca-modal-cancel" class="btn btn-secondary btn-small" type="button">Cancel</button>
+              <button id="ts-ca-modal-confirm" class="btn btn-primary btn-small" type="button">Add to Monitoring</button>
             </div>
           </div>
         </div>

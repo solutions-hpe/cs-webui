@@ -6597,6 +6597,14 @@ let hubCaBrowseMonitoredItems = []; // cached monitored items for button state
 function hubCaIsMonitored(type, name, site) {
   const n = (name || "").toLowerCase().trim();
   const s = (site || "").toLowerCase().trim();
+  // Sites are stored in central_sites_config.site_mappings, not monitored-items
+  if (type === "site") {
+    const mappings = hubCentralData?.central_sites_config?.site_mappings;
+    if (mappings && typeof mappings === "object") {
+      return Object.keys(mappings).some((k) => k.toLowerCase().trim() === n);
+    }
+    return false;
+  }
   return hubCaBrowseMonitoredItems.some((m) => {
     if (type && m.type && m.type !== type) return false;
     const mn = (m.name || m.identifier || "").toLowerCase().trim();
@@ -6703,7 +6711,14 @@ async function loadHubCaBrowseData(force = false) {
   if (cached && !force) {
     hubCentralBrowseData = cached;
     updateHubCaBrowsePills(cached);
+    // Always refresh monitored items so button state is correct even on cache hits
+    try {
+      const mRes = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/monitored-items`);
+      if (mRes?.ok) { const mData = await readJson(mRes); hubCaBrowseMonitoredItems = mData?.items || []; }
+    } catch (_) { /* non-fatal */ }
     renderHubCaBrowseTab();
+    scheduleHubCaBrowseRefresh();
+    return;
   } else if (!cached) {
     hubCentralBrowseData = null;
     resetHubCaBrowsePills();
@@ -6713,17 +6728,16 @@ async function loadHubCaBrowseData(force = false) {
   try {
     const params = new URLSearchParams({ tenant_id: tenantId });
     if (force) params.set("force", "true");
-    const res = await apiFetch(`/api/central/browse?${params.toString()}`);
+    const [res, mRes] = await Promise.all([
+      apiFetch(`/api/central/browse?${params.toString()}`),
+      apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/monitored-items`).catch(() => null),
+    ]);
     const data = await readJson(res);
     if (!res?.ok) throw new Error(data?.detail || data?.warning || "Unable to load Central data.");
     hubCentralBrowseData = data || { sites: [], alerts: [], insights: [], clients: [], mode: "—" };
     saveHubCaBrowseCache(hubCentralBrowseData, tenantId);
     updateHubCaBrowsePills(hubCentralBrowseData);
-      // Refresh monitored items for button state — API returns { items: [...] }
-      try {
-        const mRes = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/monitored-items`);
-        if (mRes?.ok) { const mData = await readJson(mRes); hubCaBrowseMonitoredItems = mData?.items || []; }
-      } catch (_) { /* non-fatal */ }
+    if (mRes?.ok) { const mData = await readJson(mRes); hubCaBrowseMonitoredItems = mData?.items || []; }
     renderHubCaBrowseTab();
   } catch (error) {
     if (!hubCentralBrowseData) {
@@ -7045,7 +7059,7 @@ async function openHubCaMonitorModal(type, payload) {
   if (!modal || !spokeSelect || !confirmBtn) return;
 
   if (title) title.textContent = `Monitor Site: ${payload?.name || "—"}`;
-  if (sub) sub.textContent = `Assign a spoke to monitor "${payload?.name || "—"}" and add it to site mappings.`;
+  if (sub) sub.textContent = `Choose which spoke should monitor "${payload?.name || "—"}". The site will be added to that spoke's site mappings.`;
   if (msg) {
     msg.textContent = "";
     msg.style.color = "";
@@ -7056,6 +7070,8 @@ async function openHubCaMonitorModal(type, payload) {
   // Close on backdrop click (outer overlay, not the inner card which stops propagation)
   modal.onclick = () => closeHubCaMonitorModal();
   if (closeBtn) closeBtn.onclick = () => closeHubCaMonitorModal();
+  const cancelBtn = $("#ts-ca-modal-cancel");
+  if (cancelBtn) cancelBtn.onclick = () => closeHubCaMonitorModal();
   // Close on ESC
   const escHandler = (e) => { if (e.key === "Escape") { closeHubCaMonitorModal(); document.removeEventListener("keydown", escHandler); } };
   document.addEventListener("keydown", escHandler);
@@ -7126,11 +7142,10 @@ async function openHubCaMonitorModal(type, payload) {
 
       closeHubCaMonitorModal();
       hubCentralData = null;
-      showToast(`“${payload.name}” added to monitoring.`, "ok");
-      await Promise.all([
-        loadHubCentralData(true).catch(() => {}),
-        loadHubCaBrowseData(true).catch(() => {}),
-      ]);
+      showToast(`"${payload.name}" added to monitoring.`, "ok");
+      // Load central data first (for site_mappings), then browse (for button state)
+      await loadHubCentralData(true).catch(() => {});
+      await loadHubCaBrowseData(true).catch(() => {});
     } catch (error) {
       if (msg) {
         msg.textContent = error.message || "Error adding site to monitoring.";

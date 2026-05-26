@@ -3687,7 +3687,7 @@ function renderTenantSetupPanel(data) {
         </div>
       </section>
       <section class="setup-card">
-        <div class="setup-card-header"><h2>Aruba Central API</h2><p>Configure Central API credentials for this tenant.</p></div>
+        <div class="setup-card-header"><h2>Central Monitoring</h2><p>Configure Central API credentials for this tenant.</p></div>
         <table class="data-table">
           <tbody>
             <tr><td>Configured</td><td>${escHtml(aruba.configured ? "Yes" : "No")}</td></tr>

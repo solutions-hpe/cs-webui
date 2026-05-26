@@ -129,8 +129,41 @@ const hubReseedState = {
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 
+const SECRET_CONFIGURED_PLACEHOLDER = '**********';
+
 function hubAuthEl(id) {
   return document.getElementById(id);
+}
+
+function getSecretInputDefaultPlaceholder(input) {
+  if (!input) return '';
+  if (!('placeholderDefault' in input.dataset)) {
+    input.dataset.placeholderDefault = input.getAttribute('placeholder') || '';
+  }
+  return input.dataset.placeholderDefault;
+}
+
+function isMaskedSecretValue(value) {
+  return typeof value === 'string' && value.trim() !== '' && /^[*•]+$/.test(value.trim());
+}
+
+function isConfiguredSecretValue(value) {
+  return value === true || value === 'true' || isMaskedSecretValue(value);
+}
+
+function setSecretInputConfigured(input, configured) {
+  if (!input) return;
+  const defaultPlaceholder = getSecretInputDefaultPlaceholder(input);
+  input.value = '';
+  input.dataset.dirty = 'false';
+  input.classList.toggle('secret-configured', Boolean(configured));
+  if (configured) {
+    input.dataset.configured = 'true';
+    input.placeholder = SECRET_CONFIGURED_PLACEHOLDER;
+    return;
+  }
+  delete input.dataset.configured;
+  input.placeholder = defaultPlaceholder;
 }
 
 

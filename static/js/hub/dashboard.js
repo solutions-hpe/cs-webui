@@ -8701,6 +8701,7 @@ function renderGlobalUsbVidpids(devices, discovered) {
         showToast(`${approveVidpid} approved globally (pushed to ${putData.pushed_to_spokes ?? 0} spokes)`, "ok");
       } catch (err) {
         showToast(`Error: ${err.message}`, "error");
+      } finally {
         e.target.disabled = false;
         e.target.textContent = "Approve";
       }

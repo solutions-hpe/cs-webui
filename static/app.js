@@ -9047,6 +9047,7 @@ function renderHubStatusTab() {
 }
 
 function renderHubSitesTab() {
+  const container = document.getElementById("hub-monitored-sites-content");
   if (!container) return;
 
   const now = new Date().toLocaleTimeString();

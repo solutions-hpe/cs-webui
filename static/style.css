@@ -2682,9 +2682,9 @@ body.mode-spoke .hub-only  { display: none !important; }
   transition: color 0.15s, border-color 0.15s;
 }
 
-.setup-subtab:hover { color: var(--text); }
+.setup-subtabs .setup-subtab:hover { color: var(--text); }
 
-.setup-subtab.active {
+.setup-subtabs .setup-subtab.active {
   color: var(--hpe-green);
   border-bottom-color: var(--hpe-green);
 }

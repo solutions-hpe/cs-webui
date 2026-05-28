@@ -5732,6 +5732,7 @@ async function queueHubTemplateUnlock(tenantId, spokeId) {
   const data = await resp.json().catch(() => ({}));
   showToast(`Queued template unlock for ${data?.queued || 0} spoke(s).`, "ok");
   setTimeout(() => loadVmServer(true), 3000);
+  return data;
 }
 
 

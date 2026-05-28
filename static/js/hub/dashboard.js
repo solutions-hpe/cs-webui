@@ -7652,7 +7652,7 @@ function renderHubCaAlertsTab(container, alerts, search) {
       <td style="white-space:nowrap;min-width:80px;text-align:center;${tdP}">${_caSevDot(alert.severity)}</td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap;${tdP}">${devType}</td>
       <td style="min-width:70px;${tdP}">${_caTs(alert.ts)}</td>
-      <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("alert", { name: alert.name || "", site: alert.site || "" })}</td>
+      <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("alert", { name: alert.name || "", site: alert.site || "", identifier: alert.name || "" })}</td>
     </tr>`;
   }).join("");
 
@@ -7703,7 +7703,7 @@ function renderHubCaInsightsTab(container, insights, search) {
       <td style="white-space:nowrap;${tdP}">${escHtml(insight.site || "—")}</td>
       <td style="white-space:nowrap;font-size:11px;${tdP}">${escHtml(impacted || "—")}</td>
       <td style="min-width:70px;${tdP}">${_caTs(insight.ts)}</td>
-      <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("insight", { name: insight.name || "", site: insight.site || "" })}</td>
+      <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("insight", { name: insight.name || "", site: insight.site || "", identifier: insight.name || "" })}</td>
     </tr>`;
   }).join("");
 

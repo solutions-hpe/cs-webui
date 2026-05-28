@@ -7672,10 +7672,50 @@ function renderHubCaInsightsTab(container, insights, search) {
 }
 
 function renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search) {
-  const entries = Object.entries(clientsBySite || {});
   const tdP = "padding:6px 10px;";
 
-  if (entries.length > 0) {
+  // Prefer individual client records; fall back to count-only mode if no individual data
+  const allClients = (clientsLegacy || []).filter((c) => c.hostname || c.mac);
+  const clientSource = allClients.length > 0 ? allClients : null;
+
+  if (clientSource) {
+    const filtered = clientSource.filter((c) => !search || JSON.stringify(c).toLowerCase().includes(search));
+    if (!filtered.length) {
+      container.innerHTML = `<div class="empty-state">${search ? "No clients match your search." : "No clients returned from Central."}</div>`;
+      return;
+    }
+    const rows = filtered.map((c) => {
+      const statusColor = (c.status || "").toLowerCase() === "connected" ? "#27ae60"
+        : (c.status || "").toLowerCase() === "disconnected" ? "#e74c3c" : "#aaa";
+      const statusDot = `<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:8px;height:8px;border-radius:50%;background:${statusColor};display:inline-block;flex-shrink:0;"></span>${escHtml(c.status || "—")}</span>`;
+      return `<tr>
+        <td style="width:30%;${tdP}"><strong>${escHtml(c.hostname || "—")}</strong><div style="font-size:11px;color:var(--muted);">${escHtml(c.mac || "")}</div></td>
+        <td style="white-space:nowrap;${tdP}">${escHtml(c.site || "—")}</td>
+        <td style="white-space:nowrap;${tdP}">${escHtml(c.ip || "—")}</td>
+        <td style="white-space:nowrap;${tdP}">${escHtml(c.ap || "—")}</td>
+        <td style="white-space:nowrap;${tdP}">${escHtml(c.ssid || "—")}</td>
+        <td style="white-space:nowrap;${tdP}">${statusDot}</td>
+        <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("client", { name: c.hostname || c.mac || "Client", site: c.site || "" })}</td>
+      </tr>`;
+    }).join("");
+    container.innerHTML = `
+      <div class="setup-card" style="overflow-x:auto;padding:0;">
+        <table class="data-table" style="font-size:0.82rem;margin:0;min-width:700px;width:100%;">
+          <thead><tr>
+            <th style="width:30%;padding:5px 10px;">Client</th>
+            <th style="padding:5px 10px;white-space:nowrap;">Site</th>
+            <th style="padding:5px 10px;white-space:nowrap;">IP</th>
+            <th style="padding:5px 10px;white-space:nowrap;">AP</th>
+            <th style="padding:5px 10px;white-space:nowrap;">SSID</th>
+            <th style="padding:5px 10px;white-space:nowrap;">Status</th>
+            <th style="padding:5px 10px;"></th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  } else {
+    // Fallback: show per-site counts when no individual client records are available
+    const entries = Object.entries(clientsBySite || {});
     const filtered = entries.filter(([site]) => !search || site.toLowerCase().includes(search));
     if (!filtered.length) {
       container.innerHTML = `<div class="empty-state">${search ? "No clients match your search." : "No clients returned from Central."}</div>`;
@@ -7698,30 +7738,6 @@ function renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search) 
             <th style="padding:5px 10px;white-space:nowrap;">Wireless</th>
             <th style="padding:5px 10px;white-space:nowrap;">Wired</th>
             <th style="padding:5px 10px;"></th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>`;
-  } else {
-    const filtered = (clientsLegacy || []).filter((c) => !search || JSON.stringify(c).toLowerCase().includes(search));
-    if (!filtered.length) {
-      container.innerHTML = `<div class="empty-state">${search ? "No clients match your search." : "No clients returned from Central."}</div>`;
-      return;
-    }
-    const rows = filtered.map((c) => `<tr>
-      <td style="${tdP}"><strong>${escHtml(c.hostname || "—")}</strong><div style="font-size:11px;color:var(--muted);">${escHtml(c.mac || "")}</div></td>
-      <td style="white-space:nowrap;${tdP}">${escHtml(c.ip || "—")}</td>
-      <td style="white-space:nowrap;${tdP}">${escHtml(c.site || "—")}</td>
-      <td style="white-space:nowrap;${tdP}">${escHtml(c.status || "—")}</td>
-    </tr>`).join("");
-    container.innerHTML = `
-      <div class="setup-card" style="overflow-x:auto;padding:0;">
-        <table class="data-table" style="font-size:0.82rem;margin:0;min-width:500px;width:100%;">
-          <thead><tr>
-            <th style="padding:5px 10px;">Client</th>
-            <th style="padding:5px 10px;white-space:nowrap;">IP</th>
-            <th style="padding:5px 10px;white-space:nowrap;">Site</th>
-            <th style="padding:5px 10px;white-space:nowrap;">Status</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>

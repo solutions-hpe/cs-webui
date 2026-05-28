@@ -7569,7 +7569,7 @@ function _caSevDot(sev) {
     : s === "minor" || s === "warning" || s === "yellow" ? "#f1c40f"
     : s === "info" || s === "good" || s === "green" || s === "clear" ? "#27ae60"
     : "#aaa";
-  return `<span style="display:inline-flex;align-items:center;"><span style="width:10px;height:10px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0;"></span></span>`;
+  return `<span style="display:flex;justify-content:center;align-items:center;"><span style="width:10px;height:10px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0;"></span></span>`;
 }
 
 function renderHubCaAlertsTab(container, alerts, search) {
@@ -7592,7 +7592,7 @@ function renderHubCaAlertsTab(container, alerts, search) {
     return `<tr>
       <td style="width:40%;${tdP}"><strong>${escHtml(alert.name || "—")}</strong>${catBadge}${detailStr}</td>
       <td style="white-space:nowrap;${tdP}">${escHtml(alert.site || "—")}</td>
-      <td style="white-space:nowrap;min-width:80px;${tdP}">${_caSevDot(alert.severity)}</td>
+      <td style="white-space:nowrap;min-width:80px;text-align:center;${tdP}">${_caSevDot(alert.severity)}</td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap;${tdP}">${devType}</td>
       <td style="min-width:70px;${tdP}">${_caTs(alert.ts)}</td>
       <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("alert", { name: alert.name || "", site: alert.site || "" })}</td>

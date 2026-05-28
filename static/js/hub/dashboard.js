@@ -175,6 +175,16 @@ function fmtDate(iso) {
   return d.toLocaleString();
 }
 
+function fmtSize(bytes) {
+  const b = Number(bytes) || 0;
+  if (b >= 1024 ** 4) return (b / 1024 ** 4).toFixed(1) + ' TB';
+  if (b >= 1024 ** 3) return (b / 1024 ** 3).toFixed(1) + ' GB';
+  if (b >= 1024 ** 2) return (b / 1024 ** 2).toFixed(0) + ' MB';
+  return b + ' B';
+}
+
+function fmtSizeKB(kb) { return fmtSize(Number(kb) * 1024); }
+
 function relativeTime(iso) {
   if (!iso) return "—";
   const then = new Date(iso).getTime();

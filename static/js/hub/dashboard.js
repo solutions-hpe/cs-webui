@@ -4228,6 +4228,11 @@ function renderHubVmServer() {
       const data = await apiFetch(`/api/${encodeURIComponent(currentTenantId)}/aggregate/fleet-reclone-clear`, { method: "POST" });
       showToast(`Queued reclone state clear for ${data?.queued || 0} spoke(s).`, "ok");
       setTimeout(() => loadVmServer(true), 3000);
+    } catch (err) {
+      showToast(err?.message || "Unable to clear reclone state.", "error");
+      if (btn) { btn.disabled = false; btn.textContent = "✕ Clear Error"; }
+    }
+  });
   $("#hub-autoprov-pill", container)?.addEventListener("click", async () => {
     if (!canManageTenant(tenantId)) return;
     const pill = $("#hub-autoprov-pill", container);

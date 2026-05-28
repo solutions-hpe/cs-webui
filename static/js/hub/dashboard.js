@@ -7413,7 +7413,7 @@ function hubCaMonitorBtn(type, payload = {}) {
     .map(([key, value]) => `data-ca-${key.replace(/_/g, "-")}="${escHtml(String(value ?? ""))}"`)
     .join(" ");
   if (monitored) {
-    return `<span class="badge badge-blue" title="Already in Monitored Items">✓ Monitored</span>`;
+    return `<button class="btn btn-small btn-secondary ca-unmonitor-btn" type="button" data-ca-type="${escHtml(type)}" ${dataAttrs} title="Click to remove from monitoring">✓ Monitored</button>`;
   }
   return `<button class="btn btn-small btn-primary ca-monitor-btn" type="button" data-ca-type="${escHtml(type)}" ${dataAttrs}>Monitor</button>`;
 }
@@ -7433,6 +7433,82 @@ function attachHubCaMonitorButtons(container) {
       });
     });
   });
+  container.querySelectorAll(".ca-unmonitor-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      const payload = {
+        name: button.dataset.caName || "",
+        site: button.dataset.caSite || "",
+        central_site: button.dataset.caCentralSite || "",
+        mac: button.dataset.caMac || "",
+        hostname: button.dataset.caHostname || "",
+      };
+      hubCaUnmonitorItem(button.dataset.caType || "", payload, button).catch((error) => {
+        showToast(error.message || "Unable to remove from monitoring.", "error");
+      });
+    });
+  });
+}
+
+async function hubCaUnmonitorItem(type, payload, button) {
+  const tenantId = getActiveTenantId();
+  if (!tenantId) return;
+  if (button) button.disabled = true;
+
+  try {
+    if (type === "site") {
+      // Sites: remove from central_sites_config.site_mappings
+      const cfgRes = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/central-sites-config`);
+      const cfg = await readJson(cfgRes);
+      if (!cfgRes?.ok) throw new Error(cfg?.detail || "Unable to load Central site mappings.");
+      const siteMappings = { ...((cfg && typeof cfg.site_mappings === "object") ? cfg.site_mappings : {}) };
+      const nameKey = (payload.name || "").toLowerCase().trim();
+      Object.keys(siteMappings).forEach((k) => {
+        if (k.toLowerCase().trim() === nameKey) delete siteMappings[k];
+      });
+      const saveRes = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/central-sites-config`, {
+        method: "POST",
+        body: { ...(cfg || {}), site_mappings: siteMappings },
+      });
+      const saveData = await readJson(saveRes);
+      if (!saveRes?.ok) throw new Error(saveData?.detail || "Unable to save Central site mappings.");
+      // Update local hubCentralData so button state refreshes immediately
+      if (hubCentralData) {
+        if (typeof hubCentralData.central_sites_config === "object") {
+          hubCentralData.central_sites_config.site_mappings = siteMappings;
+        } else {
+          hubCentralData.central_sites_config = { site_mappings: siteMappings };
+        }
+      }
+      showToast(`"${payload.name}" removed from monitoring.`, "ok");
+      renderHubCaBrowseTab();
+    } else {
+      // Alerts/insights/clients: find and delete by monitored-items ID
+      const name = (payload.name || payload.hostname || payload.mac || "").toLowerCase().trim();
+      const site = (payload.site || "").toLowerCase().trim();
+      const item = hubCaBrowseMonitoredItems.find((m) => {
+        if (type && m.type && m.type !== type) return false;
+        const mn = (m.name || m.identifier || "").toLowerCase().trim();
+        const ms = (m.site || m.site_name || "").toLowerCase().trim();
+        return mn === name && (ms === site || !ms || !site);
+      });
+      if (!item) {
+        showToast("Item not found in Monitored Items.", "error");
+        if (button) button.disabled = false;
+        return;
+      }
+      const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/monitored-items/${encodeURIComponent(item.id)}`, { method: "DELETE" });
+      if (!res?.ok) {
+        const err = await readJson(res);
+        throw new Error(err?.detail || "Failed to remove monitored item.");
+      }
+      hubCaBrowseMonitoredItems = hubCaBrowseMonitoredItems.filter((m) => m.id !== item.id);
+      showToast(`"${payload.name || name}" removed from monitoring.`, "ok");
+      renderHubCaBrowseTab();
+    }
+  } catch (error) {
+    if (button) button.disabled = false;
+    throw error;
+  }
 }
 
 function renderHubCaSitesTab(container, sites, search) {

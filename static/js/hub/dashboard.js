@@ -7101,18 +7101,23 @@ function hubCaIsIndividualClientRecord(client) {
     .some((key) => Object.prototype.hasOwnProperty.call(client, key));
 }
 
-function normalizeHubCaBrowseData(data) {
-  if (!data || typeof data !== "object") return data;
-  const normalized = { ...data };
-  const clients = Array.isArray(data.clients) ? data.clients : [];
+function hubCaHasLegacyClientSummaryRows(data) {
+  const clients = Array.isArray(data?.clients) ? data.clients : [];
   const hasIndividualClients = clients.some((client) => hubCaIsIndividualClientRecord(client));
   const hasLegacyClientSummaries = clients.some((client) =>
     client && typeof client === "object"
     && !hubCaIsIndividualClientRecord(client)
     && ["total", "wired", "wireless"].some((key) => Object.prototype.hasOwnProperty.call(client, key))
   );
+  return hasLegacyClientSummaries && !hasIndividualClients;
+}
 
-  if (hasLegacyClientSummaries && !hasIndividualClients) {
+function normalizeHubCaBrowseData(data) {
+  if (!data || typeof data !== "object") return data;
+  const normalized = { ...data };
+  const clients = Array.isArray(data.clients) ? data.clients : [];
+
+  if (hubCaHasLegacyClientSummaryRows(data)) {
     normalized.clients = [];
     if (!normalized.clients_by_site || typeof normalized.clients_by_site !== "object") {
       normalized.clients_by_site = Object.fromEntries(clients.map((client) => {
@@ -7144,7 +7149,9 @@ function loadHubCaBrowseCache(tenantId = getActiveTenantId()) {
   if (!key) return null;
   try {
     const raw = localStorage.getItem(key);
-    return raw ? normalizeHubCaBrowseData(JSON.parse(raw)) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return hubCaHasLegacyClientSummaryRows(parsed) ? null : normalizeHubCaBrowseData(parsed);
   } catch (_) {
     return null;
   }

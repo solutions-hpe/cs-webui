@@ -741,59 +741,59 @@ function hubCentralMonitorSummary(data = hubCentralData) {
       : (spoke?.assigned_site ? [String(spoke.assigned_site).trim()] : []),
     spoke_online: typeof spoke?.spoke_online === "boolean" ? spoke.spoke_online : Boolean(spoke?.online),
   }));
-  const assignedBySite = new Map();
+  // Map wsite → Set of spoke ids to avoid duplicates, with ordered list
+  const assignedBySite = new Map(); // wsite → Spoke[] (all assigned spokes)
+  const _addToAssigned = (wsite, spoke) => {
+    if (!wsite) return;
+    const list = assignedBySite.get(wsite) || [];
+    if (!list.find((s) => s.spoke_id === spoke.spoke_id)) list.push(spoke);
+    assignedBySite.set(wsite, list);
+  };
   for (const spoke of spokes) {
-    for (const site of spoke.assigned_sites) {
-      const existing = assignedBySite.get(site);
-      if (!existing || (spoke.spoke_online && !existing.spoke_online) || spoke.display_name.localeCompare(existing.display_name, undefined, { sensitivity: "base" }) < 0) {
-        assignedBySite.set(site, spoke);
-      }
-    }
+    for (const site of spoke.assigned_sites) _addToAssigned(site, spoke);
   }
-  // Fallback: for sites not explicitly assigned (e.g. auto-discovered in centralized mode),
-  // infer assignment from each spoke's active site list.
+  // Fallback: infer from each spoke's active site list for unassigned sites.
   for (const spoke of spokes) {
     for (const siteObj of (Array.isArray(spoke?.sites) ? spoke.sites : [])) {
       const wsite = String(siteObj?.wsite || "").trim();
       if (!wsite || assignedBySite.has(wsite)) continue;
-      const existing = assignedBySite.get(wsite);
-      if (!existing || (spoke.spoke_online && !existing.spoke_online) || spoke.display_name.localeCompare((existing || {}).display_name || "", undefined, { sensitivity: "base" }) < 0) {
-        assignedBySite.set(wsite, spoke);
-      }
+      _addToAssigned(wsite, spoke);
     }
   }
   const knownSites = new Set(
     [...assignedBySite.keys(), ...Object.keys(siteMappings)].filter(Boolean)
   );
-  // In centralized mode the hub monitors all sites on behalf of all spokes.
-  // Guarantee every known site has a spoke shown — use first online spoke as fallback.
+  // In centralized mode guarantee every site has at least one spoke shown.
   if (source.mode === "centralized" && spokes.length) {
     const fallbackSpoke = spokes.find((s) => s.spoke_online) || spokes[0];
     for (const wsite of knownSites) {
-      if (!assignedBySite.has(wsite)) assignedBySite.set(wsite, fallbackSpoke);
+      if (!assignedBySite.has(wsite)) _addToAssigned(wsite, fallbackSpoke);
     }
   }
   const sites = [...knownSites]
     .sort((left, right) => String(left).localeCompare(String(right), undefined, { sensitivity: "base" }))
     .map((wsite) => {
-      const assignedSpoke = assignedBySite.get(wsite) || null;
+      const assignedSpokes = assignedBySite.get(wsite) || [];
+      // Primary spoke: first online, or first in list
+      const assignedSpoke = assignedSpokes.find((s) => s.spoke_online) || assignedSpokes[0] || null;
       const statusMap = statusBySite[wsite] && typeof statusBySite[wsite] === "object" ? statusBySite[wsite] : {};
       const checkStatus = hubCentralAggregateCheckStatus(statusMap);
       const clientCount = clientCountBySite[wsite] && typeof clientCountBySite[wsite] === "object" ? clientCountBySite[wsite] : null;
       const clientStatus = hubCentralClientStatusMeta(clientCount);
-      const assignedSpokeOffline = Boolean(assignedSpoke && !assignedSpoke.spoke_online);
+      const allOffline = assignedSpokes.length > 0 && assignedSpokes.every((s) => !s.spoke_online);
       return {
         wsite,
         central_site: String(siteMappings[wsite] || fallbackSites[wsite] || "").trim(),
         assigned_spoke: assignedSpoke,
+        assigned_spokes: assignedSpokes,
         wireless_clients: Number.isFinite(Number(wirelessBySite[wsite])) ? Number(wirelessBySite[wsite]) : null,
         status_map: statusMap,
         check_status: checkStatus,
         client_count: clientCount,
         client_status: clientStatus,
-        alerts_suppressed: assignedSpokeOffline,
-        has_active_check_issue: Boolean(assignedSpoke?.spoke_online) && checkStatus.hasError,
-        has_active_client_issue: Boolean(assignedSpoke?.spoke_online) && clientStatus.isIssue,
+        alerts_suppressed: allOffline,
+        has_active_check_issue: !allOffline && checkStatus.hasError,
+        has_active_client_issue: !allOffline && clientStatus.isIssue,
       };
     });
   const checkFailures = sites
@@ -1007,7 +1007,7 @@ function renderHubStatusTab() {
   const siteRows = (summary?.sites || []).map((site) => {
     const cs = site.client_status || {};
     const cc = site.client_count || {};
-    const spokeName = site.assigned_spoke?.display_name || "Unassigned";
+    const spokeNames = (site.assigned_spokes || []).map((s) => s.display_name).filter(Boolean).join(", ") || "Unassigned";
     const current = Number.isFinite(Number(cc.current)) ? Number(cc.current) : null;
     const avg = Number.isFinite(Number(cc.hourly_avg)) ? Math.round(cc.hourly_avg) : null;
     const dropPct = Number.isFinite(Number(cc.drop_pct)) ? Math.round(cc.drop_pct) : 0;
@@ -1016,7 +1016,7 @@ function renderHubStatusTab() {
     const countDetail = current !== null
       ? (avg !== null ? `${current} now / ${avg} avg (1h)` : `${current} clients`)
       : null;
-    const detail = countDetail ? `${spokeName} | ${countDetail}` : spokeName;
+    const detail = countDetail ? `${spokeNames} | ${countDetail}` : spokeNames;
     const lastSeen = cc.ts ? new Date(cc.ts * 1000).toLocaleString() : null;
     return {
       _tone: cs.tone || "gray",
@@ -1097,10 +1097,13 @@ function renderHubSitesTab() {
   }
 
   const rows = sites.map((site) => {
-    const spokeName = site.assigned_spoke ? escHtml(site.assigned_spoke.display_name || "—") : '<span style="color:var(--muted)">Unassigned</span>';
-    const spokeOnline = site.assigned_spoke?.spoke_online;
-    const spokeStatus = site.assigned_spoke
-      ? (spokeOnline
+    const assignedSpokes = site.assigned_spokes || (site.assigned_spoke ? [site.assigned_spoke] : []);
+    const spokeName = assignedSpokes.length
+      ? assignedSpokes.map((s) => escHtml(s.display_name || "—")).join(", ")
+      : '<span style="color:var(--muted)">Unassigned</span>';
+    const anyOnline = assignedSpokes.some((s) => s.spoke_online);
+    const spokeStatus = assignedSpokes.length
+      ? (anyOnline
           ? `<span class="badge badge-success">Online</span>`
           : `<span class="badge badge-failure">Offline</span>`)
       : `<span class="badge" style="background:var(--muted-bg);color:var(--muted);">—</span>`;
@@ -6460,22 +6463,24 @@ function renderHubCentralSites() {
 
   const summary = hubCentralMonitorSummary(hubCentralData);
   const rows = summary.sites.map((site) => {
-    const assignedSpoke = site.assigned_spoke;
-    const offlineNote = site.alerts_suppressed ? "Suppressed while assigned spoke is offline" : "";
+    const assignedSpokes = site.assigned_spokes || (site.assigned_spoke ? [site.assigned_spoke] : []);
+    const offlineNote = site.alerts_suppressed ? "Suppressed while all assigned spokes are offline" : "";
     const checkBadge = site.alerts_suppressed
       ? hubCentralBadge(site.check_status.label, "gray", offlineNote)
       : hubCentralBadge(site.check_status.label, site.check_status.tone);
     const clientBadge = site.alerts_suppressed
       ? hubCentralBadge(site.client_status.label, "gray", offlineNote)
       : hubCentralBadge(site.client_status.label, site.client_status.tone);
-    const spokeOnline = assignedSpoke
-      ? `<span class="status-dot ${assignedSpoke.spoke_online ? "online" : "offline"}"></span> ${assignedSpoke.spoke_online ? "Online" : "Offline"}`
+    const anyOnline = assignedSpokes.some((s) => s.spoke_online);
+    const spokeOnline = assignedSpokes.length
+      ? `<span class="status-dot ${anyOnline ? "online" : "offline"}"></span> ${anyOnline ? "Online" : "Offline"}`
       : '<span class="status-dot" style="background:#95a5a6;"></span> —';
+    const spokeNames = assignedSpokes.map((s) => escHtml(s.display_name || "—")).join(", ") || "—";
     return `
       <tr>
         <td><strong>${escHtml(site.wsite)}</strong></td>
         <td>${escHtml(site.central_site || "—")}</td>
-        <td>${escHtml(assignedSpoke?.display_name || "—")}</td>
+        <td>${spokeNames}</td>
         <td>${spokeOnline}</td>
         <td>${site.wireless_clients ?? "—"}</td>
         <td>${checkBadge}</td>

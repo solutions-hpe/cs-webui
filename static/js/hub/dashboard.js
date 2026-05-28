@@ -1144,7 +1144,9 @@ async function loadAndRenderHubMonitoredItems(force = false) {
     const data = await readJson(res);
     if (!res?.ok) throw new Error(data?.detail || "Failed to load monitored items.");
     _hubMonitoredItemsData = Array.isArray(data?.items) ? data.items : [];
+    hubCaBrowseMonitoredItems = _hubMonitoredItemsData;
     renderHubMonitoredItems(_hubMonitoredItemsData, tenantId);
+    if (hubCentralBrowseData) renderHubCaBrowseTab();
   } catch (error) {
     ["hub-monitored-sites-content", "hub-monitored-alerts-content", "hub-monitored-insights-content"].forEach((id) => {
       const el = document.getElementById(id);
@@ -7057,9 +7059,26 @@ let hubCentralBrowseData = null;
 let hubCaBrowseActiveTab = "ts-ca-sites";
 let hubCaBrowseMonitoredItems = []; // cached monitored items for button state
 
-function hubCaIsMonitored(type, name, site) {
+function hubCaFindMonitoredItem(type, payload = {}) {
+  const requestedType = String(type || "").trim().toLowerCase();
+  const requestedIdentifier = String(
+    payload.identifier || payload.name || payload.hostname || payload.mac || ""
+  ).trim().toLowerCase();
+  const requestedSite = String(
+    payload.site || payload.site_name || payload.central_site || ""
+  ).trim().toLowerCase();
+  if (!requestedIdentifier) return null;
+  return hubCaBrowseMonitoredItems.find((item) => {
+    const itemType = String(item?.type || "").trim().toLowerCase();
+    if (requestedType && itemType && itemType !== requestedType) return false;
+    const itemIdentifier = String(item?.identifier || item?.name || "").trim().toLowerCase();
+    const itemSite = String(item?.site || item?.site_name || item?.central_site || "").trim().toLowerCase();
+    return itemIdentifier === requestedIdentifier && (!itemSite || !requestedSite || itemSite === requestedSite);
+  }) || null;
+}
+
+function hubCaIsMonitored(type, name, site, identifier = "") {
   const n = (name || "").toLowerCase().trim();
-  const s = (site || "").toLowerCase().trim();
   // Sites are stored in central_sites_config.site_mappings, not monitored-items
   if (type === "site") {
     const mappings = hubCentralData?.central_sites_config?.site_mappings;
@@ -7068,12 +7087,7 @@ function hubCaIsMonitored(type, name, site) {
     }
     return false;
   }
-  return hubCaBrowseMonitoredItems.some((m) => {
-    if (type && m.type && m.type !== type) return false;
-    const mn = (m.name || m.identifier || "").toLowerCase().trim();
-    const ms = (m.site || m.site_name || "").toLowerCase().trim();
-    return mn === n && (ms === s || !ms || !s);
-  });
+  return Boolean(hubCaFindMonitoredItem(type, { name, site, identifier }));
 }
 let hubCaBrowseRefreshTimer = null;
 
@@ -7081,11 +7095,47 @@ function hubCaBrowseCacheKey(tenantId = getActiveTenantId()) {
   return tenantId ? `hub_ca_browse_${tenantId}` : "";
 }
 
+function hubCaIsIndividualClientRecord(client) {
+  if (!client || typeof client !== "object") return false;
+  return ["mac", "hostname", "ip", "ap", "ssid", "status", "os", "vlan"]
+    .some((key) => Object.prototype.hasOwnProperty.call(client, key));
+}
+
+function normalizeHubCaBrowseData(data) {
+  if (!data || typeof data !== "object") return data;
+  const normalized = { ...data };
+  const clients = Array.isArray(data.clients) ? data.clients : [];
+  const hasIndividualClients = clients.some((client) => hubCaIsIndividualClientRecord(client));
+  const hasLegacyClientSummaries = clients.some((client) =>
+    client && typeof client === "object"
+    && !hubCaIsIndividualClientRecord(client)
+    && ["total", "wired", "wireless"].some((key) => Object.prototype.hasOwnProperty.call(client, key))
+  );
+
+  if (hasLegacyClientSummaries && !hasIndividualClients) {
+    normalized.clients = [];
+    if (!normalized.clients_by_site || typeof normalized.clients_by_site !== "object") {
+      normalized.clients_by_site = Object.fromEntries(clients.map((client) => {
+        const site = String(client?.site || "—").trim() || "—";
+        return [site, {
+          total: Number(client?.total) || 0,
+          wired: Number(client?.wired) || 0,
+          wireless: Number(client?.wireless) || 0,
+        }];
+      }));
+    }
+  } else if (!Array.isArray(normalized.clients)) {
+    normalized.clients = [];
+  }
+
+  return normalized;
+}
+
 function saveHubCaBrowseCache(data, tenantId = getActiveTenantId()) {
   const key = hubCaBrowseCacheKey(tenantId);
   if (!key) return;
   try {
-    localStorage.setItem(key, JSON.stringify(data));
+    localStorage.setItem(key, JSON.stringify(normalizeHubCaBrowseData(data)));
   } catch (_) {}
 }
 
@@ -7094,7 +7144,7 @@ function loadHubCaBrowseCache(tenantId = getActiveTenantId()) {
   if (!key) return null;
   try {
     const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : null;
+    return raw ? normalizeHubCaBrowseData(JSON.parse(raw)) : null;
   } catch (_) {
     return null;
   }
@@ -7373,7 +7423,7 @@ async function loadHubCaBrowseData(force = false) {
       apiFetch(`/api/central/browse?${params.toString()}`),
       apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/monitored-items`).catch(() => null),
     ]);
-    const data = await readJson(res);
+    const data = normalizeHubCaBrowseData(await readJson(res));
     if (!res?.ok) throw new Error(data?.detail || data?.warning || "Unable to load Central data.");
     hubCentralBrowseData = data || { sites: [], alerts: [], insights: [], clients: [], mode: "—" };
     saveHubCaBrowseCache(hubCentralBrowseData, tenantId);
@@ -7412,7 +7462,8 @@ function renderHubCaBrowseTab() {
 function hubCaMonitorBtn(type, payload = {}) {
   const name = payload.name || payload.hostname || payload.mac || "";
   const site = payload.site || "";
-  const monitored = hubCaIsMonitored(type, name, site);
+  const identifier = payload.identifier || payload.mac || payload.hostname || payload.name || "";
+  const monitored = hubCaIsMonitored(type, name, site, identifier);
   const dataAttrs = Object.entries(payload)
     .map(([key, value]) => `data-ca-${key.replace(/_/g, "-")}="${escHtml(String(value ?? ""))}"`)
     .join(" ");
@@ -7429,6 +7480,7 @@ function attachHubCaMonitorButtons(container) {
         name: button.dataset.caName || "",
         site: button.dataset.caSite || "",
         central_site: button.dataset.caCentralSite || "",
+        identifier: button.dataset.caIdentifier || "",
         mac: button.dataset.caMac || "",
         hostname: button.dataset.caHostname || "",
       };
@@ -7443,6 +7495,7 @@ function attachHubCaMonitorButtons(container) {
         name: button.dataset.caName || "",
         site: button.dataset.caSite || "",
         central_site: button.dataset.caCentralSite || "",
+        identifier: button.dataset.caIdentifier || "",
         mac: button.dataset.caMac || "",
         hostname: button.dataset.caHostname || "",
       };
@@ -7493,14 +7546,7 @@ async function hubCaUnmonitorItem(type, payload, button) {
       renderHubCaBrowseTab();
     } else {
       // Alerts/insights/clients: find and delete by monitored-items ID
-      const name = (payload.name || payload.hostname || payload.mac || "").toLowerCase().trim();
-      const site = (payload.site || "").toLowerCase().trim();
-      const item = hubCaBrowseMonitoredItems.find((m) => {
-        if (type && m.type && m.type !== type) return false;
-        const mn = (m.name || m.identifier || "").toLowerCase().trim();
-        const ms = (m.site || m.site_name || "").toLowerCase().trim();
-        return mn === name && (ms === site || !ms || !site);
-      });
+      const item = hubCaFindMonitoredItem(type, payload);
       if (!item) {
         showToast("Item not found in Monitored Items.", "error");
         if (button) button.disabled = false;
@@ -7679,7 +7725,7 @@ function renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search) 
   const tdP = "padding:6px 10px;";
 
   // Prefer individual client records; fall back to count-only mode if no individual data
-  const allClients = (clientsLegacy || []).filter((c) => c.hostname || c.mac);
+  const allClients = (clientsLegacy || []).filter((client) => hubCaIsIndividualClientRecord(client));
   const clientSource = allClients.length > 0 ? allClients : null;
 
   if (clientSource) {
@@ -7699,7 +7745,12 @@ function renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search) 
         <td style="white-space:nowrap;${tdP}">${escHtml(c.ap || "—")}</td>
         <td style="white-space:nowrap;${tdP}">${escHtml(c.ssid || "—")}</td>
         <td style="white-space:nowrap;${tdP}">${statusDot}</td>
-        <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("client", { name: c.hostname || c.mac || "Client", site: c.site || "" })}</td>
+        <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("client", {
+          name: c.hostname || c.mac || "Client",
+          hostname: c.hostname || "",
+          mac: c.mac || "",
+          site: c.site || "",
+        })}</td>
       </tr>`;
     }).join("");
     container.innerHTML = `
@@ -7808,9 +7859,9 @@ async function openHubCaMonitorModal(type, payload) {
       return;
     }
     const name = payload?.name || payload?.hostname || payload?.mac || "—";
-    const identifier = type === "client"
+    const identifier = payload?.identifier || (type === "client"
       ? (payload?.mac || payload?.hostname || payload?.site || payload?.name || "")
-      : (payload?.name || "");
+      : (payload?.name || ""));
     if (!identifier) {
       showToast("Cannot monitor: missing identifier.", "error");
       return;
@@ -7826,6 +7877,13 @@ async function openHubCaMonitorModal(type, payload) {
         showToast(`"${name}" is already being monitored.`, "ok");
       } else {
         showToast(`"${name}" added to Monitored Items (Simulations tab).`, "ok");
+      }
+      if (data?.item) {
+        hubCaBrowseMonitoredItems = [
+          ...hubCaBrowseMonitoredItems.filter((item) => item?.id !== data.item.id),
+          data.item,
+        ];
+        renderHubCaBrowseTab();
       }
       // Refresh monitored items so it shows up immediately in the Simulations tab
       _hubMonitoredItemsData = null;

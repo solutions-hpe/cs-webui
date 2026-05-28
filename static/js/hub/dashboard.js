@@ -7130,34 +7130,6 @@ async function initTsCentralApiTab(force = false) {
     clusterSel.insertAdjacentHTML("afterbegin", opts);
   }
 
-  $$(".ts-ca-subtab").forEach((button) => {
-    button.onclick = () => {
-      hubCaBrowseActiveTab = button.dataset.subtab || "ts-ca-sites";
-      if (hubCaBrowseActiveTab === "ts-ca-settings") {
-        showTsCaSettingsPanel();
-      } else {
-        hideTsCaSettingsPanel();
-        renderHubCaBrowseTab();
-      }
-    };
-  });
-
-  const searchEl = $("#ts-ca-search");
-  if (searchEl) searchEl.oninput = () => renderHubCaBrowseTab();
-
-  const refreshBtn = $("#ts-ca-refresh-btn");
-  if (refreshBtn) refreshBtn.onclick = () => { void loadHubCaBrowseData(true); };
-
-  const cancelBtn = $("#ts-ca-modal-cancel");
-  if (cancelBtn) cancelBtn.onclick = closeHubCaMonitorModal;
-
-  const modal = $("#ts-ca-monitor-modal");
-  if (modal) {
-    modal.onclick = (event) => {
-      if (event.target === modal) closeHubCaMonitorModal();
-    };
-  }
-
   const saveCentralBtn = $("#ts-ca-save-central-btn");
   if (saveCentralBtn) saveCentralBtn.onclick = saveTsApiCentralSettings;
 
@@ -7166,8 +7138,6 @@ async function initTsCentralApiTab(force = false) {
 
   const clearSecretsBtn = $("#ts-ca-clear-secrets-btn");
   if (clearSecretsBtn) clearSecretsBtn.onclick = async () => {
-    const tenantId = getActiveTenantId();
-    if (!tenantId) return;
     if (!confirm("Clear the stored Central client secret and access token?")) return;
     clearSecretsBtn.disabled = true;
     clearSecretsBtn.textContent = "Clearing…";
@@ -7188,8 +7158,6 @@ async function initTsCentralApiTab(force = false) {
 
   const testCentralBtn = $("#ts-ca-test-central-btn");
   if (testCentralBtn) testCentralBtn.onclick = async () => {
-    const tenantId = getActiveTenantId();
-    if (!tenantId) return;
     testCentralBtn.disabled = true;
     setFormMessage("ts-ca-central-msg", "Testing…", true);
     try {
@@ -7208,11 +7176,7 @@ async function initTsCentralApiTab(force = false) {
     }
   };
 
-  if (hubCaBrowseActiveTab === "ts-ca-settings") {
-    showTsCaSettingsPanel();
-  } else {
-    await loadHubCaBrowseData(force);
-  }
+  await loadTsApiSettingsForm(force);
 }
 
 function showTsCaSettingsPanel() {

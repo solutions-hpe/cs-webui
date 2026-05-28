@@ -1352,6 +1352,42 @@
               </div>
             </div>
           </div>
+
+          <div class="setup-card" style="margin-top:16px;">
+            <div class="setup-card-header">
+              <h2>Global Ignored USB Devices 🚫</h2>
+              <p>Devices ignored here are blocked on <strong>all tenants</strong> — they are merged into every
+                 spoke's ignored list and pushed to all connected spokes. Use this to globally suppress
+                 unwanted or non-simulation USB devices across the platform.</p>
+            </div>
+            <table class="data-table" id="sa-global-usb-ignored-table">
+              <thead><tr><th>Label</th><th>VID:PID</th><th></th></tr></thead>
+              <tbody id="sa-global-usb-ignored-tbody"><tr><td colspan="3" class="empty-state">Loading…</td></tr></tbody>
+            </table>
+            <div class="setup-form" style="max-width:500px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+              <div class="setup-card-header"><h3>Add Global Ignored Device</h3></div>
+              <div class="form-group">
+                <label class="form-label" for="sa-usb-ignore-vidpid">VID:PID</label>
+                <input id="sa-usb-ignore-vidpid" type="text" class="form-input" placeholder="e.g. 0bda:8153" maxlength="9">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="sa-usb-ignore-label">Label</label>
+                <input id="sa-usb-ignore-label" type="text" class="form-input" placeholder="e.g. Hub USB Hub">
+              </div>
+              <div class="form-actions">
+                <button id="sa-usb-ignore-add-btn" class="btn btn-warning" type="button">Add to Ignored List</button>
+                <span id="sa-usb-ignore-msg" class="form-msg"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="setup-card" style="margin-top:16px;" id="sa-global-usb-discovered-card">
+            <div class="setup-card-header">
+              <h3>Discovered Devices (Pending Review)</h3>
+              <p>Devices seen in spoke telemetry across all tenants that are not yet globally certified or ignored.</p>
+            </div>
+            <div id="sa-global-usb-discovered"></div>
+          </div>
         </div>
 
         <div id="sa-gkill" class="setup-subpanel hidden" style="margin-top:16px;">

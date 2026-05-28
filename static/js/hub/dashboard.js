@@ -21,7 +21,7 @@ let autoRefreshCountdownTimer = null;
 let autoRefreshSecondsLeft = 10;
 let refreshPaused = false;
 let tenantContextActive = false;
-const autoRefreshActiveTabs = new Set(["dashboard", "simulations", "clients", "central", "vm-server", "spokes"]);
+const autoRefreshActiveTabs = new Set(["dashboard", "simulations", "clients", "central", "spokes"]);
 const autoRefreshActiveSuperadminTabs = new Set(["sa-gkill"]);
 let superadminActiveSubtab = "sa-pending";
 let tenantDetailState = { open: false, tenantId: null, activeTab: "dashboard", data: {} };
@@ -9894,7 +9894,6 @@ function connectHubWebSocket() {
       if (activeTab === "dashboard") scheduleReload("ws-dashboard", () => loadDashboard(true));
       if (activeTab === "simulations") scheduleReload("ws-simulations", () => loadHubSimulations(true));
       if (activeTab === "clients") scheduleReload("ws-clients", () => loadClients(true));
-      if (activeTab === "vm-server") scheduleReload("ws-vm-server", () => loadVmServer(true));
       if (activeTab === "central") scheduleReload("ws-hub-central", () => loadHubCentralMonitoring(true));
       if (activeTab === "spokes") scheduleReload("ws-spokes", () => loadSpokes(true));
       if (activeTab === "reseed") scheduleReload("ws-reseed", () => ensureSpokes(true).then(() => renderHubReseedPanel()));

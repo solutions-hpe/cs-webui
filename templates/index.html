@@ -492,7 +492,7 @@
         <button id="refresh-tenant-setup-btn" class="btn btn-primary btn-small" style="margin-left:auto;" type="button">Refresh</button>
       </div>
       <nav class="setup-subnav">
-        <button class="setup-subtab hub-ts-subtab active" data-subtab="ts-central-api" type="button">Central API</button>
+        <button class="setup-subtab hub-ts-subtab active" data-subtab="ts-central-api" type="button">API</button>
         <button class="setup-subtab hub-ts-subtab" data-subtab="ts-proxmox" type="button">Proxmox</button>
         <button class="setup-subtab hub-ts-subtab" data-subtab="ts-security" type="button">Security</button>
         <button class="setup-subtab hub-ts-subtab" data-subtab="ts-notifications" type="button">Notifications</button>
@@ -520,12 +520,94 @@
           <button class="setup-subtab ts-ca-subtab" data-subtab="ts-ca-insights" type="button">Insights</button>
           <button class="setup-subtab ts-ca-subtab" data-subtab="ts-ca-clients" type="button">Clients</button>
           <button class="setup-subtab ts-ca-subtab" data-subtab="ts-ca-devices" type="button">Devices</button>
+          <button class="setup-subtab ts-ca-subtab" data-subtab="ts-ca-settings" type="button">⚙ Settings</button>
         </nav>
         <div style="padding:10px 0 6px;">
           <input type="search" id="ts-ca-search" class="form-input" placeholder="Search…" style="max-width:320px;" autocomplete="off">
         </div>
         <div id="ts-ca-content">
           <div class="empty-state">Select Central API tab to browse.</div>
+        </div>
+        <!-- Settings panel (Central API config + GitHub) -->
+        <div id="ts-ca-settings-panel" class="hidden" style="padding:16px;overflow-y:auto;">
+          <div class="setup-card" style="margin-bottom:16px;">
+            <div class="setup-card-header"><h2>Central API</h2><p>Configure HPE Aruba Central API credentials for this tenant.</p></div>
+            <div class="setup-form">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="ts-ca-central-api-version">API Version</label>
+                  <select id="ts-ca-central-api-version" class="form-input">
+                    <option value="classic">Classic</option>
+                    <option value="new_central">Central / HPE GreenLake</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="ts-ca-central-cluster-select">Cluster</label>
+                  <select id="ts-ca-central-cluster-select" class="form-input" onchange="onTsCaClusterSelectChange(this)">
+                    <option value="">— select cluster —</option>
+                    <option value="__custom__">Custom URL…</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-group" id="ts-ca-central-custom-url-group" style="display:none">
+                <label class="form-label" for="ts-ca-central-cluster-url">Custom Cluster URL</label>
+                <input id="ts-ca-central-cluster-url" type="url" class="form-input" placeholder="https://your-cluster.api.central.arubanetworks.com">
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="ts-ca-central-client-id">Client ID (OAuth2)</label>
+                  <input id="ts-ca-central-client-id" type="text" class="form-input" placeholder="OAuth2 Client ID">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="ts-ca-central-client-secret">Client Secret (OAuth2)</label>
+                  <input id="ts-ca-central-client-secret" type="password" class="form-input" placeholder="Leave blank to keep existing">
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="ts-ca-central-access-token">Access Token <span style="font-weight:normal;color:var(--muted)">(use instead of Client ID/Secret)</span></label>
+                <input id="ts-ca-central-access-token" type="password" class="form-input" placeholder="Paste token here">
+                <span class="form-hint" id="ts-ca-central-token-status"></span>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="ts-ca-central-customer-id">Customer ID</label>
+                  <input id="ts-ca-central-customer-id" type="text" class="form-input" placeholder="Customer ID">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="ts-ca-central-workspace-id">GLP Workspace ID <span style="font-weight:normal;color:var(--muted)">(optional)</span></label>
+                  <input id="ts-ca-central-workspace-id" type="text" class="form-input" placeholder="Workspace ID">
+                </div>
+              </div>
+              <div class="tenant-detail-note">Use either a static <strong>Access Token</strong> (from Central → API Gateway → REST API → Generate Token) <em>or</em> a <strong>Client ID + Secret</strong> (from GreenLake → Manage Workspace → Personal API Clients). The Cluster is always required.</div>
+              <div class="form-actions">
+                <button id="ts-ca-save-central-btn" class="btn btn-primary" type="button">Save Central Settings</button>
+                <button id="ts-ca-test-central-btn" class="btn btn-secondary" type="button">Test Connection</button>
+                <span id="ts-ca-central-msg" class="form-msg"></span>
+              </div>
+            </div>
+          </div>
+          <div class="setup-card">
+            <div class="setup-card-header"><h2>GitHub</h2><p>Configure GitHub repository and personal access token for simulation configs.</p></div>
+            <div class="setup-form">
+              <div class="form-group">
+                <label class="form-label" for="ts-ca-github-repo-url">Simulation Repo URL</label>
+                <input id="ts-ca-github-repo-url" type="url" class="form-input" placeholder="https://github.com/owner/repo.git">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="ts-ca-github-repo-branch">Simulation Repo Branch</label>
+                <input id="ts-ca-github-repo-branch" type="text" class="form-input" placeholder="main" value="main">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="ts-ca-github-token">GitHub Token</label>
+                <input id="ts-ca-github-token" type="password" class="form-input" placeholder="Leave blank to keep existing">
+                <span class="form-hint" id="ts-ca-github-token-status">Token not configured</span>
+              </div>
+              <div class="form-actions">
+                <button id="ts-ca-save-github-btn" class="btn btn-primary" type="button">Save GitHub Settings</button>
+                <span id="ts-ca-github-msg" class="form-msg"></span>
+              </div>
+            </div>
+          </div>
         </div>
         <div id="ts-ca-monitor-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:center;justify-content:center;">
           <div style="background:var(--panel);border-radius:10px;padding:0;min-width:380px;max-width:480px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.35);overflow:hidden;" onclick="event.stopPropagation()">

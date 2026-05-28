@@ -2613,6 +2613,8 @@ function syncHubPermissionUI() {
   ].forEach(selector => {
     $$(selector).forEach(el => el.classList.toggle("hidden", !isSuperadmin));
   });
+  // Hide the entire dark row1 nav bar for non-superadmins (all buttons inside are superadmin-only)
+  $$(".tenant-context-nav-row1").forEach(el => el.classList.toggle("hidden", !isSuperadmin));
   $("#dashboard-add-tenant-btn")?.classList.toggle("hidden", !isSuperadmin);
   syncSuperadminBackupAccess();
 }
@@ -7153,10 +7155,24 @@ async function initTsCentralApiTab(force = false) {
   const tenantId = getActiveTenantId();
   if (!tenantId) return;
 
+  // Populate cluster select options if empty
+  const clusterSel = $("#ts-ca-central-cluster-select");
+  if (clusterSel && clusterSel.options.length <= 2) {
+    const opts = NEW_CENTRAL_CLUSTERS.map(c =>
+      `<option value="${escHtml(c.url)}">${escHtml(c.label)}</option>`
+    ).join("");
+    clusterSel.insertAdjacentHTML("afterbegin", opts);
+  }
+
   $$(".ts-ca-subtab").forEach((button) => {
     button.onclick = () => {
       hubCaBrowseActiveTab = button.dataset.subtab || "ts-ca-sites";
-      renderHubCaBrowseTab();
+      if (hubCaBrowseActiveTab === "ts-ca-settings") {
+        showTsCaSettingsPanel();
+      } else {
+        hideTsCaSettingsPanel();
+        renderHubCaBrowseTab();
+      }
     };
   });
 
@@ -7176,7 +7192,167 @@ async function initTsCentralApiTab(force = false) {
     };
   }
 
-  await loadHubCaBrowseData(force);
+  const saveCentralBtn = $("#ts-ca-save-central-btn");
+  if (saveCentralBtn) saveCentralBtn.onclick = saveTsApiCentralSettings;
+
+  const saveGithubBtn = $("#ts-ca-save-github-btn");
+  if (saveGithubBtn) saveGithubBtn.onclick = saveTsApiGithubSettings;
+
+  const testCentralBtn = $("#ts-ca-test-central-btn");
+  if (testCentralBtn) testCentralBtn.onclick = async () => {
+    setFormMessage("ts-ca-central-msg", "Testing…", true);
+    const res = await apiFetch(aggregateEndpoint("central-test"), { method: "POST" }).catch(() => null);
+    if (res?.ok) setFormMessage("ts-ca-central-msg", "Connection OK.", true);
+    else setFormMessage("ts-ca-central-msg", "Connection failed.", false);
+  };
+
+  if (hubCaBrowseActiveTab === "ts-ca-settings") {
+    showTsCaSettingsPanel();
+  } else {
+    await loadHubCaBrowseData(force);
+  }
+}
+
+function showTsCaSettingsPanel() {
+  $$(".ts-ca-subtab").forEach(b => b.classList.toggle("active", b.dataset.subtab === "ts-ca-settings"));
+  const browseArea = $("#ts-ca-search")?.parentElement;
+  if (browseArea) browseArea.style.display = "none";
+  $("#ts-ca-content")?.classList.add("hidden");
+  $("#ts-ca-settings-panel")?.classList.remove("hidden");
+  // Load current settings into form
+  void loadTsApiSettingsForm();
+}
+
+function hideTsCaSettingsPanel() {
+  const browseArea = $("#ts-ca-search")?.parentElement;
+  if (browseArea) browseArea.style.display = "";
+  $("#ts-ca-content")?.classList.remove("hidden");
+  $("#ts-ca-settings-panel")?.classList.add("hidden");
+}
+
+async function loadTsApiSettingsForm(force = false) {
+  const data = await loadTenantDetailData(force);
+  if (!data) return;
+  const config = data.settings?.aruba || {};
+  const github = data.settings?.github || {};
+  const disabled = canManageTenant() ? "" : " disabled";
+
+  // Central API version
+  const apiVer = $("#ts-ca-central-api-version");
+  if (apiVer) { apiVer.value = config.api_version || "classic"; if (disabled) apiVer.disabled = true; }
+
+  // Cluster select
+  const clusterSel = $("#ts-ca-central-cluster-select");
+  const clusterUrlInput = $("#ts-ca-central-cluster-url");
+  if (clusterSel) {
+    const current = (config.cluster_url || "").trim();
+    const knownUrls = NEW_CENTRAL_CLUSTERS.map(c => c.url);
+    const isKnown = knownUrls.includes(current);
+    clusterSel.value = isKnown ? current : (current ? "__custom__" : "");
+    if (disabled) clusterSel.disabled = true;
+    const customGroup = $("#ts-ca-central-custom-url-group");
+    if (customGroup) customGroup.style.display = (clusterSel.value === "__custom__") ? "" : "none";
+  }
+  if (clusterUrlInput) {
+    clusterUrlInput.value = config.cluster_url || "";
+    if (disabled) clusterUrlInput.disabled = true;
+  }
+
+  // Non-secret fields
+  const setVal = (id, val) => { const el = $(id); if (el) { el.value = val; if (disabled) el.disabled = true; } };
+  setVal("#ts-ca-central-client-id", config.client_id || "");
+  setVal("#ts-ca-central-customer-id", config.customer_id || "");
+  setVal("#ts-ca-central-workspace-id", config.workspace_id || "");
+
+  // Secret placeholders
+  const atEl = $("#ts-ca-central-access-token");
+  if (atEl) {
+    atEl.placeholder = config.access_token_configured ? "Token saved — leave blank to keep" : "Paste token here";
+    if (disabled) atEl.disabled = true;
+  }
+  const tokenStatus = $("#ts-ca-central-token-status");
+  if (tokenStatus) tokenStatus.textContent = config.access_token_configured ? "Access token configured" : "";
+
+  // GitHub fields
+  setVal("#ts-ca-github-repo-url", github.sim_repo_url || "");
+  setVal("#ts-ca-github-repo-branch", github.sim_repo_branch || "main");
+  const ghStatus = $("#ts-ca-github-token-status");
+  if (ghStatus) ghStatus.textContent = github.github_token_configured ? "Token configured" : "Token not configured";
+  const ghToken = $("#ts-ca-github-token");
+  if (ghToken && disabled) ghToken.disabled = true;
+}
+
+window.onTsCaClusterSelectChange = function(sel) {
+  const customGroup = $("#ts-ca-central-custom-url-group");
+  const customInput = $("#ts-ca-central-cluster-url");
+  if (sel.value === "__custom__") {
+    if (customGroup) customGroup.style.display = "";
+    if (customInput) customInput.focus();
+  } else {
+    if (customGroup) customGroup.style.display = "none";
+  }
+};
+
+async function saveTsApiCentralSettings() {
+  if (!canManageTenant()) {
+    setFormMessage("ts-ca-central-msg", "Read-only access.", false);
+    return;
+  }
+  const clusterSel = $("#ts-ca-central-cluster-select");
+  const clusterUrl = (clusterSel?.value && clusterSel.value !== "__custom__")
+    ? clusterSel.value
+    : ($("#ts-ca-central-cluster-url")?.value.trim() || "");
+  const payload = {
+    mode: "centralized",
+    hub_central_config: {
+      api_version: $("#ts-ca-central-api-version")?.value || "classic",
+      cluster_url: clusterUrl,
+      client_id: $("#ts-ca-central-client-id")?.value.trim() || "",
+      client_secret: $("#ts-ca-central-client-secret")?.value || "",
+      access_token: $("#ts-ca-central-access-token")?.value || "",
+      workspace_id: $("#ts-ca-central-workspace-id")?.value.trim() || "",
+      customer_id: $("#ts-ca-central-customer-id")?.value.trim() || "",
+    },
+  };
+  setFormMessage("ts-ca-central-msg", "Saving…", true);
+  const res = await apiFetch(aggregateEndpoint("central"), { method: "POST", body: payload });
+  if (!res?.ok) {
+    const err = await readJson(res);
+    setFormMessage("ts-ca-central-msg", err?.detail || "Unable to save Central settings.", false);
+    return;
+  }
+  aggregateCentralData = await res.json();
+  setFormMessage("ts-ca-central-msg", "Central settings saved.", true);
+  // Clear secret inputs
+  const secretEl = $("#ts-ca-central-client-secret"); if (secretEl) secretEl.value = "";
+  const tokenEl = $("#ts-ca-central-access-token"); if (tokenEl) tokenEl.value = "";
+  void loadTsApiSettingsForm(true);
+}
+
+async function saveTsApiGithubSettings() {
+  if (!canManageTenant()) {
+    setFormMessage("ts-ca-github-msg", "Read-only access.", false);
+    return;
+  }
+  const token = $("#ts-ca-github-token")?.value || "";
+  const payload = {
+    sim_repo_url: $("#ts-ca-github-repo-url")?.value.trim() || "",
+    sim_repo_branch: $("#ts-ca-github-repo-branch")?.value.trim() || "main",
+    ...(token ? { github_token: token } : {}),
+  };
+  setFormMessage("ts-ca-github-msg", "Saving…", true);
+  const tenantId = getActiveTenantId();
+  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/settings/github`, { method: "POST", body: payload });
+  if (!res?.ok) {
+    const err = await readJson(res);
+    setFormMessage("ts-ca-github-msg", err?.detail || "Unable to save GitHub settings.", false);
+    return;
+  }
+  const data = await res.json();
+  setFormMessage("ts-ca-github-msg", "GitHub settings saved.", true);
+  const tokenEl = $("#ts-ca-github-token"); if (tokenEl) tokenEl.value = "";
+  const statusEl = $("#ts-ca-github-token-status");
+  if (statusEl) statusEl.textContent = data.github_token_configured ? "Token configured" : "Token not configured";
 }
 
 async function loadHubCaBrowseData(force = false) {
@@ -7234,6 +7410,7 @@ async function loadHubCaBrowseData(force = false) {
 function renderHubCaBrowseTab() {
   const content = $("#ts-ca-content");
   if (!content || !hubCentralBrowseData) return;
+  if (hubCaBrowseActiveTab === "ts-ca-settings") return; // settings panel handles its own rendering
 
   const search = ($("#ts-ca-search")?.value || "").trim().toLowerCase();
   const tab = hubCaBrowseActiveTab || "ts-ca-sites";

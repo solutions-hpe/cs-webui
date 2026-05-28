@@ -957,7 +957,7 @@ function renderHubStatusTab() {
   // Build a section card with a table. extraCol = optional extra column header.
   // rows: array of {_tone, _label, _name, _detail, _lastSeen, _itemId}
   // showRemove: wire Remove buttons if true
-  const makeSection = (title, rows, extraColHeader = "", showRemove = false) => {
+  const makeSection = (title, rows, extraColHeader = "", showRemove = false, showLastSeen = true) => {
     const emptyMsg = `<div class="central-empty" style="padding:8px 16px;font-size:0.85rem;">None configured.</div>`;
     if (!rows.length) return `
       <div class="setup-card" style="margin-bottom:1rem;padding:0;">
@@ -967,11 +967,12 @@ function renderHubStatusTab() {
 
     const extraHeader = extraColHeader ? `<th style="padding:5px 10px;white-space:nowrap;">${escHtml(extraColHeader)}</th>` : "";
     const removeHeader = showRemove ? `<th style="padding:5px 10px;"></th>` : "";
+    const lastSeenHeader = showLastSeen ? `<th style="padding:5px 10px;white-space:nowrap;">Last Seen</th>` : "";
     const rowsHtml = rows.map((r) => {
       const extraCell = extraColHeader
         ? `<td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;${tdP}">${r._detail ? escHtml(r._detail) : "—"}</td>`
         : "";
-      const lastSeenCell = `<td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;${tdP}">${r._lastSeen ? escHtml(r._lastSeen) : "—"}</td>`;
+      const lastSeenCell = showLastSeen ? `<td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;${tdP}">${r._lastSeen ? escHtml(r._lastSeen) : "—"}</td>` : "";
       const removeCell = showRemove && r._itemId
         ? `<td style="white-space:nowrap;${tdP}"><button class="btn btn-small btn-secondary hub-monitored-remove-btn" data-item-id="${escHtml(r._itemId)}" type="button">Remove</button></td>`
         : (showRemove ? `<td></td>` : "");
@@ -993,7 +994,7 @@ function renderHubStatusTab() {
               <th style="padding:5px 10px;">Name</th>
               <th style="padding:5px 10px;white-space:nowrap;">Status</th>
               ${extraHeader}
-              <th style="padding:5px 10px;white-space:nowrap;">Last Seen</th>
+              ${lastSeenHeader}
               ${removeHeader}
             </tr></thead>
             <tbody>${rowsHtml}</tbody>
@@ -1055,7 +1056,7 @@ function renderHubStatusTab() {
     }).sort(sortByTone);
 
   container.innerHTML =
-    makeSection("Sites", siteRows, "Spoke / Clients", false) +
+    makeSection("Sites", siteRows, "Spoke / Clients", false, false) +
     makeSection("Hardware", hwRows, "", false) +
     makeSection("Alerts", monRows("alert"), "", true) +
     makeSection("Insights", monRows("insight"), "", true) +

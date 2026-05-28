@@ -4269,12 +4269,13 @@ function renderHubVmServerDetail(container, host) {
   const spokeId = host.spoke_id;
   const tenantId = host.tenant_id || getActiveTenantId();
   const spokeName = escHtml(spokeDisplayName(host, "Spoke"));
-  // Prefer the richer proxmox.vms (expanded summary) over proxmox_vms for CPU/RAM
+  // proxmox_vms has full data (cpu, mem, maxmem) from the Proxmox agent.
+  // proxmox.vms is stripped (vmid/name/status/type only) — use as fallback only.
   const px = host.proxmox || {};
   const templateLock = String(px.template_lock || '').trim();
   const canUnlockTemplate = canManageTenant(tenantId);
-  const vms = (Array.isArray(px.vms) && px.vms.length ? px.vms : null)
-    || (Array.isArray(host.proxmox_vms) ? host.proxmox_vms : []);
+  const vms = (Array.isArray(host.proxmox_vms) && host.proxmox_vms.length ? host.proxmox_vms : null)
+    || (Array.isArray(px.vms) ? px.vms : []);
   const usb = Array.isArray(host.usb_devices) ? host.usb_devices : [];
   const reclone = host.reclone_state || {};
 

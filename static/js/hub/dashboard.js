@@ -3681,7 +3681,6 @@ function renderTenantSetupPanel(data) {
     ${accessNote}
     <div class="setup-subtabs">
       <button class="setup-subtab active" onclick="switchSetupSubTab('info')">Info</button>
-      <button class="setup-subtab" onclick="switchSetupSubTab('api')">API</button>
       <button class="setup-subtab" onclick="switchSetupSubTab('notifications')">Notifications</button>
       <button class="setup-subtab" onclick="switchSetupSubTab('processing')">Processing</button>
       <button class="setup-subtab" onclick="switchSetupSubTab('config')">Config</button>
@@ -3694,39 +3693,6 @@ function renderTenantSetupPanel(data) {
           <div class="setup-status-item"><span class="setup-status-label">Tenant ID</span><span class="setup-status-value"><code>${escHtml(tenant.id || tenantId)}</code></span></div>
           <div class="setup-status-item"><span class="setup-status-label">Aruba CID</span><span class="setup-status-value">${escHtml(tenant.aruba_cid || "—")}</span></div>
           <div class="setup-status-item"><span class="setup-status-label">Created</span><span class="setup-status-value">${escHtml(fmtDate(tenant.created_at))}</span></div>
-        </div>
-      </section>
-    </div>
-    <div id="setup-subtab-api" class="setup-subtab-content tenant-detail-grid hidden">
-      <section class="setup-card">
-        <div class="setup-card-header"><h2>Central Monitoring</h2><p>Configure Central API credentials for this tenant.</p></div>
-        <table class="data-table">
-          <tbody>
-            <tr><td>Configured</td><td>${escHtml(aruba.configured ? "Yes" : "No")}</td></tr>
-            <tr><td>Cluster URL</td><td>${escHtml(aruba.cluster_url || "—")}</td></tr>
-            <tr><td>Client ID</td><td>${escHtml(aruba.client_id || "—")}</td></tr>
-            <tr><td>Customer ID</td><td>${escHtml(aruba.customer_id || tenant.aruba_cid || "—")}</td></tr>
-            <tr><td>API Version</td><td>${escHtml(aruba.api_version || "—")}</td></tr>
-          </tbody>
-        </table>
-      </section>
-      <section class="setup-card">
-        <div class="setup-card-header"><h2>GitHub API</h2><p>Configure GitHub repository and token for simulation configs.</p></div>
-        <div class="setup-form">
-          <div class="form-group">
-            <label class="form-label" for="tenant-github-sim-repo-url">Simulation Repo URL</label>
-            <input id="tenant-github-sim-repo-url" type="url" class="form-input" value="${escHtml(github.sim_repo_url || "")}" placeholder="https://github.com/owner/repo.git" onblur="window.saveTenantGithubSettings && window.saveTenantGithubSettings()"${disabled}>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="tenant-github-sim-repo-branch">Simulation Repo Branch</label>
-            <input id="tenant-github-sim-repo-branch" type="text" class="form-input" value="${escHtml(github.sim_repo_branch || "main")}" placeholder="main" onblur="window.saveTenantGithubSettings && window.saveTenantGithubSettings()"${disabled}>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="tenant-github-token">GitHub Token</label>
-            <input id="tenant-github-token" type="password" class="form-input" placeholder="Leave blank to keep existing" data-secret-field="true" onblur="window.saveTenantGithubSettings && window.saveTenantGithubSettings()"${disabled}>
-            <span class="form-hint" id="tenant-github-token-status">${escHtml(github.github_token_configured ? "Token configured" : "Token not configured")}</span>
-          </div>
-          <div id="tenant-github-msg" class="form-msg"></div>
         </div>
       </section>
     </div>

@@ -4036,6 +4036,11 @@ async function loadDashboard(force = false) {
     empty.classList.remove("hidden");
     return;
   }
+  // Auto-enter tenant context if user has exactly one tenant assigned
+  if (tenants.length === 1 && !currentUser?.is_superadmin) {
+    await enterTenantContext(tenants[0].id, "simulations", false);
+    return;
+  }
   try {
     // Render immediately from the tenants list (no per-tenant fetch needed for basic list).
     const rows = tenants.map(tenant => ({

@@ -1028,15 +1028,18 @@ function renderHubStatusTab() {
     };
   }).sort(sortByTone);
 
-  // — Hardware —
+  // — Hardware — auto hardware alerts from spokes + manually monitored gateway devices
   const hwChecks = hubAggregateHardware(hubCentralData?.spokes || []);
-  const hwRows = hwChecks.map((hw) => ({
-    _tone: hw.total > 0 ? "red" : "green",
-    _label: hw.total > 0 ? `${hw.total} DOWN` : "CLEAR",
-    _name: escHtml(hw.name),
-    _detail: "",
-    _lastSeen: null,
-  })).sort(sortByTone);
+  const hwRows = [
+    ...hwChecks.map((hw) => ({
+      _tone: hw.total > 0 ? "red" : "green",
+      _label: hw.total > 0 ? `${hw.total} DOWN` : "CLEAR",
+      _name: escHtml(hw.name),
+      _detail: "",
+      _lastSeen: null,
+    })),
+    ...monRows("gateway"),
+  ].sort(sortByTone);
 
   // — Monitored items (alerts, insights, clients) —
   const items = Array.isArray(_hubMonitoredItemsData) ? _hubMonitoredItemsData : [];
@@ -1057,7 +1060,7 @@ function renderHubStatusTab() {
 
   container.innerHTML =
     makeSection("Sites", siteRows, "Spoke / Clients", false, false) +
-    makeSection("Hardware", hwRows, "", false) +
+    makeSection("Hardware", hwRows, "", true) +
     makeSection("Alerts", monRows("alert"), "", true) +
     makeSection("Insights", monRows("insight"), "", true) +
     makeSection("Clients", monRows("client"), "", true);
@@ -7952,7 +7955,7 @@ function renderHubCaDevicesTab(container, devicesBySite, search) {
       <td style="white-space:nowrap;font-size:11px;color:var(--muted);${tdP}">${escHtml(d.type || "—")}</td>
       <td style="white-space:nowrap;min-width:80px;${tdP}">${statusDot}</td>
       <td style="font-size:11px;color:var(--muted);${tdP}">${ipFw || "—"}</td>
-      <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("alert", { name: deviceName, identifier: deviceIdentifier, site: d.site || "" })}</td>
+      <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("gateway", { name: deviceName, identifier: deviceIdentifier, site: d.site || "" })}</td>
     </tr>`;
   }).join("");
   container.innerHTML = `
@@ -7978,7 +7981,7 @@ async function openHubCaMonitorModal(type, payload) {
 
   if (type !== "site") {
     // For alerts, insights, clients — add directly to monitored items list
-    const typeMap = { alert: "alert", insight: "insight", client: "client" };
+    const typeMap = { alert: "alert", insight: "insight", client: "client", gateway: "gateway" };
     const itemType = typeMap[type];
     if (!itemType) {
       showToast("Unknown monitor type.", "error");

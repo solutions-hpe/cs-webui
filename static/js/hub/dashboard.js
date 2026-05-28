@@ -7456,7 +7456,7 @@ async function hubCaUnmonitorItem(type, payload, button) {
 
   try {
     if (type === "site") {
-      // Sites: remove from central_sites_config.site_mappings
+      // Sites: remove from central_sites_config.site_mappings and add to excluded_sites
       const cfgRes = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/central-sites-config`);
       const cfg = await readJson(cfgRes);
       if (!cfgRes?.ok) throw new Error(cfg?.detail || "Unable to load Central site mappings.");
@@ -7465,9 +7465,14 @@ async function hubCaUnmonitorItem(type, payload, button) {
       Object.keys(siteMappings).forEach((k) => {
         if (k.toLowerCase().trim() === nameKey) delete siteMappings[k];
       });
+      // Track excluded sites so auto-discovery doesn't re-add them
+      const excludedSites = Array.isArray(cfg?.excluded_sites) ? [...cfg.excluded_sites] : [];
+      if (nameKey && !excludedSites.map((s) => s.toLowerCase().trim()).includes(nameKey)) {
+        excludedSites.push(payload.name || nameKey);
+      }
       const saveRes = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/central-sites-config`, {
         method: "POST",
-        body: { ...(cfg || {}), site_mappings: siteMappings },
+        body: { ...(cfg || {}), site_mappings: siteMappings, excluded_sites: excludedSites },
       });
       const saveData = await readJson(saveRes);
       if (!saveRes?.ok) throw new Error(saveData?.detail || "Unable to save Central site mappings.");
@@ -7475,8 +7480,9 @@ async function hubCaUnmonitorItem(type, payload, button) {
       if (hubCentralData) {
         if (typeof hubCentralData.central_sites_config === "object") {
           hubCentralData.central_sites_config.site_mappings = siteMappings;
+          hubCentralData.central_sites_config.excluded_sites = excludedSites;
         } else {
-          hubCentralData.central_sites_config = { site_mappings: siteMappings };
+          hubCentralData.central_sites_config = { site_mappings: siteMappings, excluded_sites: excludedSites };
         }
       }
       showToast(`"${payload.name}" removed from monitoring.`, "ok");

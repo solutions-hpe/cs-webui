@@ -157,8 +157,9 @@ let usbCountdownTimer = null;
 let activeVmCat = 'sim';   // 'sim' | 'other' | 'containers' | 'templates'
 let webuiVmid = null;      // VMID of the LXC container running this service (protected from delete)
 const spokeRoot = document.getElementById('spoke-root');
+const spokeNavRoot = document.getElementById('spoke-nav');
 const spokeTabPanels = document.querySelectorAll('#spoke-root .tab-content');
-let activeSpokeTab = document.querySelector('#tab-nav .spoke-only .tab.active')?.dataset.tab || 'simulations';
+let activeSpokeTab = spokeNavRoot?.querySelector('.tab.active')?.dataset.tab || 'simulations';
 let activeServerSubtab = spokeRoot?.querySelector('.server-subtab.active')?.dataset.subtab || 'server-vms';
 let refreshPaused = false;
 let refreshCountdownTimer = null;
@@ -239,7 +240,7 @@ function bindSecretInput(input) {
 const refreshActiveServerSubtabs = new Set(['server-vms', 'server-commands']);
 
 // ── Tab navigation ────────────────────────────────────────────────
-const spokeNavTabs = document.querySelectorAll('#tab-nav .spoke-only .tab');
+const spokeNavTabs = Array.from(spokeNavRoot?.querySelectorAll('.tab') || []);
 spokeNavTabs.forEach((tab) => {
   tab.addEventListener('click', () => {
     spokeNavTabs.forEach((t) => {
@@ -610,10 +611,10 @@ const serverVersionAvailable = document.getElementById('server-version-available
 const serverUpdateMsg = document.getElementById('server-update-message');
 const setupActiveBranch = document.getElementById('setup-active-branch');
 const repoUrlInput = document.getElementById('repo-url-input');
-const centralTabButtons = document.querySelectorAll('#tab-nav .spoke-only .tab[data-tab="central"]');
-const configTabButtons = document.querySelectorAll('#tab-nav .spoke-only .tab[data-tab="config"]');
-const simTabButtons = document.querySelectorAll('#tab-nav .spoke-only .tab[data-tab="simulations"]');
-const spokeSetupTabButtons = document.querySelectorAll('#tab-nav .spoke-only .tab[data-tab="setup"]');
+const centralTabButtons = Array.from(spokeNavRoot?.querySelectorAll('.tab[data-tab="central"]') || []);
+const configTabButtons = Array.from(spokeNavRoot?.querySelectorAll('.tab[data-tab="config"]') || []);
+const simTabButtons = Array.from(spokeNavRoot?.querySelectorAll('.tab[data-tab="simulations"]') || []);
+const spokeSetupTabButtons = Array.from(spokeNavRoot?.querySelectorAll('.tab[data-tab="setup"]') || []);
 const setupSubtabButtons = document.querySelectorAll('#tab-setup .setup-subnav .setup-subtab');
 const setupSubpanels = document.querySelectorAll('#tab-setup .setup-subpanel');
 const centralOverview = document.getElementById('central-overview');

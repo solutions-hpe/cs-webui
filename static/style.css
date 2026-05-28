@@ -2389,11 +2389,14 @@ details[open] > summary.panel-header { margin-bottom: 16px; }
 .tab.dynamic-tenant-tab { font-weight: 600; }
 .sa-header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
-.hub-nav-wrap { display: flex; flex-direction: column; width: 100%; flex: 1; }
+.hub-nav-wrap,
+.spoke-nav-wrap { display: flex; flex-direction: column; width: 100%; flex: 1; }
 .hub-admin-nav,
-.tenant-context-nav { display: flex; flex-direction: column; align-items: stretch; gap: 0; width: 100%; flex: 1; }
+.tenant-context-nav,
+.spoke-nav-panel { display: flex; flex-direction: column; align-items: stretch; gap: 0; width: 100%; flex: 1; }
 .hub-admin-nav.hidden,
 .tenant-context-nav.hidden { display: none; }
+.spoke-nav-row { display: flex; flex-direction: column; align-items: stretch; flex: 1; }
 
 /* Two-row tenant context nav — vertical sidebar layout */
 .tenant-context-nav { flex-direction: column; align-items: stretch; }

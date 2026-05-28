@@ -144,15 +144,19 @@
         </div>
       </div>
     </div>
-    <span class="spoke-only">
-      <button class="tab active" role="tab" aria-selected="true" data-tab="simulations" type="button">Simulations</button>
-      <button class="tab" role="tab" aria-selected="false" data-tab="dashboard" type="button">Clients</button>
-      <button class="tab" role="tab" aria-selected="false" data-tab="central" type="button">Central</button>
-      <button class="tab tab-btn" id="tab-server-btn" role="tab" aria-selected="false" data-tab="server" style="display:none;" type="button">VM Server</button>
-      <span class="tab-nav-sep" aria-hidden="true"></span>
-      <button class="tab tab-nav-right" role="tab" aria-selected="false" data-tab="config" type="button">⚙ Config</button>
-      <button class="tab" role="tab" aria-selected="false" data-tab="setup" type="button">⚙ Setup</button>
-    </span>
+    <div class="spoke-only spoke-nav-wrap">
+      <div id="spoke-nav" class="spoke-nav-panel" aria-label="Spoke navigation">
+        <div class="tenant-context-nav-row2 spoke-nav-row">
+          <button class="tab active" role="tab" aria-selected="true" data-tab="simulations" type="button">Simulations</button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="dashboard" type="button">Clients</button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="central" type="button">Central</button>
+          <button class="tab tab-btn" id="tab-server-btn" role="tab" aria-selected="false" data-tab="server" style="display:none;" type="button">VM Server</button>
+          <span class="tab-nav-sep" aria-hidden="true"></span>
+          <button class="tab tab-nav-right" role="tab" aria-selected="false" data-tab="config" type="button">⚙ Config</button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="setup" type="button">⚙ Setup</button>
+        </div>
+      </div>
+    </div>
   </nav>
 
   <div id="hub-root" class="hub-only">

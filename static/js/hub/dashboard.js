@@ -7166,10 +7166,24 @@ async function initTsCentralApiTab(force = false) {
 
   const testCentralBtn = $("#ts-ca-test-central-btn");
   if (testCentralBtn) testCentralBtn.onclick = async () => {
+    const tenantId = getActiveTenantId();
+    if (!tenantId) return;
+    testCentralBtn.disabled = true;
     setFormMessage("ts-ca-central-msg", "Testing…", true);
-    const res = await apiFetch(aggregateEndpoint("central-test"), { method: "POST" }).catch(() => null);
-    if (res?.ok) setFormMessage("ts-ca-central-msg", "Connection OK.", true);
-    else setFormMessage("ts-ca-central-msg", "Connection failed.", false);
+    try {
+      const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/test-central`, { method: "POST" });
+      const data = await readJson(res);
+      if (!res?.ok || !data?.ok) {
+        setFormMessage("ts-ca-central-msg", `Connection failed: ${data?.error || "Unknown error"}`, false);
+      } else {
+        const sitesText = data.sites_discovered > 0 ? ` Found ${data.sites_discovered} site(s).` : " No sites found.";
+        setFormMessage("ts-ca-central-msg", `✓ Connected (${data.api_version}).${sitesText}`, true);
+      }
+    } catch (e) {
+      setFormMessage("ts-ca-central-msg", "Connection failed.", false);
+    } finally {
+      testCentralBtn.disabled = false;
+    }
   };
 
   if (hubCaBrowseActiveTab === "ts-ca-settings") {
@@ -7269,7 +7283,7 @@ async function saveTsApiCentralSettings() {
     ? clusterSel.value
     : ($("#ts-ca-central-cluster-url")?.value.trim() || "");
   const payload = {
-    mode: "centralized",
+    mode: hubCentralData?.mode || aggregateCentralData?.mode || "centralized",
     hub_central_config: {
       api_version: $("#ts-ca-central-api-version")?.value || "classic",
       cluster_url: clusterUrl,

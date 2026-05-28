@@ -7527,41 +7527,53 @@ function renderHubCaAlertsTab(container, alerts, search) {
 }
 
 function renderHubCaInsightsTab(container, insights, search) {
-  const filtered = insights.filter((i) => !search || JSON.stringify(i).toLowerCase().includes(search));
-  if (!filtered.length) {
-    container.innerHTML = `<div class="empty-state">${search ? "No insights match your search." : "No AI insights returned from Central."}</div>`;
-    return;
-  }
+  const activeCat = container._caCatFilter || "All";
+  const categories = ["All", ...new Set(insights.map((i) => i.category).filter(Boolean))].sort((a, b) => a === "All" ? -1 : a.localeCompare(b));
+
+  let filtered = insights;
+  if (activeCat !== "All") filtered = filtered.filter((i) => i.category === activeCat);
+  if (search) filtered = filtered.filter((i) => JSON.stringify(i).toLowerCase().includes(search));
+
+  const catPills = categories.map((cat) =>
+    `<button class="btn btn-small ${activeCat === cat ? "btn-primary" : "btn-secondary"} ca-insight-cat-filter" data-cat="${escHtml(cat)}" style="margin:0 2px 4px;">${escHtml(cat)}</button>`
+  ).join("");
+
+  const tdP = "padding:6px 10px;";
   const rows = filtered.map((insight) => {
-    const catLabel = (insight.category || "—").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    const catLabel = (insight.category || "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    const catBadge = catLabel ? `<span class="badge badge-grey" style="font-size:10px;margin-left:4px;">${escHtml(catLabel)}</span>` : "";
     const devCount = insight.device_count ? `${insight.device_count} dev` : "";
     const cliCount = insight.client_count ? `${insight.client_count} client${insight.client_count !== 1 ? "s" : ""}` : "";
     const impacted = [devCount, cliCount].filter(Boolean).join(", ");
-    const tooltip = insight.description ? ` title="${escHtml(insight.description)}"` : "";
-    const tsStr = insight.ts ? (() => { try { return new Date(insight.ts).toLocaleString(); } catch (_) { return ""; } })() : "";
+    const descStr = insight.description ? `<div style="font-size:11px;color:var(--muted);line-height:1.3;">${escHtml(insight.description)}</div>` : "";
+    const tsStr = insight.ts ? (() => { try { return new Date(insight.ts).toLocaleString(); } catch (_) { return String(insight.ts); } })() : "—";
     return `<tr>
-      <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"${tooltip}><strong>${escHtml(insight.name || "—")}</strong></td>
-      <td style="white-space:nowrap;">${escHtml(catLabel)}</td>
-      <td style="white-space:nowrap;">${escHtml(insight.site || "—")}</td>
-      <td style="white-space:nowrap;font-size:11px;">${escHtml(impacted || "—")}</td>
-      <td style="white-space:nowrap;color:var(--muted);font-size:0.8rem;">${escHtml(tsStr)}</td>
-      <td style="white-space:nowrap;">${hubCaMonitorBtn("insight", { name: insight.name || "", site: insight.site || "" })}</td>
+      <td style="width:45%;${tdP}"><strong>${escHtml(insight.name || "—")}</strong>${catBadge}${descStr}</td>
+      <td style="white-space:nowrap;${tdP}">${escHtml(insight.site || "—")}</td>
+      <td style="white-space:nowrap;font-size:11px;${tdP}">${escHtml(impacted || "—")}</td>
+      <td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;${tdP}">${escHtml(tsStr)}</td>
+      <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("insight", { name: insight.name || "", site: insight.site || "" })}</td>
     </tr>`;
   }).join("");
+
   container.innerHTML = `
-    <div class="setup-card" style="padding:0;overflow-x:auto;">
-      <table class="data-table" style="margin:0;width:100%;">
+    <div style="margin-bottom:4px;">${catPills}</div>
+    ${filtered.length ? `<div class="setup-card" style="overflow-x:auto;padding:0;">
+      <table class="data-table" style="font-size:0.82rem;margin:0;width:100%;">
         <thead><tr>
-          <th style="padding:6px 10px;">Insight</th>
-          <th style="padding:6px 10px;white-space:nowrap;">Category</th>
-          <th style="padding:6px 10px;white-space:nowrap;">Site</th>
-          <th style="padding:6px 10px;white-space:nowrap;">Impacted</th>
-          <th style="padding:6px 10px;white-space:nowrap;">Time</th>
-          <th style="padding:6px 10px;"></th>
+          <th style="width:45%;padding:5px 10px;">Insight</th>
+          <th style="padding:5px 10px;">Site</th>
+          <th style="padding:5px 10px;">Impacted</th>
+          <th style="padding:5px 10px;">Time</th>
+          <th style="padding:5px 10px;"></th>
         </tr></thead>
-        <tbody style="font-size:0.85rem;">${rows}</tbody>
+        <tbody>${rows}</tbody>
       </table>
-    </div>`;
+    </div>` : `<div class="empty-state">${search || activeCat !== "All" ? "No insights match the filter." : "No AI insights returned from Central."}</div>`}`;
+
+  container.querySelectorAll(".ca-insight-cat-filter").forEach((btn) => {
+    btn.onclick = () => { container._caCatFilter = btn.dataset.cat; renderHubCaInsightsTab(container, insights, search); };
+  });
   attachHubCaMonitorButtons(container);
 }
 

@@ -717,30 +717,34 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 /* Setup sub-tabs */
 .setup-subnav {
   display: flex;
-  gap: 6px;
-  padding: 12px 16px;
+  gap: 0;
+  padding: 0 16px;
   background: var(--card-bg, var(--panel));
+  border-bottom: 2px solid var(--border);
   flex-wrap: wrap;
 }
 .setup-subtab {
   display: inline-flex;
   align-items: center;
-  padding: 6px 16px;
-  border: 1px solid var(--border);
-  background: transparent;
+  padding: 10px 18px;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  background: none;
   color: var(--muted);
   font-size: 0.875rem;
+  font-family: inherit;
   font-weight: 500;
   cursor: pointer;
-  border-radius: 20px;
+  border-radius: 0;
   line-height: 1.2;
-  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
-.setup-subtab:hover { color: var(--text); background: var(--hover, #f0f0f0); }
+.setup-subtab:hover { color: var(--text); background: var(--hover, rgba(0,0,0,0.04)); }
 .setup-subtab.active {
-  color: #fff;
-  background: var(--hpe-green);
-  border-color: var(--hpe-green);
+  color: var(--hpe-green);
+  border-bottom-color: var(--hpe-green);
+  background: rgba(1,169,130,0.07);
   font-weight: 600;
 }
 .setup-subtab.disabled {
@@ -2659,34 +2663,13 @@ body.mode-spoke .hub-only  { display: none !important; }
 .hub-vmserver-spoke-card { padding: 10px 20px; }
 .hub-vmserver-spoke-card .panel-header { margin-bottom: 2px; }
 
-/* ── Setup sub-tabs ─────────────────────────────────────────────── */
+/* ── Setup sub-tabs (underline variant used in settings panels) ───── */
 .setup-subtabs {
   display: flex;
   gap: 0;
   border-bottom: 2px solid var(--border);
   margin-bottom: 1.5rem;
   padding: 0 1rem;
-}
-
-.setup-subtab {
-  background: none;
-  border: none;
-  border-bottom: 3px solid transparent;
-  margin-bottom: -2px;
-  padding: 10px 18px;
-  font-family: inherit;
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--muted);
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-}
-
-.setup-subtabs .setup-subtab:hover { color: var(--text); }
-
-.setup-subtabs .setup-subtab.active {
-  color: var(--hpe-green);
-  border-bottom-color: var(--hpe-green);
 }
 
 .setup-subtab-content {

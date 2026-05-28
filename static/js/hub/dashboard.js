@@ -7341,7 +7341,9 @@ async function loadHubCaBrowseData(force = false) {
   if (!tenantId || !content) return;
 
   const cached = loadHubCaBrowseCache(tenantId);
-  if (cached && !force) {
+  // Only use localStorage cache if it has sites — empty cache may be stale (token expired)
+  const cachedHasSites = cached && (cached.sites || []).length > 0;
+  if (cachedHasSites && !force) {
     // Render cached data immediately — no flash of loading message
     hubCentralBrowseData = cached;
     updateHubCaBrowsePills(cached);

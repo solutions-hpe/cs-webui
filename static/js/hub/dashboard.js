@@ -7569,7 +7569,7 @@ function _caSevDot(sev) {
     : s === "minor" || s === "warning" || s === "yellow" ? "#f1c40f"
     : s === "info" || s === "good" || s === "green" || s === "clear" ? "#27ae60"
     : "#aaa";
-  return `<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0;"></span>${escHtml(sev || "—")}</span>`;
+  return `<span style="display:inline-flex;align-items:center;"><span style="width:10px;height:10px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0;"></span></span>`;
 }
 
 function renderHubCaAlertsTab(container, alerts, search) {

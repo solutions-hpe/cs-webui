@@ -5133,13 +5133,14 @@ async function loadConfigEditor(force = false) {
 
 // ── Command Inbox ─────────────────────────────────────────────────────────────
 
-const cmdTarget    = document.getElementById('cmd-target');
-const cmdAction    = document.getElementById('cmd-action');
-const cmdSendBtn   = document.getElementById('cmd-send-btn');
-const cmdClearBtn  = document.getElementById('cmd-clear-btn');
-const cmdMsg       = document.getElementById('cmd-msg');
-const cmdTbody     = document.getElementById('cmd-tbody');
-const cmdEmpty     = document.getElementById('cmd-empty');
+const cmdTarget       = document.getElementById('cmd-target');
+const cmdAction       = document.getElementById('cmd-action');
+const cmdSendBtn      = document.getElementById('cmd-send-btn');
+const cmdClearBtn     = document.getElementById('cmd-clear-btn');
+const cmdCancelAllBtn = document.getElementById('cmd-cancel-all-btn');
+const cmdMsg          = document.getElementById('cmd-msg');
+const cmdTbody        = document.getElementById('cmd-tbody');
+const cmdEmpty        = document.getElementById('cmd-empty');
 
 // Re-render on search input
 document.getElementById('cmd-search')?.addEventListener('input', () => {
@@ -5330,6 +5331,19 @@ if (cmdClearBtn) {
   cmdClearBtn.addEventListener('click', async () => {
     const ids = [...cmdTbody.querySelectorAll('[data-id]')].map((button) => button.dataset.id);
     await Promise.all(ids.map((id) => fetch(`/api/commands/${id}`, { method: 'DELETE' })));
+  });
+}
+
+if (cmdCancelAllBtn) {
+  cmdCancelAllBtn.addEventListener('click', async () => {
+    const res = await fetch('/api/commands/cancel-all', { method: 'POST' });
+    const data = res.ok ? await res.json() : null;
+    const count = data?.cancelled ?? 0;
+    if (cmdMsg) {
+      cmdMsg.textContent = count > 0 ? `✅ Cancelled ${count} queued command(s).` : 'No pending commands to cancel.';
+      cmdMsg.className = 'form-msg ' + (count > 0 ? 'success' : 'info');
+      setTimeout(() => { cmdMsg.textContent = ''; cmdMsg.className = 'form-msg'; }, 4000);
+    }
   });
 }
 

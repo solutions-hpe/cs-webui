@@ -911,6 +911,90 @@ function hubAggregateClientCount(spokes) {
   });
 }
 
+// ── Simulation client count history ─────────────────────────────────────────
+// Tracks per-spoke client counts over time so the Status tab can detect drops.
+const _CLIENT_HISTORY_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
+const _CLIENT_DROP_THRESHOLD = 0.25;                // 25% drop → red
+
+function _clientCountHistoryKey(tenantId) {
+  return `hub_client_count_history_${tenantId}`;
+}
+
+function _loadClientCountHistory(tenantId) {
+  try {
+    const raw = localStorage.getItem(_clientCountHistoryKey(tenantId));
+    return raw ? JSON.parse(raw) : [];
+  } catch (_) { return []; }
+}
+
+function _saveClientCountHistory(tenantId, history) {
+  try { localStorage.setItem(_clientCountHistoryKey(tenantId), JSON.stringify(history)); } catch (_) {}
+}
+
+// Record a snapshot of current per-spoke client counts and prune old entries.
+function _recordClientCountSnapshot(tenantId) {
+  if (!tenantId || !aggregateClientRows.length) return;
+  const now = Date.now();
+  const bySpokeId = {};
+  for (const row of aggregateClientRows) {
+    const id = row.spoke_id || row.spoke_hostname || "unknown";
+    const name = row.spoke_name || row.spoke_label || row.spoke_hostname || id;
+    if (!bySpokeId[id]) bySpokeId[id] = { spokeId: id, spokeName: name, count: 0 };
+    bySpokeId[id].count++;
+  }
+  let history = _loadClientCountHistory(tenantId).filter(e => now - e.ts < _CLIENT_HISTORY_MAX_AGE_MS);
+  for (const entry of Object.values(bySpokeId)) {
+    history.push({ ts: now, spokeId: entry.spokeId, spokeName: entry.spokeName, count: entry.count });
+  }
+  _saveClientCountHistory(tenantId, history);
+}
+
+// Return per-spoke status: { spokeId, spokeName, current, avg1h, tone, label, detail }
+function _getClientCountStatus(tenantId) {
+  const now = Date.now();
+  const history = _loadClientCountHistory(tenantId).filter(e => now - e.ts < _CLIENT_HISTORY_MAX_AGE_MS);
+
+  // Current counts from aggregateClientRows
+  const current = {};
+  for (const row of aggregateClientRows) {
+    const id = row.spoke_id || row.spoke_hostname || "unknown";
+    const name = row.spoke_name || row.spoke_label || row.spoke_hostname || id;
+    if (!current[id]) current[id] = { spokeId: id, spokeName: name, count: 0 };
+    current[id].count++;
+  }
+
+  // 1-hour average per spoke from history
+  const histBySpokeId = {};
+  for (const e of history) {
+    if (!histBySpokeId[e.spokeId]) histBySpokeId[e.spokeId] = [];
+    histBySpokeId[e.spokeId].push(e.count);
+  }
+
+  return Object.values(current).map(({ spokeId, spokeName, count }) => {
+    const samples = histBySpokeId[spokeId] || [];
+    const avg1h = samples.length > 1 ? Math.round(samples.reduce((s, v) => s + v, 0) / samples.length) : null;
+    let tone = "green";
+    let label = `${count} clients`;
+    let detail = avg1h !== null ? `Avg 1h: ${avg1h}` : "Establishing baseline…";
+    if (avg1h !== null && avg1h > 0) {
+      const dropPct = (avg1h - count) / avg1h;
+      if (dropPct >= _CLIENT_DROP_THRESHOLD) {
+        tone = "red";
+        label = `${count} clients (↓${Math.round(dropPct * 100)}%)`;
+        detail = `Avg 1h: ${avg1h} — dropped ${Math.round(dropPct * 100)}%`;
+      } else if (dropPct > 0) {
+        detail = `Avg 1h: ${avg1h} (↓${Math.round(dropPct * 100)}%)`;
+      }
+    } else if (avg1h === null) {
+      tone = "gray";
+    }
+    return { spokeId, spokeName, count, avg1h, tone, label, detail };
+  }).sort((a, b) => {
+    const tp = { red: 0, yellow: 1, green: 2, gray: 3 };
+    return (tp[a.tone] ?? 3) - (tp[b.tone] ?? 3) || a.spokeName.localeCompare(b.spokeName);
+  });
+}
+
 function renderHubStatusTab() {
   const container = document.getElementById("hub-status-content");
   if (!container) return;
@@ -918,6 +1002,11 @@ function renderHubStatusTab() {
   const now = new Date().toLocaleTimeString();
   const refreshEl = document.getElementById("hub-status-last-refreshed");
   if (refreshEl) refreshEl.textContent = `Last refreshed: ${now}`;
+
+  const tenantId = getActiveTenantId();
+
+  // Record a client count snapshot each time this tab renders
+  _recordClientCountSnapshot(tenantId);
 
   const tonePriority = { red: 0, yellow: 1, orange: 1, green: 2, gray: 3 };
   const sortByTone = (a, b) => (tonePriority[a._tone] ?? 3) - (tonePriority[b._tone] ?? 3);
@@ -1016,6 +1105,13 @@ function renderHubStatusTab() {
     }).sort(sortByTone);
 
   container.innerHTML =
+    makeSection("Simulation Clients", _getClientCountStatus(tenantId).map(s => ({
+      _tone: s.tone,
+      _label: s.label,
+      _name: escHtml(s.spokeName),
+      _detail: s.detail,
+      _lastSeen: null,
+    })), "Client Count", false) +
     makeSection("Sites", siteRows, "Spoke", false) +
     makeSection("Hardware", hwRows, "", false) +
     makeSection("Alerts", monRows("alert"), "", true) +
@@ -1023,7 +1119,6 @@ function renderHubStatusTab() {
     makeSection("Clients", monRows("client"), "", true);
 
   // Wire Remove buttons
-  const tenantId = getActiveTenantId();
   container.querySelectorAll(".hub-monitored-remove-btn").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const itemId = btn.dataset.itemId;

@@ -7574,6 +7574,15 @@ async function hubCaUnmonitorItem(type, payload, button) {
   }
 }
 
+// Returns a Set of lowercased monitored site names, or null if no sites are configured yet.
+function _caMonitoredSiteNames() {
+  const mappings = hubCentralData?.central_sites_config?.site_mappings;
+  if (!mappings || typeof mappings !== "object") return null;
+  const keys = Object.keys(mappings);
+  if (!keys.length) return null;
+  return new Set(keys.map((k) => k.toLowerCase().trim()));
+}
+
 function renderHubCaSitesTab(container, sites, search) {
   const filtered = sites.filter((site) => !search || JSON.stringify(site).toLowerCase().includes(search));
   if (!filtered.length) {
@@ -7630,6 +7639,9 @@ function _caSevDot(sev) {
 }
 
 function renderHubCaAlertsTab(container, alerts, search) {
+  const monitoredSites = _caMonitoredSiteNames();
+  if (monitoredSites) alerts = alerts.filter((a) => monitoredSites.has((a.site || "").toLowerCase().trim()));
+
   const activeCat = container._caCatFilter || "All";
   const categories = ["All", ...new Set(alerts.map((a) => a.category).filter(Boolean))].sort((a, b) => a === "All" ? -1 : a.localeCompare(b));
 
@@ -7679,6 +7691,9 @@ function renderHubCaAlertsTab(container, alerts, search) {
 }
 
 function renderHubCaInsightsTab(container, insights, search) {
+  const monitoredSites = _caMonitoredSiteNames();
+  if (monitoredSites) insights = insights.filter((i) => monitoredSites.has((i.site || "").toLowerCase().trim()));
+
   const activeCat = container._caCatFilter || "All";
   const categories = ["All", ...new Set(insights.map((i) => i.category).filter(Boolean))].sort((a, b) => a === "All" ? -1 : a.localeCompare(b));
 
@@ -7730,10 +7745,13 @@ function renderHubCaInsightsTab(container, insights, search) {
 
 function renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search) {
   const tdP = "padding:6px 10px;";
+  const monitoredSites = _caMonitoredSiteNames();
 
   // Prefer individual client records; fall back to count-only mode if no individual data
   const allClients = (clientsLegacy || []).filter((client) => hubCaIsIndividualClientRecord(client));
-  const clientSource = allClients.length > 0 ? allClients : null;
+  const clientSource = allClients.length > 0
+    ? (monitoredSites ? allClients.filter((c) => monitoredSites.has((c.site || "").toLowerCase().trim())) : allClients)
+    : null;
 
   if (clientSource) {
     const filtered = clientSource.filter((c) => !search || JSON.stringify(c).toLowerCase().includes(search));
@@ -7777,7 +7795,8 @@ function renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search) 
       </div>`;
   } else {
     // Fallback: show per-site counts when no individual client records are available
-    const entries = Object.entries(clientsBySite || {});
+    let entries = Object.entries(clientsBySite || {});
+    if (monitoredSites) entries = entries.filter(([site]) => monitoredSites.has(site.toLowerCase().trim()));
     const filtered = entries.filter(([site]) => !search || site.toLowerCase().includes(search));
     if (!filtered.length) {
       container.innerHTML = `<div class="empty-state">${search ? "No clients match your search." : "No clients returned from Central."}</div>`;
@@ -7809,9 +7828,10 @@ function renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search) 
 }
 
 function renderHubCaDevicesTab(container, devicesBySite, search) {
-  const allDevices = Object.entries(devicesBySite || []).flatMap(([site, devs]) =>
-    devs.map((d) => ({ ...d, site }))
-  );
+  const monitoredSites = _caMonitoredSiteNames();
+  const allDevices = Object.entries(devicesBySite || [])
+    .filter(([site]) => !monitoredSites || monitoredSites.has(site.toLowerCase().trim()))
+    .flatMap(([site, devs]) => devs.map((d) => ({ ...d, site })));
   const filtered = allDevices.filter((d) =>
     !search || JSON.stringify(d).toLowerCase().includes(search)
   );

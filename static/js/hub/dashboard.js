@@ -1009,15 +1009,14 @@ function renderHubStatusTab() {
     const cs = site.client_status || {};
     const cc = site.client_count || {};
     const spokeNames = (site.assigned_spokes || []).map((s) => s.display_name).filter(Boolean).join(", ") || "Unassigned";
-    const current = Number.isFinite(Number(cc.current)) ? Number(cc.current) : null;
-    const avg = Number.isFinite(Number(cc.hourly_avg)) ? Math.round(cc.hourly_avg) : null;
     const dropPct = Number.isFinite(Number(cc.drop_pct)) ? Math.round(cc.drop_pct) : 0;
     const rawLabel = cs.label || "NO_DATA";
     const displayLabel = rawLabel === "NO_DATA" ? "Collecting" : rawLabel === "DEGRADED" ? `↓${dropPct}% clients` : rawLabel;
-    const countDetail = current !== null
-      ? (avg !== null ? `${current} now / ${avg} avg (1h)` : `${current} clients`)
-      : null;
-    const detail = countDetail || null;
+    // Use wireless_clients from Central API directly; fall back to tracked metric current
+    const wirelessClients = Number.isFinite(Number(site.wireless_clients)) ? Number(site.wireless_clients) : null;
+    const fallbackCurrent = Number.isFinite(Number(cc.current)) ? Number(cc.current) : null;
+    const clientNum = wirelessClients ?? fallbackCurrent;
+    const detail = clientNum !== null ? `${clientNum} clients` : null;
     const lastSeen = cc.ts ? new Date(cc.ts * 1000).toLocaleString() : null;
     return {
       _tone: cs.tone || "gray",

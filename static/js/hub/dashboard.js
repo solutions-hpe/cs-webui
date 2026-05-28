@@ -6384,25 +6384,26 @@ async function loadHubCentralData(force = false) {
 }
 
 async function loadHubCentralMonitoring(force = false) {
-  const configContainer = $("#hcm-config-content");
-  const contextContainer = $("#hcm-context-content");
-  if (!configContainer || !contextContainer) return;
-  if (!currentTenantId || !currentUser) {
-    aggregateCentralData = null;
-    renderHubCentralMonitoringConfig();
-    if (hubCentralTopSubtab === "hcm-browse") await loadHubCentralData(force);
-    return;
-  }
-  if (force || !aggregateCentralData) {
-    configContainer.innerHTML = '<div class="empty-state">Loading…</div>';
-    contextContainer.innerHTML = '<div class="empty-state">Loading…</div>';
-  }
-  const [centralData] = await Promise.all([
-    force || !aggregateCentralData ? loadAggregateData("central") : Promise.resolve(aggregateCentralData),
-    loadHubCentralData(force).catch(() => null),
-  ]);
-  aggregateCentralData = centralData || aggregateCentralData || { mode: "distributed", hub_central_config: {}, spokes: [] };
-  renderHubCentralMonitoringConfig();
+  const tenantId = getActiveTenantId();
+  if (!tenantId || !currentUser) return;
+
+  // Wire up sub-tabs, search, refresh and modal (idempotent)
+  $$(".ts-ca-subtab").forEach((button) => {
+    button.onclick = () => {
+      hubCaBrowseActiveTab = button.dataset.subtab || "ts-ca-sites";
+      renderHubCaBrowseTab();
+    };
+  });
+  const searchEl = $("#ts-ca-search");
+  if (searchEl) searchEl.oninput = () => renderHubCaBrowseTab();
+  const refreshBtn = $("#ts-ca-refresh-btn");
+  if (refreshBtn) refreshBtn.onclick = () => { void loadHubCaBrowseData(true); };
+  const cancelBtn = $("#ts-ca-modal-cancel");
+  if (cancelBtn) cancelBtn.onclick = closeHubCaMonitorModal;
+  const modal = $("#ts-ca-monitor-modal");
+  if (modal) modal.onclick = (e) => { if (e.target === modal) closeHubCaMonitorModal(); };
+
+  await loadHubCaBrowseData(force);
 }
 
 function renderHubCentralStatus() {

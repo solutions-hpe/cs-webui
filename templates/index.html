@@ -335,73 +335,45 @@
     <main id="tab-hub-central" class="page tab-content hidden">
       <div class="page-toolbar">
         <div class="toolbar-stats">
-          <span class="stat-pill" id="hcm-configured-pill">Configured: —</span>
-          <span class="stat-pill" id="hcm-version-pill">API: —</span>
-          <span class="stat-pill" id="hcm-sites-pill">— sites</span>
+          <span class="stat-pill" id="ts-ca-mode-pill">— mode</span>
+          <span class="stat-pill" id="ts-ca-sites-pill">— sites</span>
+          <span class="stat-pill" id="ts-ca-updated-pill">—</span>
         </div>
         <div class="toolbar-actions">
-          <button id="refresh-hub-central-btn" class="btn btn-primary btn-small" type="button">Refresh</button>
+          <button id="ts-ca-refresh-btn" class="btn btn-primary btn-small" type="button">Refresh</button>
         </div>
       </div>
-      <nav class="setup-subnav" role="tablist">
-        <button class="setup-subtab hub-central-top-subtab active" data-subtab="hcm-config" role="tab" type="button">Configuration</button>
-        <button class="setup-subtab hub-central-top-subtab" data-subtab="hcm-browse" role="tab" type="button">Browse Data</button>
+      <nav class="setup-subnav" style="margin-bottom:0;border-bottom:1px solid var(--border);">
+        <button class="setup-subtab ts-ca-subtab active" data-subtab="ts-ca-sites" type="button">Sites</button>
+        <button class="setup-subtab ts-ca-subtab" data-subtab="ts-ca-alerts" type="button">Alerts</button>
+        <button class="setup-subtab ts-ca-subtab" data-subtab="ts-ca-insights" type="button">Insights</button>
+        <button class="setup-subtab ts-ca-subtab" data-subtab="ts-ca-clients" type="button">Clients</button>
+        <button class="setup-subtab ts-ca-subtab" data-subtab="ts-ca-devices" type="button">Devices</button>
       </nav>
-      <div id="hcm-config-panel">
-        <div class="tenant-detail-grid">
-          <section class="setup-card">
-            <div class="setup-card-header"><h2>Central Monitoring</h2><p>Hub-level Central API configuration for the selected tenant.</p></div>
-            <div id="hcm-config-content" class="setup-status-grid">
-              <div class="setup-status-item"><span class="setup-status-label">Configured</span><span class="setup-status-value">—</span></div>
-              <div class="setup-status-item"><span class="setup-status-label">Cluster URL</span><span class="setup-status-value">—</span></div>
-              <div class="setup-status-item"><span class="setup-status-label">Client ID</span><span class="setup-status-value">—</span></div>
-              <div class="setup-status-item"><span class="setup-status-label">Customer ID</span><span class="setup-status-value">—</span></div>
-              <div class="setup-status-item"><span class="setup-status-label">API Version</span><span class="setup-status-value">—</span></div>
-            </div>
-          </section>
-          <section class="setup-card">
-            <div class="setup-card-header"><h2>Monitoring Context</h2><p>Keep Central API browsing available from the main hub workflow.</p></div>
-            <div id="hcm-context-content" class="setup-status-grid">
-              <div class="setup-status-item"><span class="setup-status-label">Selected Tenant</span><span class="setup-status-value">—</span></div>
-              <div class="setup-status-item"><span class="setup-status-label">Mode</span><span class="setup-status-value">—</span></div>
-              <div class="setup-status-item"><span class="setup-status-label">Connected Spokes</span><span class="setup-status-value">—</span></div>
-              <div class="setup-status-item"><span class="setup-status-label">Monitored Sites</span><span class="setup-status-value">—</span></div>
-            </div>
-            <div class="tenant-detail-note hub-central-note">Use <strong>Browse Data</strong> for the monitored hub views, or open the full <strong>Tenant Setup → Central API</strong> browser for sites, alerts, insights, clients, and devices.</div>
-            <div class="form-actions hub-central-browser-actions">
-              <button class="btn btn-secondary btn-small" data-open-central-browser="true" type="button">Open Central API Browser</button>
-            </div>
-          </section>
-        </div>
+      <div style="padding:10px 0 6px;">
+        <input type="search" id="ts-ca-search" class="form-input" placeholder="Search…" style="max-width:320px;" autocomplete="off">
       </div>
-      <div id="hcm-browse-panel" class="hidden">
-        <div class="tenant-detail-note hub-central-note">Browse monitored Central data here. For the full Setup browser, including insights and devices, use <strong>Open Central API Browser</strong>.</div>
-        <div class="form-actions hub-central-browser-actions">
-          <button class="btn btn-secondary btn-small" data-open-central-browser="true" type="button">Open Central API Browser</button>
-        </div>
-        <nav class="setup-subnav" role="tablist">
-          <button class="setup-subtab hub-central-subtab active" data-subtab="hcs-sites" role="tab" type="button">Sites</button>
-          <button class="setup-subtab hub-central-subtab" data-subtab="hcs-alerts" role="tab" type="button">Alerts</button>
-          <button class="setup-subtab hub-central-subtab" data-subtab="hcs-clients" role="tab" type="button">Clients</button>
-        </nav>
-        <div id="hcs-sites-panel">
-          <div id="hcs-overview"></div>
-          <div id="hcs-site-detail" class="hidden">
-            <div class="page-toolbar" style="margin-bottom:12px;">
-              <button id="hcs-detail-back" class="btn btn-secondary btn-small" type="button">← Back</button>
-              <div style="flex:1;">
-                <div id="hcs-detail-title" style="font-weight:700;font-size:1.1rem;"></div>
-                <div id="hcs-detail-sub" style="color:var(--muted);font-size:0.85rem;"></div>
-              </div>
-            </div>
-            <div id="hcs-detail-content"></div>
+      <div id="ts-ca-content">
+        <div class="empty-state">Loading Central data…</div>
+      </div>
+      <div id="ts-ca-monitor-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:center;justify-content:center;">
+        <div style="background:var(--panel);border-radius:10px;padding:0;min-width:380px;max-width:480px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.35);overflow:hidden;" onclick="event.stopPropagation()">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);">
+            <h3 style="margin:0;font-size:1rem;" id="ts-ca-modal-title">Monitor Site</h3>
+            <button id="ts-ca-modal-close" class="btn btn-ghost btn-small" type="button" style="font-size:1.1rem;line-height:1;padding:4px 8px;" title="Close">✕</button>
           </div>
-        </div>
-        <div id="hcs-alerts-panel" class="hidden">
-          <div id="hcs-alerts-content"></div>
-        </div>
-        <div id="hcs-clients-panel" class="hidden">
-          <div id="hcs-clients-content"></div>
+          <div style="padding:20px;">
+            <p style="margin:0 0 16px;color:var(--muted);font-size:0.85rem;line-height:1.5;word-wrap:break-word;" id="ts-ca-modal-sub"></p>
+            <div class="form-group" style="margin:0;">
+              <label class="form-label" style="font-size:0.82rem;margin-bottom:6px;display:block;">Assign to Spoke</label>
+              <select id="ts-ca-modal-spoke" class="form-input" style="width:100%;"></select>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 20px 16px;border-top:1px solid var(--border);">
+            <span id="ts-ca-modal-msg" class="form-msg" style="flex:1;margin:0;font-size:0.82rem;"></span>
+            <button id="ts-ca-modal-cancel" class="btn btn-secondary btn-small" type="button">Cancel</button>
+            <button id="ts-ca-modal-confirm" class="btn btn-primary btn-small" type="button">Add to Monitoring</button>
+          </div>
         </div>
       </div>
     </main>

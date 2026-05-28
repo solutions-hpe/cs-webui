@@ -5920,6 +5920,18 @@ function renderHubCentral() {
           <div class="form-group"><label class="form-label" for="hub-central-workspace-id">GLP Workspace ID (optional)</label><input id="hub-central-workspace-id" type="text" class="form-input" value="${escHtml(config.workspace_id || "")}"${disabled}></div>
           <div class="form-group"><label class="form-label" for="hub-central-customer-id">Customer ID</label><input id="hub-central-customer-id" type="text" class="form-input" value="${escHtml(config.customer_id || "")}"${disabled}></div>
           <div class="tenant-detail-note"><strong>New Central setup:</strong> Use either a static <strong>Access Token</strong> (from Central → API Gateway → REST API → Generate Token) <em>or</em> a <strong>Client ID + Secret</strong> (from GreenLake → Manage Workspace → Personal API Clients). The <code>Cluster URL</code> is always required. <code>Workspace ID</code> is only needed for GLP-scoped OAuth2 credentials.</div>
+          <div class="form-group">
+            <label class="form-label" for="hub-central-poll-interval">Polling Interval</label>
+            <select id="hub-central-poll-interval" class="form-input"${disabled}>
+              <option value="1"${(config.central_browse_interval_minutes||5) === 1 ? " selected" : ""}>Every 1 minute</option>
+              <option value="2"${(config.central_browse_interval_minutes||5) === 2 ? " selected" : ""}>Every 2 minutes</option>
+              <option value="5"${(config.central_browse_interval_minutes||5) === 5 ? " selected" : ""}>Every 5 minutes (default)</option>
+              <option value="10"${(config.central_browse_interval_minutes||5) === 10 ? " selected" : ""}>Every 10 minutes</option>
+              <option value="15"${(config.central_browse_interval_minutes||5) === 15 ? " selected" : ""}>Every 15 minutes</option>
+              <option value="30"${(config.central_browse_interval_minutes||5) === 30 ? " selected" : ""}>Every 30 minutes</option>
+              <option value="60"${(config.central_browse_interval_minutes||5) === 60 ? " selected" : ""}>Every 60 minutes</option>
+            </select>
+          </div>
           <div class="form-actions">
             <button id="save-central-btn" class="btn btn-primary" type="button"${disabled}>Save Central Settings</button>
             <button id="test-central-btn" class="btn btn-secondary" type="button">Test Connection</button>
@@ -7945,6 +7957,7 @@ async function saveCentralSettings() {
   }
   const payload = {
     mode: $("#hub-central-mode")?.value || "distributed",
+    central_browse_interval_minutes: parseInt($("#hub-central-poll-interval")?.value || "5", 10),
     hub_central_config: {
       api_version: $("#hub-central-api-version")?.value || "classic",
       cluster_url: (() => {

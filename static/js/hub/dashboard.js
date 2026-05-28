@@ -4227,12 +4227,7 @@ function renderHubVmServer() {
     try {
       const data = await apiFetch(`/api/${encodeURIComponent(currentTenantId)}/aggregate/fleet-reclone-clear`, { method: "POST" });
       showToast(`Queued reclone state clear for ${data?.queued || 0} spoke(s).`, "ok");
-      setTimeout(() => loadHubVmServer(true), 3000);
-    } catch (err) {
-      showToast(err?.message || "Unable to clear reclone state.", "error");
-      if (btn) { btn.disabled = false; btn.textContent = "✕ Clear Error"; }
-    }
-  });
+      setTimeout(() => loadVmServer(true), 3000);
   $("#hub-autoprov-pill", container)?.addEventListener("click", async () => {
     if (!canManageTenant(tenantId)) return;
     const pill = $("#hub-autoprov-pill", container);
@@ -4629,7 +4624,7 @@ function wireHubVmsPanelActions(panel, tenantId, spokeId) {
       const data = await readJson(res);
       if (!res?.ok) throw new Error(data?.detail || "Unable to clear reclone state.");
       showToast("Queued reclone state clear for this spoke.", "ok");
-      setTimeout(() => loadHubVmServer(true), 3000);
+      setTimeout(() => loadVmServer(true), 3000);
     } catch (err) {
       showToast(err?.message || "Unable to clear reclone state.", "error");
       if (btn) { btn.disabled = false; btn.textContent = "✕ Clear Errors"; }
@@ -5731,8 +5726,7 @@ async function queueHubTemplateUnlock(tenantId, spokeId) {
   if (!resp?.ok) throw new Error(`HTTP ${resp?.status ?? "?"}`);
   const data = await resp.json().catch(() => ({}));
   showToast(`Queued template unlock for ${data?.queued || 0} spoke(s).`, "ok");
-  setTimeout(() => loadHubVmServer(true), 3000);
-  return data;
+  setTimeout(() => loadVmServer(true), 3000);
 }
 
 

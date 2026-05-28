@@ -10492,6 +10492,20 @@ function bindEvents() {
   $("#refresh-hub-central-btn")?.addEventListener("click", () => loadHubCentralMonitoring(true));
   $("#refresh-vm-server-btn")?.addEventListener("click", () => loadVmServer(true));
   $("#refresh-spokes-btn")?.addEventListener("click", () => loadSpokes(true));
+  $("#update-all-spokes-btn")?.addEventListener("click", async () => {
+    const btn = $("#update-all-spokes-btn");
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "⬆ Queuing…";
+    try {
+      const res = await apiFetch(`/api/${currentTenantId}/aggregate/update-all-spokes`, { method: "POST" });
+      const data = await res.json();
+      btn.textContent = data.ok ? `✓ Queued (${data.spokes_queued} spokes)` : "⚠ Failed";
+    } catch {
+      btn.textContent = "⚠ Error";
+    }
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000);
+  });
   $("#refresh-commands-btn")?.addEventListener("click", loadCommands);
   $("#refresh-config-btn")?.addEventListener("click", () => loadConfig(true));
   $("#refresh-tenant-setup-btn")?.addEventListener("click", () => loadTenantSetup(true));

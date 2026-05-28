@@ -765,6 +765,14 @@ function hubCentralMonitorSummary(data = hubCentralData) {
   const knownSites = new Set(
     [...assignedBySite.keys(), ...Object.keys(siteMappings)].filter(Boolean)
   );
+  // In centralized mode the hub monitors all sites on behalf of all spokes.
+  // Guarantee every known site has a spoke shown — use first online spoke as fallback.
+  if (source.mode === "centralized" && spokes.length) {
+    const fallbackSpoke = spokes.find((s) => s.spoke_online) || spokes[0];
+    for (const wsite of knownSites) {
+      if (!assignedBySite.has(wsite)) assignedBySite.set(wsite, fallbackSpoke);
+    }
+  }
   const sites = [...knownSites]
     .sort((left, right) => String(left).localeCompare(String(right), undefined, { sensitivity: "base" }))
     .map((wsite) => {

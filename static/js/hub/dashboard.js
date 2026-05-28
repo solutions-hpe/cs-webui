@@ -3683,7 +3683,7 @@ function renderTenantSetupPanel(data) {
       <button class="setup-subtab active" onclick="switchSetupSubTab('info')">Info</button>
       <button class="setup-subtab" onclick="switchSetupSubTab('notifications')">Notifications</button>
       <button class="setup-subtab" onclick="switchSetupSubTab('processing')">Processing</button>
-      <button class="setup-subtab" onclick="switchSetupSubTab('config')">Config</button>
+      <button class="setup-subtab" onclick="switchSetupSubTab('simulations')">Simulations</button>
     </div>
     <div id="setup-subtab-info" class="setup-subtab-content tenant-detail-grid">
       <section class="setup-card">
@@ -3748,7 +3748,7 @@ function renderTenantSetupPanel(data) {
         </table>
       </section>
     </div>
-    <div id="setup-subtab-config" class="setup-subtab-content tenant-detail-grid hidden">
+    <div id="setup-subtab-simulations" class="setup-subtab-content tenant-detail-grid hidden">
       <section class="setup-card">
         <div class="setup-card-header"><h2>Aggregated Spoke Config</h2><p>Common runtime configuration across spokes in this tenant.</p></div>
         <table class="data-table">
@@ -3776,8 +3776,8 @@ function switchSetupSubTab(subtabId) {
     content.classList.toggle('hidden', !content.id.endsWith(subtabId));
   });
   
-  // Load simulation config when Config sub-tab is shown
-  if (subtabId === 'config') {
+  // Load simulation config when Simulations sub-tab is shown
+  if (subtabId === 'simulations') {
     renderSetupSimulationConfigEditor();
   }
 }

@@ -1046,13 +1046,24 @@ function renderHubStatusTab() {
   const monRows = (type) => items
     .filter((item) => item.type === type)
     .map((item) => {
-      const isOk = item.status === "ok" || !item.consecutive_failures;
-      const lastSeen = item.last_seen ? new Date(item.last_seen * 1000).toLocaleString() : null;
+      const status = item.status || "ok";
+      const missingSince = item.missing_since ? (Date.now() / 1000 - Number(item.missing_since)) : 0;
+      const missingMins = Math.round(missingSince / 60);
+      const tone = status === "missing" ? "red" : status === "warning" ? "yellow" : "green";
+      const label = status === "ok" ? "OK"
+        : status === "warning" ? `⚠ ${missingMins}m absent`
+        : `✗ ${missingMins}m absent`;
+      // Use Central API timestamps (when the alert actually fired), not polling time.
+      const centralLast = item.central_last_seen ? new Date(item.central_last_seen).toLocaleString() : null;
+      const centralFirst = item.central_first_seen ? new Date(item.central_first_seen).toLocaleString() : null;
+      const lastSeen = centralLast || (item.last_seen ? new Date(item.last_seen * 1000).toLocaleString() : null);
+      const detail = centralFirst && centralLast && centralFirst !== centralLast
+        ? `First: ${centralFirst}` : null;
       return {
-        _tone: isOk ? "green" : "red",
-        _label: isOk ? "OK" : `Missing (${item.consecutive_failures || 0})`,
+        _tone: tone,
+        _label: label,
         _name: escHtml(item.name || item.identifier || "—"),
-        _detail: "",
+        _detail: detail,
         _lastSeen: lastSeen,
         _itemId: item.id || "",
       };
@@ -1061,8 +1072,8 @@ function renderHubStatusTab() {
   container.innerHTML =
     makeSection("Sites", siteRows, "Spoke / Clients", false, false) +
     makeSection("Hardware", hwRows, "", true) +
-    makeSection("Alerts", monRows("alert"), "", true) +
-    makeSection("Insights", monRows("insight"), "", true) +
+    makeSection("Alerts", monRows("alert"), "First Fired", true) +
+    makeSection("Insights", monRows("insight"), "First Fired", true) +
     makeSection("Clients", monRows("client"), "", true);
 
   // Wire Remove buttons
@@ -1287,15 +1298,22 @@ function renderHubMonitoredItems(items = [], tenantId = "") {
       return id && id !== n;
     });
     const rows = typeItems.map((item) => {
-      const isOk = item.status === "ok" || !item.consecutive_failures;
-      const failures = item.consecutive_failures || 0;
-      const lastSeen = item.last_seen ? new Date(item.last_seen * 1000).toLocaleString() : "—";
+      const status = item.status || "ok";
+      const missingSince = item.missing_since ? (Date.now() / 1000 - Number(item.missing_since)) : 0;
+      const missingMins = Math.round(missingSince / 60);
+      const isOk = status === "ok";
+      const isWarn = status === "warning";
+      // Use Central API timestamps when available, fall back to polling time
+      const centralLast = item.central_last_seen ? new Date(item.central_last_seen).toLocaleString() : null;
+      const centralFirst = item.central_first_seen ? new Date(item.central_first_seen).toLocaleString() : null;
+      const lastSeenDisplay = centralLast || (item.last_seen ? new Date(item.last_seen * 1000).toLocaleString() : "—");
+      const firstSeenDisplay = centralFirst || "—";
+      const dotColor = isOk ? "#01A982" : isWarn ? "#f39c12" : "#FC5A5A";
       const dotTitle = isOk
-        ? `Last seen: ${lastSeen}`
-        : `Missing for ${failures} consecutive check${failures === 1 ? "" : "s"}`;
-      const statusBadge = isOk
-        ? `<span style="display:inline-flex;align-items:center;gap:5px;color:#01A982;font-weight:600;font-size:0.82rem;" title="${escHtml(dotTitle)}"><span style="width:8px;height:8px;border-radius:50%;background:#01A982;flex-shrink:0;"></span>Reporting</span>`
-        : `<span style="display:inline-flex;align-items:center;gap:5px;color:#FC5A5A;font-weight:600;font-size:0.82rem;" title="${escHtml(dotTitle)}"><span style="width:8px;height:8px;border-radius:50%;background:#FC5A5A;flex-shrink:0;"></span>Missing (${failures})</span>`;
+        ? `Last fired: ${lastSeenDisplay}${centralFirst ? ` · First fired: ${firstSeenDisplay}` : ""}`
+        : `Absent for ${missingMins} min · Last fired: ${lastSeenDisplay}`;
+      const badgeLabel = isOk ? "Reporting" : isWarn ? `⚠ ${missingMins}m absent` : `✗ ${missingMins}m absent`;
+      const statusBadge = `<span style="display:inline-flex;align-items:center;gap:5px;color:${dotColor};font-weight:600;font-size:0.82rem;" title="${escHtml(dotTitle)}"><span style="width:8px;height:8px;border-radius:50%;background:${dotColor};flex-shrink:0;"></span>${escHtml(badgeLabel)}</span>`;
       const name = item.name || item.identifier || "—";
       const ident = item.identifier || "—";
       const identCell = showIdent ? `<td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;">${escHtml(ident)}</td>` : "";
@@ -1304,7 +1322,7 @@ function renderHubMonitoredItems(items = [], tenantId = "") {
           <td style="font-weight:600;word-break:break-word;min-width:160px;">${escHtml(name)}</td>
           ${identCell}
           <td style="white-space:nowrap;">${statusBadge}</td>
-          <td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;">${escHtml(lastSeen)}</td>
+          <td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;">${escHtml(lastSeenDisplay)}</td>
           <td style="white-space:nowrap;">
             <button class="btn btn-small btn-secondary hub-monitored-remove-btn"
               data-item-id="${escHtml(item.id)}" type="button">Remove</button>

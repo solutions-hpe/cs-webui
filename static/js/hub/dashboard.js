@@ -7517,33 +7517,56 @@ function renderHubCaSitesTab(container, sites, search) {
     container.innerHTML = `<div class="empty-state">${search ? "No sites match your search." : "No sites returned from Central."}</div>`;
     return;
   }
-  const healthBadge = (score) => {
-    if (score == null || score === "") return "—";
-    const n = parseInt(score, 10);
-    const cls = n >= 80 ? "badge-ok" : n >= 50 ? "badge-warning" : "badge-failure";
-    const label = n >= 80 ? "Healthy" : n >= 50 ? "Fair" : "Poor";
-    return `<span class="badge ${cls}">${label}</span>`;
-  };
-  const rows = filtered.map((site) => `
-    <tr>
-      <td><strong>${escHtml(site.name || "—")}</strong></td>
-      <td>${site.health_score != null ? `${escHtml(String(site.health_score))}%` : "—"}</td>
-      <td>${site.wireless_clients != null ? escHtml(String(site.wireless_clients)) : "—"}</td>
-      <td>${healthBadge(site.health_score)}</td>
-      <td>${hubCaMonitorBtn("site", { name: site.name || "", central_site: site.central_site || site.name || "" })}</td>
-    </tr>`).join("");
+  const tdP = "padding:6px 10px;";
+  const rows = filtered.map((site) => {
+    const score = site.health_score != null ? parseInt(site.health_score, 10) : null;
+    const healthColor = score == null ? "#aaa" : score >= 80 ? "#27ae60" : score >= 50 ? "#f39c12" : "#e74c3c";
+    const healthLabel = score == null ? "—" : score >= 80 ? "Healthy" : score >= 50 ? "Fair" : "Poor";
+    const healthDot = `<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:${healthColor};display:inline-block;flex-shrink:0;"></span>${healthLabel}</span>`;
+    const scoreStr = score != null ? `<div style="font-size:11px;color:var(--muted);">${score}%</div>` : "";
+    return `<tr>
+      <td style="width:40%;${tdP}"><strong>${escHtml(site.name || "—")}</strong></td>
+      <td style="${tdP}">${healthDot}${scoreStr}</td>
+      <td style="white-space:nowrap;${tdP}">${site.wireless_clients != null ? escHtml(String(site.wireless_clients)) : "—"}</td>
+      <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("site", { name: site.name || "", central_site: site.central_site || site.name || "" })}</td>
+    </tr>`;
+  }).join("");
   container.innerHTML = `
-    <div class="setup-card" style="overflow-x:auto;">
-      <table class="data-table">
-        <thead><tr><th>Site Name</th><th>Health</th><th>Wireless Clients</th><th>Status</th><th></th></tr></thead>
+    <div class="setup-card" style="overflow-x:auto;padding:0;">
+      <table class="data-table" style="font-size:0.82rem;margin:0;min-width:500px;width:100%;">
+        <thead><tr>
+          <th style="width:40%;padding:5px 10px;">Site</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Health</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Wireless Clients</th>
+          <th style="padding:5px 10px;"></th>
+        </tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
   attachHubCaMonitorButtons(container);
 }
 
+function _caTs(ts) {
+  if (!ts) return "—";
+  try {
+    const d = new Date(ts);
+    const date = d.toLocaleDateString();
+    const time = d.toLocaleTimeString();
+    return `<span style="display:block;font-size:0.78rem;color:var(--muted);">${escHtml(date)}</span><span style="display:block;font-size:0.78rem;color:var(--muted);">${escHtml(time)}</span>`;
+  } catch (_) { return escHtml(String(ts)); }
+}
+
+function _caSevDot(sev) {
+  const s = (sev || "").toLowerCase();
+  const color = s === "critical" || s === "red" || s === "error" ? "#e74c3c"
+    : s === "major" || s === "orange" ? "#e67e22"
+    : s === "minor" || s === "warning" || s === "yellow" ? "#f1c40f"
+    : s === "info" || s === "good" || s === "green" || s === "clear" ? "#27ae60"
+    : "#aaa";
+  return `<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0;"></span>${escHtml(sev || "—")}</span>`;
+}
+
 function renderHubCaAlertsTab(container, alerts, search) {
-  // Category filter state stored on container
   const activeCat = container._caCatFilter || "All";
   const categories = ["All", ...new Set(alerts.map((a) => a.category).filter(Boolean))].sort((a, b) => a === "All" ? -1 : a.localeCompare(b));
 
@@ -7551,31 +7574,21 @@ function renderHubCaAlertsTab(container, alerts, search) {
   if (activeCat !== "All") filtered = filtered.filter((a) => a.category === activeCat);
   if (search) filtered = filtered.filter((a) => JSON.stringify(a).toLowerCase().includes(search));
 
-  const sevBadge = (sev) => {
-    const s = (sev || "").toLowerCase();
-    const cls = s === "critical" || s === "red" || s === "error" ? "badge-failure"
-      : s === "major" || s === "orange" ? "badge-failure"
-      : s === "minor" || s === "warning" || s === "yellow" ? "badge-warning"
-      : "badge-info";
-    return `<span class="badge ${cls}">${escHtml(sev || "—")}</span>`;
-  };
-
   const catPills = categories.map((cat) =>
     `<button class="btn btn-small ${activeCat === cat ? "btn-primary" : "btn-secondary"} ca-cat-filter" data-cat="${escHtml(cat)}" style="margin:0 2px 4px;">${escHtml(cat)}</button>`
   ).join("");
 
   const tdP = "padding:6px 10px;";
   const rows = filtered.map((alert) => {
-    const tsStr = alert.ts ? (() => { try { return new Date(alert.ts).toLocaleString(); } catch (_) { return String(alert.ts); } })() : "—";
     const catBadge = alert.category ? `<span class="badge badge-grey" style="font-size:10px;margin-left:4px;">${escHtml(alert.category)}</span>` : "";
     const devType = alert.device_type ? escHtml(alert.device_type) : "—";
     const detailStr = alert.detail ? `<div style="font-size:11px;color:var(--muted);line-height:1.3;">${escHtml(alert.detail)}</div>` : "";
     return `<tr>
-      <td style="width:45%;${tdP}"><strong>${escHtml(alert.name || "—")}</strong>${catBadge}${detailStr}</td>
+      <td style="width:40%;${tdP}"><strong>${escHtml(alert.name || "—")}</strong>${catBadge}${detailStr}</td>
       <td style="white-space:nowrap;${tdP}">${escHtml(alert.site || "—")}</td>
-      <td style="white-space:nowrap;${tdP}">${sevBadge(alert.severity)}</td>
+      <td style="white-space:nowrap;min-width:80px;${tdP}">${_caSevDot(alert.severity)}</td>
       <td style="font-size:11px;color:var(--muted);white-space:nowrap;${tdP}">${devType}</td>
-      <td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;${tdP}">${escHtml(tsStr)}</td>
+      <td style="min-width:70px;${tdP}">${_caTs(alert.ts)}</td>
       <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("alert", { name: alert.name || "", site: alert.site || "" })}</td>
     </tr>`;
   }).join("");
@@ -7583,13 +7596,13 @@ function renderHubCaAlertsTab(container, alerts, search) {
   container.innerHTML = `
     <div style="margin-bottom:4px;">${catPills}</div>
     ${filtered.length ? `<div class="setup-card" style="overflow-x:auto;padding:0;">
-      <table class="data-table" style="font-size:0.82rem;margin:0;width:100%;">
+      <table class="data-table" style="font-size:0.82rem;margin:0;min-width:700px;width:100%;">
         <thead><tr>
-          <th style="width:45%;padding:5px 10px;">Alert</th>
-          <th style="padding:5px 10px;">Site</th>
-          <th style="padding:5px 10px;">Severity</th>
-          <th style="padding:5px 10px;">Device Type</th>
-          <th style="padding:5px 10px;">Time</th>
+          <th style="width:40%;padding:5px 10px;">Alert</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Site</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Severity</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Device Type</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Time</th>
           <th style="padding:5px 10px;"></th>
         </tr></thead>
         <tbody>${rows}</tbody>
@@ -7622,12 +7635,11 @@ function renderHubCaInsightsTab(container, insights, search) {
     const cliCount = insight.client_count ? `${insight.client_count} client${insight.client_count !== 1 ? "s" : ""}` : "";
     const impacted = [devCount, cliCount].filter(Boolean).join(", ");
     const descStr = insight.description ? `<div style="font-size:11px;color:var(--muted);line-height:1.3;">${escHtml(insight.description)}</div>` : "";
-    const tsStr = insight.ts ? (() => { try { return new Date(insight.ts).toLocaleString(); } catch (_) { return String(insight.ts); } })() : "—";
     return `<tr>
-      <td style="width:45%;${tdP}"><strong>${escHtml(insight.name || "—")}</strong>${catBadge}${descStr}</td>
+      <td style="width:40%;${tdP}"><strong>${escHtml(insight.name || "—")}</strong>${catBadge}${descStr}</td>
       <td style="white-space:nowrap;${tdP}">${escHtml(insight.site || "—")}</td>
       <td style="white-space:nowrap;font-size:11px;${tdP}">${escHtml(impacted || "—")}</td>
-      <td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;${tdP}">${escHtml(tsStr)}</td>
+      <td style="min-width:70px;${tdP}">${_caTs(insight.ts)}</td>
       <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("insight", { name: insight.name || "", site: insight.site || "" })}</td>
     </tr>`;
   }).join("");
@@ -7635,12 +7647,12 @@ function renderHubCaInsightsTab(container, insights, search) {
   container.innerHTML = `
     <div style="margin-bottom:4px;">${catPills}</div>
     ${filtered.length ? `<div class="setup-card" style="overflow-x:auto;padding:0;">
-      <table class="data-table" style="font-size:0.82rem;margin:0;width:100%;">
+      <table class="data-table" style="font-size:0.82rem;margin:0;min-width:600px;width:100%;">
         <thead><tr>
-          <th style="width:45%;padding:5px 10px;">Insight</th>
-          <th style="padding:5px 10px;">Site</th>
-          <th style="padding:5px 10px;">Impacted</th>
-          <th style="padding:5px 10px;">Time</th>
+          <th style="width:40%;padding:5px 10px;">Insight</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Site</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Impacted</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Time</th>
           <th style="padding:5px 10px;"></th>
         </tr></thead>
         <tbody>${rows}</tbody>
@@ -7654,11 +7666,10 @@ function renderHubCaInsightsTab(container, insights, search) {
 }
 
 function renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search) {
-  // New format: clientsBySite = {siteName: {total, wired, wireless}}
   const entries = Object.entries(clientsBySite || {});
-  const useNew = entries.length > 0;
+  const tdP = "padding:6px 10px;";
 
-  if (useNew) {
+  if (entries.length > 0) {
     const filtered = entries.filter(([site]) => !search || site.toLowerCase().includes(search));
     if (!filtered.length) {
       container.innerHTML = `<div class="empty-state">${search ? "No clients match your search." : "No clients returned from Central."}</div>`;
@@ -7666,34 +7677,49 @@ function renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search) 
     }
     const rows = filtered.sort((a, b) => (b[1].total || 0) - (a[1].total || 0)).map(([site, counts]) => `
       <tr>
-        <td>${escHtml(site)}</td>
-        <td>${counts.total ?? "—"}</td>
-        <td>${counts.wireless ?? "—"}</td>
-        <td>${counts.wired ?? "—"}</td>
-        <td>${hubCaMonitorBtn("client", { name: `Client Count: ${site}`, site })}</td>
+        <td style="width:40%;${tdP}"><strong>${escHtml(site)}</strong></td>
+        <td style="white-space:nowrap;${tdP}">${counts.total ?? "—"}</td>
+        <td style="white-space:nowrap;${tdP}">${counts.wireless ?? "—"}</td>
+        <td style="white-space:nowrap;${tdP}">${counts.wired ?? "—"}</td>
+        <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("client", { name: `Client Count: ${site}`, site })}</td>
       </tr>`).join("");
     container.innerHTML = `
-      <div class="setup-card" style="overflow-x:auto;">
-        <table class="data-table">
-          <thead><tr><th>Site</th><th>Total</th><th>Wireless</th><th>Wired</th><th></th></tr></thead>
+      <div class="setup-card" style="overflow-x:auto;padding:0;">
+        <table class="data-table" style="font-size:0.82rem;margin:0;min-width:500px;width:100%;">
+          <thead><tr>
+            <th style="width:40%;padding:5px 10px;">Site</th>
+            <th style="padding:5px 10px;white-space:nowrap;">Total</th>
+            <th style="padding:5px 10px;white-space:nowrap;">Wireless</th>
+            <th style="padding:5px 10px;white-space:nowrap;">Wired</th>
+            <th style="padding:5px 10px;"></th>
+          </tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>`;
   } else {
-    // Legacy fallback (old format)
     const filtered = (clientsLegacy || []).filter((c) => !search || JSON.stringify(c).toLowerCase().includes(search));
     if (!filtered.length) {
       container.innerHTML = `<div class="empty-state">${search ? "No clients match your search." : "No clients returned from Central."}</div>`;
       return;
     }
     const rows = filtered.map((c) => `<tr>
-      <td>${escHtml(c.hostname || "—")}</td><td>${escHtml(c.mac || "—")}</td>
-      <td>${escHtml(c.ip || "—")}</td><td>${escHtml(c.site || "—")}</td>
-      <td>${escHtml(c.status || "—")}</td>
+      <td style="${tdP}"><strong>${escHtml(c.hostname || "—")}</strong><div style="font-size:11px;color:var(--muted);">${escHtml(c.mac || "")}</div></td>
+      <td style="white-space:nowrap;${tdP}">${escHtml(c.ip || "—")}</td>
+      <td style="white-space:nowrap;${tdP}">${escHtml(c.site || "—")}</td>
+      <td style="white-space:nowrap;${tdP}">${escHtml(c.status || "—")}</td>
     </tr>`).join("");
-    container.innerHTML = `<div class="setup-card" style="overflow-x:auto;"><table class="data-table">
-      <thead><tr><th>Hostname</th><th>MAC</th><th>IP</th><th>Site</th><th>Status</th></tr></thead>
-      <tbody>${rows}</tbody></table></div>`;
+    container.innerHTML = `
+      <div class="setup-card" style="overflow-x:auto;padding:0;">
+        <table class="data-table" style="font-size:0.82rem;margin:0;min-width:500px;width:100%;">
+          <thead><tr>
+            <th style="padding:5px 10px;">Client</th>
+            <th style="padding:5px 10px;white-space:nowrap;">IP</th>
+            <th style="padding:5px 10px;white-space:nowrap;">Site</th>
+            <th style="padding:5px 10px;white-space:nowrap;">Status</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
   }
   attachHubCaMonitorButtons(container);
 }
@@ -7709,25 +7735,34 @@ function renderHubCaDevicesTab(container, devicesBySite, search) {
     container.innerHTML = `<div class="empty-state">${search ? "No devices match your search." : "No devices returned from Central."}</div>`;
     return;
   }
-  const statusBadge = (s) => {
-    const cls = (s || "").toUpperCase() === "OFFLINE" ? "badge-failure" : "badge-ok";
-    return `<span class="badge ${cls}">${escHtml(s || "—")}</span>`;
-  };
-  const rows = filtered.map((d) => `
-    <tr>
-      <td><strong>${escHtml(d.name || "—")}</strong><br><span style="font-size:11px;color:var(--muted);">${escHtml(d.serial || "")}</span></td>
-      <td>${escHtml(d.type || "—")}</td>
-      <td>${escHtml(d.model || "—")}</td>
-      <td>${escHtml(d.site || "—")}</td>
-      <td>${statusBadge(d.status)}</td>
-      <td>${escHtml(d.ip || "—")}</td>
-      <td>${escHtml(d.firmware || "—")}</td>
-      <td>${hubCaMonitorBtn("alert", { name: `${d.type || "Device"} Offline`, site: d.site || "" })}</td>
-    </tr>`).join("");
+  const tdP = "padding:6px 10px;";
+  const rows = filtered.map((d) => {
+    const statusColor = (d.status || "").toUpperCase() === "DOWN" || (d.status || "").toUpperCase() === "OFFLINE" ? "#e74c3c"
+      : (d.status || "").toUpperCase() === "UP" || (d.status || "").toUpperCase() === "ONLINE" ? "#27ae60"
+      : "#aaa";
+    const statusDot = `<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:${statusColor};display:inline-block;flex-shrink:0;"></span>${escHtml(d.status || "—")}</span>`;
+    const subLine = [d.model, d.serial].filter(Boolean).map(escHtml).join(" · ");
+    const ipFw = [d.ip, d.firmware].filter(Boolean).map(escHtml).join(" · ");
+    return `<tr>
+      <td style="width:40%;${tdP}"><strong>${escHtml(d.name || "—")}</strong>${subLine ? `<div style="font-size:11px;color:var(--muted);">${subLine}</div>` : ""}</td>
+      <td style="white-space:nowrap;${tdP}">${escHtml(d.site || "—")}</td>
+      <td style="white-space:nowrap;font-size:11px;color:var(--muted);${tdP}">${escHtml(d.type || "—")}</td>
+      <td style="white-space:nowrap;min-width:80px;${tdP}">${statusDot}</td>
+      <td style="font-size:11px;color:var(--muted);${tdP}">${ipFw || "—"}</td>
+      <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("alert", { name: `${d.type || "Device"} Offline`, site: d.site || "" })}</td>
+    </tr>`;
+  }).join("");
   container.innerHTML = `
-    <div class="setup-card" style="overflow-x:auto;">
-      <table class="data-table">
-        <thead><tr><th>Device</th><th>Type</th><th>Model</th><th>Site</th><th>Status</th><th>IP</th><th>Firmware</th><th></th></tr></thead>
+    <div class="setup-card" style="overflow-x:auto;padding:0;">
+      <table class="data-table" style="font-size:0.82rem;margin:0;min-width:650px;width:100%;">
+        <thead><tr>
+          <th style="width:40%;padding:5px 10px;">Device</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Site</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Type</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Status</th>
+          <th style="padding:5px 10px;white-space:nowrap;">IP / Firmware</th>
+          <th style="padding:5px 10px;"></th>
+        </tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;

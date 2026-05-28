@@ -7928,6 +7928,8 @@ function renderHubCaDevicesTab(container, devicesBySite, search) {
       : (d.status || "").toUpperCase() === "UP" || (d.status || "").toUpperCase() === "ONLINE" ? "#27ae60"
       : "#aaa";
     const statusDot = `<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:${statusColor};display:inline-block;flex-shrink:0;"></span>${escHtml(d.status || "—")}</span>`;
+    const deviceName = String(d.name || d.serial || d.type || "Device").trim() || "Device";
+    const deviceIdentifier = String(d.name || d.serial || `${d.type || "device"}:${d.site || ""}`).trim();
     const subLine = [d.model, d.serial].filter(Boolean).map(escHtml).join(" · ");
     const ipFw = [d.ip, d.firmware].filter(Boolean).map(escHtml).join(" · ");
     return `<tr>
@@ -7936,7 +7938,7 @@ function renderHubCaDevicesTab(container, devicesBySite, search) {
       <td style="white-space:nowrap;font-size:11px;color:var(--muted);${tdP}">${escHtml(d.type || "—")}</td>
       <td style="white-space:nowrap;min-width:80px;${tdP}">${statusDot}</td>
       <td style="font-size:11px;color:var(--muted);${tdP}">${ipFw || "—"}</td>
-      <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("alert", { name: `${d.type || "Device"} Offline`, site: d.site || "" })}</td>
+      <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("alert", { name: deviceName, identifier: deviceIdentifier, site: d.site || "" })}</td>
     </tr>`;
   }).join("");
   container.innerHTML = `

@@ -6293,7 +6293,19 @@ async function loadHubCentralMonitoring(force = false) {
   const searchEl = $("#ts-ca-search");
   if (searchEl) searchEl.oninput = () => renderHubCaBrowseTab();
   const refreshBtn = $("#ts-ca-refresh-btn");
-  if (refreshBtn) refreshBtn.onclick = () => { void loadHubCaBrowseData(true); };
+  if (refreshBtn) refreshBtn.onclick = async () => {
+    const origText = refreshBtn.textContent;
+    refreshBtn.disabled = true;
+    refreshBtn.textContent = "↺ Refreshing…";
+    try {
+      // Kick a background refresh on the server, then reload the view with fresh data
+      await apiFetch(`/api/central/browse?tenant_id=${encodeURIComponent(getActiveTenantId())}&force=true`);
+      await loadHubCaBrowseData(true);
+    } catch (_) { /* non-fatal */ } finally {
+      refreshBtn.textContent = "↺ Data refreshed";
+      setTimeout(() => { refreshBtn.textContent = origText; refreshBtn.disabled = false; }, 2000);
+    }
+  };
   const cancelBtn = $("#ts-ca-modal-cancel");
   if (cancelBtn) cancelBtn.onclick = closeHubCaMonitorModal;
   const modal = $("#ts-ca-monitor-modal");
@@ -7303,28 +7315,24 @@ async function saveTsApiGithubSettings() {
 async function loadHubCaBrowseData(force = false) {
   const tenantId = getActiveTenantId();
   const content = $("#ts-ca-content");
-  console.log("[loadHubCaBrowseData] tenantId:", tenantId, "content:", content, "force:", force);
-  if (!tenantId || !content) {
-    console.warn("[loadHubCaBrowseData] Early return - missing tenantId or content element");
-    return;
-  }
+  if (!tenantId || !content) return;
 
   const cached = loadHubCaBrowseCache(tenantId);
   if (cached && !force) {
-    content.innerHTML = '<div class="empty-state">Loading cached data…</div>';
+    // Render cached data immediately — no flash of loading message
     hubCentralBrowseData = cached;
     updateHubCaBrowsePills(cached);
-    // Always refresh monitored items so button state is correct even on cache hits
-    try {
-      const mRes = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/monitored-items`);
-      if (mRes?.ok) { const mData = await readJson(mRes); hubCaBrowseMonitoredItems = mData?.items || []; }
-    } catch (_) { /* non-fatal */ }
+    // Refresh monitored items in the background so button state is correct
+    apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/monitored-items`)
+      .then(mRes => mRes?.ok ? readJson(mRes) : null)
+      .then(mData => { if (mData) hubCaBrowseMonitoredItems = mData?.items || []; renderHubCaBrowseTab(); })
+      .catch(() => {});
     renderHubCaBrowseTab();
     scheduleHubCaBrowseRefresh();
     return;
   }
-  
-  // Clear template placeholder and show loading message
+
+  // No local cache — show loading and fetch from server (which serves its own 5-min cache)
   hubCentralBrowseData = null;
   resetHubCaBrowsePills();
   content.innerHTML = '<div class="empty-state">Loading Central data…</div>';

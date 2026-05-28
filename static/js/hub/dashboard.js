@@ -1203,7 +1203,7 @@ function renderHubMonitoredItems(items = [], tenantId = "") {
       const identCell = showIdent ? `<td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;">${escHtml(ident)}</td>` : "";
       return `
         <tr>
-          <td style="white-space:nowrap;font-weight:600;">${escHtml(name)}</td>
+          <td style="font-weight:600;word-break:break-word;min-width:160px;">${escHtml(name)}</td>
           ${identCell}
           <td style="white-space:nowrap;">${statusBadge}</td>
           <td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;">${escHtml(lastSeen)}</td>

@@ -750,6 +750,18 @@ function hubCentralMonitorSummary(data = hubCentralData) {
       }
     }
   }
+  // Fallback: for sites not explicitly assigned (e.g. auto-discovered in centralized mode),
+  // infer assignment from each spoke's active site list.
+  for (const spoke of spokes) {
+    for (const siteObj of (Array.isArray(spoke?.sites) ? spoke.sites : [])) {
+      const wsite = String(siteObj?.wsite || "").trim();
+      if (!wsite || assignedBySite.has(wsite)) continue;
+      const existing = assignedBySite.get(wsite);
+      if (!existing || (spoke.spoke_online && !existing.spoke_online) || spoke.display_name.localeCompare((existing || {}).display_name || "", undefined, { sensitivity: "base" }) < 0) {
+        assignedBySite.set(wsite, spoke);
+      }
+    }
+  }
   const knownSites = new Set(
     [...assignedBySite.keys(), ...Object.keys(siteMappings)].filter(Boolean)
   );

@@ -1017,7 +1017,7 @@ function renderHubStatusTab() {
     const countDetail = current !== null
       ? (avg !== null ? `${current} now / ${avg} avg (1h)` : `${current} clients`)
       : null;
-    const detail = countDetail ? `${spokeNames} | ${countDetail}` : spokeNames;
+    const detail = countDetail || null;
     const lastSeen = cc.ts ? new Date(cc.ts * 1000).toLocaleString() : null;
     return {
       _tone: cs.tone || "gray",
@@ -1070,7 +1070,7 @@ function renderHubStatusTab() {
     }).sort(sortByTone);
 
   container.innerHTML =
-    makeSection("Sites", siteRows, "Spoke / Clients", false, false) +
+    makeSection("Sites", siteRows, "Clients", false, false) +
     makeSection("Hardware", hwRows, "", true) +
     makeSection("Alerts", monRows("alert"), "First Fired", true) +
     makeSection("Insights", monRows("insight"), "First Fired", true) +

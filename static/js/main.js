@@ -81,9 +81,10 @@ applyModeClass(state.WEBUI_MODE);
 (async function initUnifiedWebUi() {
   const mode = await detectWebuiMode();
   void setFooterVersions();
+  const v = window.WEBUI_VERSION ? `?v=${window.WEBUI_VERSION}` : '';
   if (mode === 'hub') {
-    await import('./hub/dashboard.js');
+    await import(`./hub/dashboard.js${v}`);
   } else {
-    await import('./spoke/dashboard.js');
+    await import(`./spoke/dashboard.js${v}`);
   }
 })();

@@ -714,7 +714,7 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 
 .tab-content.hidden { display: none; }
 
-/* Setup sub-tabs */
+/* Setup sub-tabs — primary level (direct child of page/tab-content) */
 .setup-subnav {
   display: flex;
   gap: 0;
@@ -751,6 +751,23 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   opacity: 0.4;
   cursor: not-allowed;
   pointer-events: none;
+}
+
+/* Secondary/nested subnav — inside panels, not a direct child of .page */
+.page > div .setup-subnav,
+.setup-subpanel .setup-subnav,
+[id$="-panel"] .setup-subnav,
+[id$="-content"] .setup-subnav {
+  background: var(--bg, #f5f5f5);
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px;
+}
+.page > div .setup-subnav .setup-subtab,
+.setup-subpanel .setup-subnav .setup-subtab,
+[id$="-panel"] .setup-subnav .setup-subtab,
+[id$="-content"] .setup-subnav .setup-subtab {
+  font-size: 0.82rem;
+  padding: 7px 14px;
 }
 .setup-subpanel { padding-top: 8px; }
 .setup-subpanel.hidden { display: none; }

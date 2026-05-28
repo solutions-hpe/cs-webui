@@ -919,74 +919,127 @@ function renderHubStatusTab() {
   const refreshEl = document.getElementById("hub-status-last-refreshed");
   if (refreshEl) refreshEl.textContent = `Last refreshed: ${now}`;
 
-  // Priority order: red=0, yellow=1, green=2, gray=3
   const tonePriority = { red: 0, yellow: 1, orange: 1, green: 2, gray: 3 };
   const sortByTone = (a, b) => (tonePriority[a._tone] ?? 3) - (tonePriority[b._tone] ?? 3);
 
-  const dot = (tone) => {
-    const cls = tone === "green" ? "dot-pass" : tone === "red" ? "dot-fail" : tone === "yellow" || tone === "orange" ? "dot-warn" : "dot-unknown";
-    return `<span class="check-dot ${cls}"></span>`;
-  };
-  const badge = (tone, label) => {
-    const cls = tone === "green" ? "sim-pass" : tone === "red" ? "sim-fail" : tone === "yellow" || tone === "orange" ? "sim-warn" : "sim-unknown";
-    return `<span class="check-badge ${cls}">${escHtml(label)}</span>`;
+  const statusBadge = (tone, label) => {
+    const color = tone === "green" ? "#01A982" : tone === "red" ? "#FC5A5A" : tone === "yellow" || tone === "orange" ? "#f39c12" : "#aaa";
+    return `<span style="display:inline-flex;align-items:center;gap:5px;color:${color};font-weight:600;font-size:0.82rem;">` +
+      `<span style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0;"></span>${escHtml(label)}</span>`;
   };
 
-  const makeSection = (title, rows) => {
+  const tdP = "padding:6px 10px;";
+
+  // Build a section card with a table. extraCol = optional extra column header.
+  // rows: array of {_tone, _label, _name, _detail, _lastSeen, _itemId}
+  // showRemove: wire Remove buttons if true
+  const makeSection = (title, rows, extraColHeader = "", showRemove = false) => {
+    const emptyMsg = `<div class="central-empty" style="padding:8px 16px;font-size:0.85rem;">None configured.</div>`;
     if (!rows.length) return `
-      <div class="setup-card" style="margin-bottom:0.75rem;">
-        <div style="font-weight:600;font-size:0.85rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:0.5rem;">${escHtml(title)}</div>
-        <div class="central-empty" style="padding:0.4rem 0;font-size:0.85rem;">None configured.</div>
-      </div>`;
-    const rowsHtml = rows.map((r) => `
-      <div class="check-row" style="cursor:default;">
-        ${dot(r._tone)}
-        <span class="check-name">${r._name}</span>
-        ${badge(r._tone, r._label)}
-        ${r._detail ? `<span class="check-detail">${r._detail}</span>` : ""}
-      </div>`).join("");
+      <div class="setup-card" style="margin-bottom:1rem;padding:0;">
+        <div style="padding:10px 16px 6px;border-bottom:1px solid var(--border);">
+          <h4 style="margin:0;color:var(--muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:0.05em;">${escHtml(title)}</h4>
+        </div>${emptyMsg}</div>`;
+
+    const extraHeader = extraColHeader ? `<th style="padding:5px 10px;white-space:nowrap;">${escHtml(extraColHeader)}</th>` : "";
+    const removeHeader = showRemove ? `<th style="padding:5px 10px;"></th>` : "";
+    const rowsHtml = rows.map((r) => {
+      const extraCell = extraColHeader
+        ? `<td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;${tdP}">${r._detail ? escHtml(r._detail) : "—"}</td>`
+        : "";
+      const lastSeenCell = `<td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;${tdP}">${r._lastSeen ? escHtml(r._lastSeen) : "—"}</td>`;
+      const removeCell = showRemove && r._itemId
+        ? `<td style="white-space:nowrap;${tdP}"><button class="btn btn-small btn-secondary hub-monitored-remove-btn" data-item-id="${escHtml(r._itemId)}" type="button">Remove</button></td>`
+        : (showRemove ? `<td></td>` : "");
+      return `<tr>
+        <td style="font-weight:600;word-break:break-word;min-width:140px;${tdP}">${r._name}</td>
+        <td style="white-space:nowrap;${tdP}">${statusBadge(r._tone, r._label)}</td>
+        ${extraCell}${lastSeenCell}${removeCell}
+      </tr>`;
+    }).join("");
+
     return `
-      <div class="setup-card" style="margin-bottom:0.75rem;">
-        <div style="font-weight:600;font-size:0.85rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:0.5rem;">${escHtml(title)}</div>
-        <div class="sim-checks-list" style="border:none;padding:0;">${rowsHtml}</div>
+      <div class="setup-card" style="margin-bottom:1rem;padding:0;">
+        <div style="padding:10px 16px 6px;border-bottom:1px solid var(--border);">
+          <h4 style="margin:0;color:var(--muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:0.05em;">${escHtml(title)}</h4>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="data-table" style="margin:0;width:100%;font-size:0.85rem;">
+            <thead><tr>
+              <th style="padding:5px 10px;">Name</th>
+              <th style="padding:5px 10px;white-space:nowrap;">Status</th>
+              ${extraHeader}
+              <th style="padding:5px 10px;white-space:nowrap;">Last Seen</th>
+              ${removeHeader}
+            </tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
       </div>`;
   };
 
-  // — Sites (from hubCentralData assigned sites) —
+  // — Sites —
   const summary = hubCentralMonitorSummary(hubCentralData);
-  const siteRows = (summary?.sites || []).map((site) => {
-    const tone = site.check_status?.tone || "gray";
-    const label = site.check_status?.label || "UNKNOWN";
-    const spokeName = site.assigned_spoke?.display_name || "Unassigned";
-    return { _tone: tone, _label: label, _name: escHtml(site.wsite), _detail: escHtml(spokeName) };
-  }).sort(sortByTone);
+  const siteRows = (summary?.sites || []).map((site) => ({
+    _tone: site.check_status?.tone || "gray",
+    _label: site.check_status?.label || "UNKNOWN",
+    _name: escHtml(site.wsite),
+    _detail: site.assigned_spoke?.display_name || "Unassigned",
+    _lastSeen: null,
+  })).sort(sortByTone);
 
-  // — Hardware (from hubAggregateHardware) —
+  // — Hardware —
   const hwChecks = hubAggregateHardware(hubCentralData?.spokes || []);
-  const hwRows = hwChecks.map((hw) => {
-    const tone = hw.total > 0 ? "red" : "green";
-    const label = hw.total > 0 ? `${hw.total} DOWN` : "CLEAR";
-    return { _tone: tone, _label: label, _name: escHtml(hw.name), _detail: "" };
-  }).sort(sortByTone);
+  const hwRows = hwChecks.map((hw) => ({
+    _tone: hw.total > 0 ? "red" : "green",
+    _label: hw.total > 0 ? `${hw.total} DOWN` : "CLEAR",
+    _name: escHtml(hw.name),
+    _detail: "",
+    _lastSeen: null,
+  })).sort(sortByTone);
 
-  // — Monitored items (alerts, insights, clients) from cached data —
+  // — Monitored items (alerts, insights, clients) —
   const items = Array.isArray(_hubMonitoredItemsData) ? _hubMonitoredItemsData : [];
   const monRows = (type) => items
     .filter((item) => item.type === type)
     .map((item) => {
       const isOk = item.status === "ok" || !item.consecutive_failures;
-      const tone = isOk ? "green" : "red";
-      const label = isOk ? "OK" : `Missing (${item.consecutive_failures || 0})`;
-      return { _tone: tone, _label: label, _name: escHtml(item.name || item.identifier || "—"), _detail: "" };
-    })
-    .sort(sortByTone);
+      const lastSeen = item.last_seen ? new Date(item.last_seen * 1000).toLocaleString() : null;
+      return {
+        _tone: isOk ? "green" : "red",
+        _label: isOk ? "OK" : `Missing (${item.consecutive_failures || 0})`,
+        _name: escHtml(item.name || item.identifier || "—"),
+        _detail: "",
+        _lastSeen: lastSeen,
+        _itemId: item.id || "",
+      };
+    }).sort(sortByTone);
 
   container.innerHTML =
-    makeSection("Sites", siteRows) +
-    makeSection("Hardware", hwRows) +
-    makeSection("Alerts", monRows("alert")) +
-    makeSection("Insights", monRows("insight")) +
-    makeSection("Clients", monRows("client"));
+    makeSection("Sites", siteRows, "Spoke", false) +
+    makeSection("Hardware", hwRows, "", false) +
+    makeSection("Alerts", monRows("alert"), "", true) +
+    makeSection("Insights", monRows("insight"), "", true) +
+    makeSection("Clients", monRows("client"), "", true);
+
+  // Wire Remove buttons
+  const tenantId = getActiveTenantId();
+  container.querySelectorAll(".hub-monitored-remove-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const itemId = btn.dataset.itemId;
+      if (!itemId || !tenantId) return;
+      btn.disabled = true;
+      try {
+        const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/monitored-items/${encodeURIComponent(itemId)}`, { method: "DELETE" });
+        if (!res?.ok) { const err = await readJson(res); throw new Error(err?.detail || "Failed to remove."); }
+        showToast("Monitored item removed.", "ok");
+        await loadAndRenderHubMonitoredItems(true);
+      } catch (error) {
+        showToast(error.message || "Failed to remove item.", "error");
+        btn.disabled = false;
+      }
+    });
+  });
 }
 
 function renderHubSitesTab() {

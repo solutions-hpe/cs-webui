@@ -3639,53 +3639,24 @@ function renderTenantSetupPanel(data) {
   const aruba = data.settings?.aruba || {};
   const github = data.settings?.github || {};
   const notifications = data.settings?.notifications || {};
-  const processingModes = {
-    central_api: data.settings?.processing_modes?.central_api || 'centralized',
-    teams: data.settings?.processing_modes?.teams || 'centralized',
-    email: data.settings?.processing_modes?.email || 'centralized',
-  };
-  const disabled = canManageTenant(tenantId) ? '' : ' disabled';
-  const apiBase = `${window.location.origin}/api/${tenantId}/spokes/{spoke_id}`;
   const accessNote = data.settingsError ? `<div class="tenant-detail-note">${escHtml(data.settingsError)}</div>` : "";
-  
-  // Config panel data
-  const spokes = data.spokes || [];
-  const approved = spokes.filter(spoke => spoke.status === "approved");
-  const siteMappings = uniqueValues(approved.map(spoke => Object.keys(spoke.config?.site_mappings || {})).flat());
-  const relayRows = [
-    renderConfigSummaryRow("Relay Enabled", summarizeConfigField(spokes, "relay_enabled")),
-    renderConfigSummaryRow("Relay Server URL", summarizeConfigField(spokes, "relay_server_url")),
-    renderConfigSummaryRow("Relay Poll Interval", summarizeConfigField(spokes, "relay_poll_interval")),
-    renderConfigSummaryRow("Relay Tenant Hint", summarizeConfigField(spokes, "relay_tenant_hint")),
-    renderConfigSummaryRow("Repo URL", summarizeConfigField(spokes, "repo_url")),
-    renderConfigSummaryRow("Repo Branch", summarizeConfigField(spokes, "repo_branch")),
-    renderConfigSummaryRow("Site Mappings", { value: siteMappings.length ? `${siteMappings.length} mapped sites` : "—", detail: `${approved.filter(spoke => Object.keys(spoke.config?.site_mappings || {}).length > 0).length}/${approved.length || 0} spokes` }),
-  ].join("");
 
-  const processingRows = data.processing?.spokes?.length ? PROCESSING_FEATURES.map(feature => {
-    const counts = data.processing.spokes.reduce((acc, item) => {
-      const mode = item.effective_modes?.[feature] || item.global_mode || data.processing.default_mode || "centralized";
-      acc[mode] = (acc[mode] || 0) + 1;
-      return acc;
-    }, {});
-    return `
-      <tr>
-        <td>${escHtml(feature.replace(/_/g, " "))}</td>
-        <td>${escHtml(data.processing.default_mode || "centralized")}</td>
-        <td>${escHtml(Object.entries(counts).map(([mode, count]) => `${mode}:${count}`).join(" • "))}</td>
-      </tr>
-    `;
-  }).join("") : '<tr><td colspan="3" class="empty-state">No processing summary available.</td></tr>';
+  const arubaStatus = aruba.configured
+    ? `<span style="color:var(--success)">✓ Configured</span>`
+    : `<span style="color:var(--muted)">✗ Not configured</span>`;
+  const githubStatus = github.configured
+    ? `<span style="color:var(--success)">✓ Configured</span>`
+    : `<span style="color:var(--muted)">✗ Not configured</span>`;
+  const notifParts = [];
+  if (notifications.teams_webhook_configured) notifParts.push("Teams");
+  if (notifications.smtp_host) notifParts.push("Email");
+  const notifStatus = notifParts.length
+    ? `<span style="color:var(--success)">✓ ${notifParts.join(", ")}</span>`
+    : `<span style="color:var(--muted)">✗ Not configured</span>`;
 
   return `
     ${accessNote}
-    <div class="setup-subtabs">
-      <button class="setup-subtab active" onclick="switchSetupSubTab('info')">Info</button>
-      <button class="setup-subtab" onclick="switchSetupSubTab('notifications')">Notifications</button>
-      <button class="setup-subtab" onclick="switchSetupSubTab('processing')">Processing</button>
-      <button class="setup-subtab" onclick="switchSetupSubTab('simulations')">Simulations</button>
-    </div>
-    <div id="setup-subtab-info" class="setup-subtab-content tenant-detail-grid">
+    <div class="tenant-detail-grid">
       <section class="setup-card">
         <div class="setup-card-header"><h2>Tenant Info</h2><p>Hub-managed settings for this tenant.</p></div>
         <div class="setup-status-grid">
@@ -3695,91 +3666,16 @@ function renderTenantSetupPanel(data) {
           <div class="setup-status-item"><span class="setup-status-label">Created</span><span class="setup-status-value">${escHtml(fmtDate(tenant.created_at))}</span></div>
         </div>
       </section>
-    </div>
-    <div id="setup-subtab-notifications" class="setup-subtab-content tenant-detail-grid hidden">
       <section class="setup-card">
-        <div class="setup-card-header"><h2>Notifications</h2></div>
-        <table class="data-table">
-          <tbody>
-            <tr><td>Enabled</td><td>${escHtml(notifications.enabled ? "Yes" : "No")}</td></tr>
-            <tr><td>Teams Webhook</td><td>${escHtml(notifications.teams_webhook_configured ? "Configured" : "Not configured")}</td></tr>
-            <tr><td>SMTP Host</td><td>${escHtml(notifications.smtp_host || "—")}</td></tr>
-            <tr><td>SMTP User</td><td>${escHtml(notifications.smtp_user || "—")}</td></tr>
-            <tr><td>Recipients</td><td>${escHtml((notifications.to_emails || []).join(", ") || "—")}</td></tr>
-          </tbody>
-        </table>
-      </section>
-    </div>
-    <div id="setup-subtab-processing" class="setup-subtab-content tenant-detail-grid hidden">
-      <section class="setup-card">
-        <div class="setup-card-header"><h2>Processing Modes</h2><p>Choose which credentials stay centralized on the hub versus distributed to spokes.</p></div>
-        <div class="setup-form processing-modes-section mt-3">
-          <div class="row g-2">
-            <div class="col-md-4">
-              <label class="form-label small">Central API</label>
-              <select class="form-input" id="pm-central-api" onchange="saveProcessingMode('${escHtml(tenantId)}', 'central_api', this.value)"${disabled}>
-                <option value="centralized"${processingModes.central_api === 'centralized' ? ' selected' : ''}>Centralized</option>
-                <option value="distributed"${processingModes.central_api === 'distributed' ? ' selected' : ''}>Distributed</option>
-              </select>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label small">Teams Webhook</label>
-              <select class="form-input" id="pm-teams" onchange="saveProcessingMode('${escHtml(tenantId)}', 'teams', this.value)"${disabled}>
-                <option value="centralized"${processingModes.teams === 'centralized' ? ' selected' : ''}>Centralized</option>
-                <option value="distributed"${processingModes.teams === 'distributed' ? ' selected' : ''}>Distributed</option>
-              </select>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label small">Email / SMTP</label>
-              <select class="form-input" id="pm-email" onchange="saveProcessingMode('${escHtml(tenantId)}', 'email', this.value)"${disabled}>
-                <option value="centralized"${processingModes.email === 'centralized' ? ' selected' : ''}>Centralized</option>
-                <option value="distributed"${processingModes.email === 'distributed' ? ' selected' : ''}>Distributed</option>
-              </select>
-            </div>
-          </div>
-          <div id="processing-modes-msg" class="form-msg"></div>
+        <div class="setup-card-header"><h2>Configuration Status</h2><p>Current state of all integrations for this tenant.</p></div>
+        <div class="setup-status-grid">
+          <div class="setup-status-item"><span class="setup-status-label">Central API</span><span class="setup-status-value">${arubaStatus}</span></div>
+          <div class="setup-status-item"><span class="setup-status-label">GitHub</span><span class="setup-status-value">${githubStatus}</span></div>
+          <div class="setup-status-item"><span class="setup-status-label">Notifications</span><span class="setup-status-value">${notifStatus}</span></div>
         </div>
-      </section>
-      <section class="setup-card">
-        <div class="setup-card-header"><h2>Processing Defaults</h2><p>Tenant default mode plus effective spoke distribution per feature.</p></div>
-        <table class="data-table">
-          <thead><tr><th>Feature</th><th>Tenant Default</th><th>Effective Modes</th></tr></thead>
-          <tbody>${processingRows}</tbody>
-        </table>
-      </section>
-    </div>
-    <div id="setup-subtab-simulations" class="setup-subtab-content tenant-detail-grid hidden">
-      <section class="setup-card">
-        <div class="setup-card-header"><h2>Aggregated Spoke Config</h2><p>Common runtime configuration across spokes in this tenant.</p></div>
-        <table class="data-table">
-          <thead><tr><th>Setting</th><th>Observed Value</th><th>Coverage</th></tr></thead>
-          <tbody>${relayRows}</tbody>
-        </table>
-      </section>
-      <section class="setup-card">
-        <div class="setup-card-header"><h2>Config File Editor</h2><p>Edit simulation.conf and push changes to GitHub repository.</p></div>
-        <div id="setup-sim-config-editor"></div>
       </section>
     </div>
   `;
-}
-
-function switchSetupSubTab(subtabId) {
-  const subtabs = document.querySelectorAll('.setup-subtab');
-  const contents = document.querySelectorAll('.setup-subtab-content');
-  
-  subtabs.forEach(tab => {
-    tab.classList.toggle('active', tab.textContent.toLowerCase() === subtabId);
-  });
-  
-  contents.forEach(content => {
-    content.classList.toggle('hidden', !content.id.endsWith(subtabId));
-  });
-  
-  // Load simulation config when Simulations sub-tab is shown
-  if (subtabId === 'simulations') {
-    renderSetupSimulationConfigEditor();
-  }
 }
 
 function renderSetupSimulationConfigEditor() {
@@ -6671,6 +6567,8 @@ function setHubTenantSetupPanels(subtab = hubTenantSetupActiveSubtab) {
     "ts-notifications-panel",
     "ts-troubleshoot-panel",
     "ts-spokes-panel",
+    "ts-processing-panel",
+    "ts-simulations-panel",
   ].forEach((panelId) => {
     document.getElementById(panelId)?.classList.toggle("hidden", panelId !== `${subtab}-panel`);
   });
@@ -7010,6 +6908,86 @@ async function initHubTenantSetupSubtab(subtab = hubTenantSetupActiveSubtab, for
   if (subtab === "ts-spokes") {
     await initTsSpokesTab(tenantId);
   }
+  if (subtab === "ts-processing") {
+    await initTsProcessingTab(tenantId);
+  }
+  if (subtab === "ts-simulations") {
+    initTsSimulationsTab();
+  }
+}
+
+async function initTsProcessingTab(tenantId) {
+  const container = $("#ts-processing-content");
+  if (!container || !tenantId) return;
+  container.innerHTML = '<div class="empty-state">Loading…</div>';
+
+  const data = await loadTenantDetailData(false);
+  const processing = data?.processing;
+  const settings = data?.settings;
+  const disabled = canManageTenant(tenantId) ? "" : " disabled";
+
+  const processingModes = {
+    central_api: settings?.processing_modes?.central_api || data?.processing?.default_mode || "centralized",
+    teams: settings?.processing_modes?.teams || "centralized",
+    email: settings?.processing_modes?.email || "centralized",
+  };
+
+  const processingRows = processing?.spokes?.length
+    ? PROCESSING_FEATURES.map(feature => {
+        const counts = processing.spokes.reduce((acc, item) => {
+          const mode = item.effective_modes?.[feature] || item.global_mode || processing.default_mode || "centralized";
+          acc[mode] = (acc[mode] || 0) + 1;
+          return acc;
+        }, {});
+        return `<tr>
+          <td>${escHtml(feature.replace(/_/g, " "))}</td>
+          <td>${escHtml(processing.default_mode || "centralized")}</td>
+          <td>${escHtml(Object.entries(counts).map(([m, c]) => `${m}:${c}`).join(" • "))}</td>
+        </tr>`;
+      }).join("")
+    : '<tr><td colspan="3" class="empty-state">No processing summary available.</td></tr>';
+
+  container.innerHTML = `
+    <div class="setup-card" style="margin-bottom:16px;">
+      <div class="setup-card-header"><h2>Processing Modes</h2><p>Choose which credentials stay centralized on the hub versus distributed to spokes.</p></div>
+      <div class="setup-form processing-modes-section mt-3">
+        <div class="row g-2">
+          <div class="col-md-4">
+            <label class="form-label small">Central API</label>
+            <select class="form-input" id="pm-central-api" onchange="saveProcessingMode('${escHtml(tenantId)}', 'central_api', this.value)"${disabled}>
+              <option value="centralized"${processingModes.central_api === "centralized" ? " selected" : ""}>Centralized</option>
+              <option value="distributed"${processingModes.central_api === "distributed" ? " selected" : ""}>Distributed</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Teams Webhook</label>
+            <select class="form-input" id="pm-teams" onchange="saveProcessingMode('${escHtml(tenantId)}', 'teams', this.value)"${disabled}>
+              <option value="centralized"${processingModes.teams === "centralized" ? " selected" : ""}>Centralized</option>
+              <option value="distributed"${processingModes.teams === "distributed" ? " selected" : ""}>Distributed</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small">Email / SMTP</label>
+            <select class="form-input" id="pm-email" onchange="saveProcessingMode('${escHtml(tenantId)}', 'email', this.value)"${disabled}>
+              <option value="centralized"${processingModes.email === "centralized" ? " selected" : ""}>Centralized</option>
+              <option value="distributed"${processingModes.email === "distributed" ? " selected" : ""}>Distributed</option>
+            </select>
+          </div>
+        </div>
+        <div id="processing-modes-msg" class="form-msg"></div>
+      </div>
+    </div>
+    <div class="setup-card">
+      <div class="setup-card-header"><h2>Processing Defaults</h2><p>Tenant default mode plus effective spoke distribution per feature.</p></div>
+      <table class="data-table">
+        <thead><tr><th>Feature</th><th>Tenant Default</th><th>Effective Modes</th></tr></thead>
+        <tbody>${processingRows}</tbody>
+      </table>
+    </div>`;
+}
+
+function initTsSimulationsTab() {
+  renderSetupSimulationConfigEditor();
 }
 
 async function activateHubTenantSetupSubtab(subtab = "ts-central-api", force = false) {

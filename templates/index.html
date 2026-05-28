@@ -470,6 +470,8 @@
         <button class="setup-subtab hub-ts-subtab" data-subtab="ts-notifications" type="button">Notifications</button>
         <button class="setup-subtab hub-ts-subtab" data-subtab="ts-troubleshoot" type="button">Troubleshooting</button>
         <button class="setup-subtab hub-ts-subtab" data-subtab="ts-spokes" type="button">Spokes</button>
+        <button class="setup-subtab hub-ts-subtab" data-subtab="ts-processing" type="button">Processing</button>
+        <button class="setup-subtab hub-ts-subtab" data-subtab="ts-simulations" type="button">Simulations</button>
         <button class="setup-subtab hub-ts-subtab" data-subtab="ts-setup" type="button">Info</button>
       </nav>
       <div id="ts-setup-panel" class="hidden">
@@ -862,9 +864,22 @@
           </section>
         </div>
       </div>
-    </main>
 
-    <!-- ── Hub setup tab ── -->
+      <!-- Processing tab -->
+      <div id="ts-processing-panel" class="hidden">
+        <div class="page-toolbar"><span class="server-node-name">Processing Modes</span></div>
+        <div id="ts-processing-content" style="padding:16px;overflow-y:auto;"></div>
+      </div>
+
+      <!-- Simulations config tab -->
+      <div id="ts-simulations-panel" class="hidden">
+        <div class="page-toolbar"><span class="server-node-name">Simulations Config</span></div>
+        <div style="padding:16px;overflow-y:auto;">
+          <div id="setup-sim-config-editor"></div>
+        </div>
+      </div>
+
+    </main>
     <main id="tab-hub-setup" class="page tab-content hidden">
       <div class="page-toolbar"><span class="server-node-name">Setup</span></div>
       <nav class="setup-subnav">

@@ -1661,7 +1661,11 @@ async function refreshAfterSpokeApproval(tenantId = currentTenantId) {
     if (tenantId) {
       await ensureTenantSpokesFor(tenantId, true);
     }
-    await loadDashboard(true);
+    // Only call loadDashboard (which auto-enters tenant context) if not already in a tenant context.
+    // When already in context, the navigation would redirect away from the current page.
+    if (!currentTenantId) {
+      await loadDashboard(true);
+    }
     if (tenantId === currentTenantId) {
       await loadHubSimulations(true);
       await loadClients(true);
@@ -3912,9 +3916,7 @@ async function loadDashboard(force = false) {
   }
   // Auto-enter tenant context if user has exactly one tenant assigned
   if (tenants.length === 1 && !currentUser?.is_superadmin) {
-    if (!currentTenantId) {
-      await enterTenantContext(tenants[0].id, "simulations", false);
-    }
+    await enterTenantContext(tenants[0].id, "simulations", false);
     return;
   }
   try {

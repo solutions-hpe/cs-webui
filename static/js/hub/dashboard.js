@@ -7164,6 +7164,28 @@ async function initTsCentralApiTab(force = false) {
   const saveGithubBtn = $("#ts-ca-save-github-btn");
   if (saveGithubBtn) saveGithubBtn.onclick = saveTsApiGithubSettings;
 
+  const clearSecretsBtn = $("#ts-ca-clear-secrets-btn");
+  if (clearSecretsBtn) clearSecretsBtn.onclick = async () => {
+    const tenantId = getActiveTenantId();
+    if (!tenantId) return;
+    if (!confirm("Clear the stored Central client secret and access token?")) return;
+    clearSecretsBtn.disabled = true;
+    clearSecretsBtn.textContent = "Clearing…";
+    try {
+      const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/central-clear-secrets`, { method: "POST" });
+      if (!res?.ok) {
+        const err = await readJson(res);
+        setFormMessage("ts-ca-central-msg", err?.detail || "Failed to clear secrets.", false);
+      } else {
+        setFormMessage("ts-ca-central-msg", "Secrets cleared.", true);
+        void loadTsApiSettingsForm(true);
+      }
+    } finally {
+      clearSecretsBtn.disabled = false;
+      clearSecretsBtn.textContent = "Clear Secrets";
+    }
+  };
+
   const testCentralBtn = $("#ts-ca-test-central-btn");
   if (testCentralBtn) testCentralBtn.onclick = async () => {
     const tenantId = getActiveTenantId();

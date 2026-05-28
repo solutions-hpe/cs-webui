@@ -3912,7 +3912,9 @@ async function loadDashboard(force = false) {
   }
   // Auto-enter tenant context if user has exactly one tenant assigned
   if (tenants.length === 1 && !currentUser?.is_superadmin) {
-    await enterTenantContext(tenants[0].id, "simulations", false);
+    if (!currentTenantId) {
+      await enterTenantContext(tenants[0].id, "simulations", false);
+    }
     return;
   }
   try {

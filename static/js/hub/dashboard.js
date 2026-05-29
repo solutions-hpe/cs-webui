@@ -47,6 +47,8 @@ let hubConfOverrideState = { tenantId: null, simContent: null, userContent: null
 // Hub demo scenario state: tenantId → { hostname → {scenario, minutes_remaining} }
 let hubDemoActiveMap = {};
 let hubDemoTenantId = null;
+// Hub-managed permanent sim overrides: hostname → [sim, ...] (admin only, no GitHub needed)
+let hubClientSimOverrides = {};
 let hubSimActiveTab = "hub-simtop-checks";
 let hubSimChecksFilter = "failing";
 let hubSimChecksSearch = "";
@@ -66,6 +68,8 @@ const tenantDashboardSort = { key: "name", direction: "asc" };
 const PROCESSING_FEATURES = ["aruba_polling", "teams_webhook", "email", "heartbeat", "gkill", "schedules", "repo_sync"];
 const FAILURE_SIMS = new Set(['dns_fail', 'ssidpw_fail', 'auth_fail', 'dhcp_fail', 'port_flap', 'assoc_fail']);
 const TRAFFIC_SIMS = new Set(['iperf', 'download', 'www_traffic', 'ping_test']);
+// All known simulations in display order (failures first, then traffic)
+const ALL_KNOWN_SIMS = ['dns_fail', 'ssidpw_fail', 'auth_fail', 'dhcp_fail', 'port_flap', 'assoc_fail', 'iperf', 'download', 'www_traffic', 'ping_test'];
 const IMPACT_LABELS = {
   dns_fail: '⚠ DNS Failure', ssidpw_fail: '⚠ Auth Failure', auth_fail: '⚠ Auth Failure',
   dhcp_fail: '⚠ DHCP Failure', assoc_fail: '⚠ Assoc Failure', port_flap: '⚠ Port Flap',
@@ -519,16 +523,26 @@ function renderHubT3PciSection(site) {
     </div>`;
 }
 
-function renderHubSimulationBadges(simulations = [], emptyLabel = "—", demoScenario = null) {
-  const uniqueSimulations = [...new Set((simulations || []).filter(Boolean))]
-    .sort((left, right) => String(left).localeCompare(String(right), undefined, { sensitivity: "base" }));
-  if (uniqueSimulations.length) {
-    return `<div class="badge-list">${uniqueSimulations.map(sim => {
-      const isDemo = demoScenario && sim === demoScenario;
-      return `<span class="${hubSimulationBadgeClass(sim)}${isDemo ? ' badge-demo-active' : ''}">${escHtml(sim)}${isDemo ? ' ⚡' : ''}</span>`;
-    }).join("")}</div>`;
-  }
-  return emptyLabel ? `<span class="muted">${escHtml(emptyLabel)}</span>` : "";
+function renderHubSimulationBadges(activeSims = [], emptyLabel = "—", demoScenario = null, opts = {}) {
+  const { hostname = "", spokeId = "", isAdmin = false } = opts;
+  const activeSet = new Set((activeSims || []).filter(Boolean));
+  // Show all known sims; active (admin) = colored, demo (temp) = colored + ⚡, inactive = dim
+  return `<div class="badge-list sim-badge-list">${ALL_KNOWN_SIMS.map(sim => {
+    const isActive = activeSet.has(sim);
+    const isDemo = Boolean(demoScenario && sim === demoScenario);
+    if (isActive || isDemo) {
+      const cls = hubSimulationBadgeClass(sim) + (isDemo ? ' badge-demo-active' : '');
+      // Admin can toggle off a permanently-active sim; demo sims use the dropdown
+      if (isAdmin && hostname && !isDemo) {
+        return `<button type="button" class="sim-toggle-btn ${cls}" data-hostname="${escHtml(hostname)}" data-spoke-id="${escHtml(spokeId)}" data-sim="${escHtml(sim)}" data-active="1" title="Disable ${escHtml(sim)} (permanent)">${escHtml(sim)}</button>`;
+      }
+      return `<span class="${cls}" title="${escHtml(sim)}">${escHtml(sim)}${isDemo ? ' ⚡' : ''}</span>`;
+    }
+    if (isAdmin && hostname) {
+      return `<button type="button" class="sim-toggle-btn badge badge-sim-inactive" data-hostname="${escHtml(hostname)}" data-spoke-id="${escHtml(spokeId)}" data-sim="${escHtml(sim)}" data-active="0" title="Enable ${escHtml(sim)} (permanent)">${escHtml(sim)}</button>`;
+    }
+    return `<span class="badge badge-sim-inactive" title="${escHtml(sim)}">${escHtml(sim)}</span>`;
+  }).join("")}</div>`;
 }
 
 function spokeDisplayName(spoke = {}, fallback = "—") {
@@ -1200,7 +1214,10 @@ function activateHubSimTopTab(tabId = "hub-simtop-checks") {
   if (tabId === "hub-simtop-clients") {
     const myRole = currentRoleForTenant(currentTenantId);
     if (myRole === 'admin' || myRole === 'demo' || myRole === 'superadmin') {
-      loadHubDemoActive().then(() => renderClientRowsForHub());
+      Promise.all([
+        loadHubDemoActive(),
+        (myRole === 'admin' || myRole === 'superadmin') ? loadHubClientSimOverrides() : Promise.resolve(),
+      ]).then(() => renderClientRowsForHub());
     } else {
       loadAndRenderHubMonitoredItems();
     }
@@ -1746,10 +1763,9 @@ function renderClientRowsForHub() {
                     ${site.clients.map(client => {
                       const sims = normalizeHubClientActiveSimulations(client.active_simulations);
                       const demoScenario = hubDemoActiveMap[client.hostname]?.scenario || null;
+                      const isAdminRole = myRole === 'admin' || myRole === 'superadmin';
                       const colSpan = showDemoButtons ? 6 : 5;
-                      const simsRow = sims.length
-                        ? `<tr class="hub-client-sims-row"><td colspan="${colSpan + 1}" class="hub-client-sims-cell">${renderHubSimulationBadges(sims, "", demoScenario)}</td></tr>`
-                        : "";
+                      const simsRow = `<tr class="hub-client-sims-row"><td colspan="${colSpan + 1}" class="hub-client-sims-cell">${renderHubSimulationBadges(sims, "", demoScenario, { hostname: client.hostname || '', spokeId: client.spoke_id || '', isAdmin: isAdminRole })}</td></tr>`;
                       return `
                         <tr class="hub-client-main-row">
                           <td class="status-cell">${statusDot(Boolean(client.online))}</td>
@@ -1781,6 +1797,21 @@ function renderClientRowsForHub() {
   if (showDemoButtons) {
     container.querySelectorAll("td.hub-demo-btn-cell[data-hostname]").forEach(cell => {
       buildHubDemoSelect({ hostname: cell.dataset.hostname, spoke_id: cell.dataset.spokeId }, cell);
+    });
+  }
+  // Wire admin sim toggle buttons — event delegation per container render
+  const isAdminRole = myRole === 'admin' || myRole === 'superadmin';
+  if (isAdminRole) {
+    container.querySelectorAll("button.sim-toggle-btn[data-sim]").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const { hostname, sim } = btn.dataset;
+        const isCurrentlyActive = btn.dataset.active === "1";
+        btn.disabled = true;
+        await toggleHubClientSimOverride(currentTenantId, hostname, sim, !isCurrentlyActive);
+        btn.disabled = false;
+        renderClientRowsForHub(); // re-render after state update
+      });
     });
   }
 }
@@ -3635,6 +3666,31 @@ async function loadHubDemoActive(tenantId = currentTenantId) {
   if (hubDemoTenantId !== tenantId) {
     hubDemoActiveMap = {};
     hubDemoTenantId = tenantId;
+  }
+}
+
+async function loadHubClientSimOverrides(tenantId = currentTenantId) {
+  try {
+    const d = await apiFetch(`/api/${encodeURIComponent(tenantId)}/clients/sim-overrides`);
+    hubClientSimOverrides = d?.client_sim_overrides || {};
+  } catch { hubClientSimOverrides = {}; }
+}
+
+async function toggleHubClientSimOverride(tenantId, hostname, simulation, enabled) {
+  try {
+    await apiFetch(`/api/${encodeURIComponent(tenantId)}/clients/${encodeURIComponent(hostname)}/sim-override`, {
+      method: "PUT", body: { simulation, enabled },
+    });
+    // Update local cache optimistically so next render is immediate
+    if (!hubClientSimOverrides[hostname]) hubClientSimOverrides[hostname] = [];
+    if (enabled) {
+      if (!hubClientSimOverrides[hostname].includes(simulation)) hubClientSimOverrides[hostname].push(simulation);
+    } else {
+      hubClientSimOverrides[hostname] = hubClientSimOverrides[hostname].filter(s => s !== simulation);
+    }
+    showToast(`${enabled ? "Enabled" : "Disabled"} ${simulation} for ${hostname}`, "success");
+  } catch (e) {
+    showToast(`Failed to update simulation: ${e.message}`, "error");
   }
 }
 

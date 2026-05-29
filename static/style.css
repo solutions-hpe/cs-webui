@@ -1639,6 +1639,40 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   outline: 1.5px solid currentColor;
   outline-offset: 1px;
 }
+/* Inactive sim pill (not running) */
+.badge-sim-inactive {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  opacity: 0.55;
+}
+/* Admin-clickable sim toggle buttons — reset button defaults, keep badge look */
+button.sim-toggle-btn {
+  appearance: none;
+  font: inherit;
+  cursor: pointer;
+  border: none;
+  padding: 2px 7px;
+  border-radius: 3px;
+  line-height: 1.4;
+  transition: opacity 0.15s, transform 0.1s;
+}
+button.sim-toggle-btn:hover {
+  opacity: 0.8;
+  transform: scale(1.06);
+}
+button.sim-toggle-btn:disabled {
+  cursor: wait;
+  opacity: 0.4;
+}
+button.sim-toggle-btn.badge-sim-inactive {
+  border: 1px solid var(--border);
+}
+button.sim-toggle-btn.badge-sim-inactive:hover {
+  opacity: 1;
+  background: var(--hpe-green-bg, #d1fae5);
+  color: #065f46;
+}
 .hub-table-section td {
   background: var(--bg-secondary) !important;
   color: var(--hpe-navy);

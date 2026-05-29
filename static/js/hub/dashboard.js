@@ -9552,6 +9552,7 @@ async function loadSuperadmin() {
 
 // ── Global USB certified devices (superadmin) ────────────────────────────────
 // Shared state so loadGlobalUsbVidpids and wireGlobalUsb stay in sync.
+let _globalCertified = [];
 let _globalDiscovered = [];
 let _globalIgnored = [];
 
@@ -9571,11 +9572,12 @@ async function loadGlobalUsbVidpids() {
     const certData    = certRes?.ok    ? await readJson(certRes)    : null;
     const ignoredData = ignoredRes?.ok ? await readJson(ignoredRes) : null;
     const discData    = discRes?.ok    ? await readJson(discRes)    : null;
-    const certified   = Array.isArray(certData?.usb_vidpids)    ? certData.usb_vidpids    : [];
+    _globalCertified  = Array.isArray(certData?.usb_vidpids)    ? certData.usb_vidpids    : [];
     _globalIgnored    = Array.isArray(ignoredData?.usb_vidpids) ? ignoredData.usb_vidpids : [];
     _globalDiscovered = Array.isArray(discData?.devices)        ? discData.devices        : [];
-    renderGlobalUsbVidpids(certified, _globalDiscovered);
+    renderGlobalUsbVidpids(_globalCertified, _globalDiscovered);
     renderGlobalUsbIgnored(_globalIgnored);
+    populateIgnoreFromDiscovered();
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="4" class="empty-state" style="color:var(--danger)">Error loading USB data: ${escHtml(String(err))}</td></tr>`;
   }
@@ -9652,6 +9654,33 @@ function renderGlobalUsbIgnored(devices) {
     </tr>`).join("");
 }
 
+function populateIgnoreFromDiscovered() {
+  const select = $("#sa-usb-ignore-discovered-select");
+  if (!select) return;
+
+  const certifiedSet = new Set(_globalCertified.map(d => String(d.vidpid || "").toLowerCase().trim()));
+  const ignoredSet = new Set(_globalIgnored.map(d => String(d.vidpid || "").toLowerCase().trim()));
+  const pending = _globalDiscovered.filter(d => {
+    const vidpid = String(d.vidpid || "").toLowerCase().trim();
+    return vidpid && !certifiedSet.has(vidpid) && !ignoredSet.has(vidpid);
+  });
+
+  const currentValue = select.value;
+  select.innerHTML = '<option value="">— select a discovered device —</option>';
+  pending.forEach((device, idx) => {
+    const option = document.createElement("option");
+    option.value = String(idx);
+    const seenOn = Array.isArray(device.seen_on)
+      ? device.seen_on.map(s => [s?.spoke_name, s?.tenant_name].filter(Boolean).join(" / ")).filter(Boolean).join(", ")
+      : "";
+    option.textContent = [device.vidpid || "—", device.name || "Unnamed device", seenOn ? `(${seenOn})` : ""]
+      .filter(Boolean)
+      .join(" — ");
+    select.appendChild(option);
+  });
+  if (pending.some((_, idx) => String(idx) === currentValue)) select.value = currentValue;
+}
+
 // Wire global USB add/remove/approve/ignore — called once after DOM ready.
 (function wireGlobalUsb() {
   // Add button
@@ -9681,7 +9710,9 @@ function renderGlobalUsbIgnored(devices) {
         });
         const putData = await readJson(putRes);
         if (!putRes?.ok) throw new Error(putData?.detail || "Save failed");
+        _globalCertified = updated;
         renderGlobalUsbVidpids(updated, _globalDiscovered);
+        populateIgnoreFromDiscovered();
         if ($("#sa-usb-label")) $("#sa-usb-label").value = "";
         if (msg) { msg.textContent = `✓ ${vidpid} added (pushed to ${putData.pushed_to_spokes ?? 0} spokes)`; msg.style.color = "var(--accent-green)"; }
       } catch (err) {
@@ -9690,6 +9721,27 @@ function renderGlobalUsbIgnored(devices) {
         e.target.disabled = false;
         e.target.textContent = "Add to Global List";
       }
+    }
+
+    if (e.target.id === "sa-usb-ignore-load-btn") {
+      const select = $("#sa-usb-ignore-discovered-select");
+      const option = select?.selectedOptions?.[0];
+      const deviceIndex = Number(option?.value);
+      const selectMsg = $("#sa-usb-ignore-msg");
+      const certifiedSet = new Set(_globalCertified.map(d => String(d.vidpid || "").toLowerCase().trim()));
+      const ignoredSet = new Set(_globalIgnored.map(d => String(d.vidpid || "").toLowerCase().trim()));
+      const pending = _globalDiscovered.filter(d => {
+        const vidpid = String(d.vidpid || "").toLowerCase().trim();
+        return vidpid && !certifiedSet.has(vidpid) && !ignoredSet.has(vidpid);
+      });
+      const device = Number.isInteger(deviceIndex) ? pending[deviceIndex] : null;
+      if (!device) {
+        if (selectMsg) { selectMsg.textContent = "Select a discovered device to load."; selectMsg.style.color = "var(--text-danger)"; }
+        return;
+      }
+      if ($("#sa-usb-ignore-vidpid")) $("#sa-usb-ignore-vidpid").value = String(device.vidpid || "").toLowerCase().trim();
+      if ($("#sa-usb-ignore-label")) $("#sa-usb-ignore-label").value = String(device.name || device.vidpid || "").trim();
+      if (selectMsg) { selectMsg.textContent = `Loaded ${device.vidpid || "device"} from discovered devices.`; selectMsg.style.color = "var(--muted)"; }
     }
 
     // Add to global ignored list
@@ -9718,7 +9770,10 @@ function renderGlobalUsbIgnored(devices) {
         if (!putRes?.ok) throw new Error(putData?.detail || "Save failed");
         _globalIgnored = updated;
         renderGlobalUsbIgnored(updated);
-        renderGlobalUsbVidpids(await _reloadCertified(), _globalDiscovered);
+        _globalCertified = await _reloadCertified();
+        renderGlobalUsbVidpids(_globalCertified, _globalDiscovered);
+        populateIgnoreFromDiscovered();
+        if ($("#sa-usb-ignore-discovered-select")) $("#sa-usb-ignore-discovered-select").value = "";
         if ($("#sa-usb-ignore-vidpid")) $("#sa-usb-ignore-vidpid").value = "";
         if ($("#sa-usb-ignore-label")) $("#sa-usb-ignore-label").value = "";
         if (msg) { msg.textContent = `✓ ${vidpid} ignored (pushed to ${putData.pushed_to_spokes ?? 0} spokes)`; msg.style.color = "var(--accent-green)"; }
@@ -9749,7 +9804,9 @@ function renderGlobalUsbIgnored(devices) {
         });
         const putData = await readJson(putRes);
         if (!putRes?.ok) throw new Error(putData?.detail || "Approve failed");
+        _globalCertified = current;
         renderGlobalUsbVidpids(current, _globalDiscovered);
+        populateIgnoreFromDiscovered();
         showToast(`${approveVidpid} approved globally (pushed to ${putData.pushed_to_spokes ?? 0} spokes)`, "ok");
       } catch (err) {
         showToast(`Error: ${err.message}`, "error");
@@ -9780,7 +9837,9 @@ function renderGlobalUsbIgnored(devices) {
         if (!putRes?.ok) throw new Error(putData?.detail || "Ignore failed");
         _globalIgnored = current;
         renderGlobalUsbIgnored(current);
-        renderGlobalUsbVidpids(await _reloadCertified(), _globalDiscovered);
+        _globalCertified = await _reloadCertified();
+        renderGlobalUsbVidpids(_globalCertified, _globalDiscovered);
+        populateIgnoreFromDiscovered();
         showToast(`${ignoreVidpid} globally ignored (pushed to ${putData.pushed_to_spokes ?? 0} spokes)`, "ok");
       } catch (err) {
         showToast(`Error: ${err.message}`, "error");
@@ -9805,7 +9864,9 @@ function renderGlobalUsbIgnored(devices) {
         });
         const putData = await readJson(putRes);
         if (!putRes?.ok) throw new Error(putData?.detail || "Remove failed");
+        _globalCertified = updated;
         renderGlobalUsbVidpids(updated, _globalDiscovered);
+        populateIgnoreFromDiscovered();
       } catch (err) {
         showToast(`Error: ${err.message}`, "error");
         e.target.disabled = false;
@@ -9830,7 +9891,9 @@ function renderGlobalUsbIgnored(devices) {
         if (!putRes?.ok) throw new Error(putData?.detail || "Remove failed");
         _globalIgnored = updated;
         renderGlobalUsbIgnored(updated);
-        renderGlobalUsbVidpids(await _reloadCertified(), _globalDiscovered);
+        _globalCertified = await _reloadCertified();
+        renderGlobalUsbVidpids(_globalCertified, _globalDiscovered);
+        populateIgnoreFromDiscovered();
       } catch (err) {
         showToast(`Error: ${err.message}`, "error");
         e.target.disabled = false;

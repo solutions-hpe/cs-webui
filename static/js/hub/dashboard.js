@@ -1030,8 +1030,8 @@ function renderHubStatusTab() {
         ? `<td style="white-space:nowrap;vertical-align:top;${tdP}"><button class="btn btn-small btn-secondary hub-monitored-remove-btn" data-item-id="${escHtml(r._itemId)}" type="button">Remove</button></td>`
         : (showRemove ? `<td></td>` : "");
       return `<tr>
-        <td style="font-weight:600;word-break:break-word;min-width:140px;vertical-align:top;${tdP}">${r._name}</td>
-        <td style="white-space:nowrap;vertical-align:top;${tdP}">${statusBadge(r._tone, r._label)}</td>
+        <td style="font-weight:600;word-break:break-word;width:260px;vertical-align:top;${tdP}">${r._name}</td>
+        <td style="white-space:nowrap;width:180px;vertical-align:top;${tdP}">${statusBadge(r._tone, r._label)}</td>
         ${extraCell}${lastSeenCell}${removeCell}
       </tr>`;
     }).join("");
@@ -1042,10 +1042,10 @@ function renderHubStatusTab() {
           <h4 style="margin:0;color:var(--muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:0.05em;">${escHtml(title)}</h4>
         </div>
         <div style="overflow-x:auto;">
-          <table class="data-table" style="margin:0;width:100%;font-size:0.85rem;">
+          <table class="data-table" style="margin:0;width:100%;font-size:0.85rem;table-layout:fixed;">
             <thead><tr>
-              <th style="padding:5px 10px;">Name</th>
-              <th style="padding:5px 10px;white-space:nowrap;">Status</th>
+              <th style="padding:5px 10px;width:260px;">Name</th>
+              <th style="padding:5px 10px;white-space:nowrap;width:180px;">Status</th>
               ${extraHeader}
               ${lastSeenHeader}
               ${removeHeader}

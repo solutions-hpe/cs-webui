@@ -7716,7 +7716,7 @@ function renderHubCaSitesTab(container, sites, search) {
     const healthColor = score == null ? "#aaa" : score >= 80 ? "#27ae60" : score >= 50 ? "#f39c12" : "#e74c3c";
     const healthLabel = score == null ? "—" : score >= 80 ? "Healthy" : score >= 50 ? "Fair" : "Poor";
     const healthDot = `<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:${healthColor};display:inline-block;flex-shrink:0;"></span>${healthLabel}</span>`;
-    const scoreStr = score != null ? `<div style="font-size:11px;color:var(--muted);">${score}%</div>` : "";
+    const scoreStr = score != null ? `<div style="font-size:11px;color:var(--muted);">${score}</div>` : "";
     return `<tr>
       <td style="width:40%;${tdP}"><strong>${escHtml(site.name || "—")}</strong></td>
       <td style="${tdP}">${healthDot}${scoreStr}</td>

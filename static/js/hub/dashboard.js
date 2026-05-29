@@ -41,7 +41,8 @@ let hubTenantSetupActiveSubtab = "ts-central-api";
 let hubCentralSiteOpen = null;
 let hubConfigDraft = "";
 let hubConfigActiveSubtab = "api";
-let hubSimulationConfState = { tenantId: null, loaded: false, loading: false, rawContent: "", sha: "", fetchedAt: "", sections: {}, sectionOrder: [], keyOrder: {}, error: "" };
+let hubSimulationConfState = { tenantId: null, loaded: false, loading: false, rawContent: "", sha: "", fetchedAt: "", sections: {}, sectionOrder: [], keyOrder: {}, error: "", mode: "github" };
+let hubUserOverridesConfState = { tenantId: null, loaded: false, loading: false, rawContent: "", fetchedAt: "", sections: {}, sectionOrder: [], keyOrder: {}, error: "" };
 let hubConfOverrideState = { tenantId: null, simContent: null, userContent: null, loading: false, error: "" };
 // Hub demo scenario state: tenantId → { hostname → {scenario, minutes_remaining} }
 let hubDemoActiveMap = {};
@@ -2871,6 +2872,7 @@ function applyAuthUI() {
     aggregateCentralData = null;
     hubConfigDraft = "";
     resetHubSimulationConfState(null);
+    resetHubUserOverridesConfState(null);
     hubClientUiState.expandedByTenant = {};
     hubClientUiState.seenSitesByTenant = {};
     hubVmServerSelectedSpoke = null;
@@ -2988,6 +2990,7 @@ function logout(showMessage = true) {
   aggregateCentralData = null;
   hubConfigDraft = "";
   resetHubSimulationConfState(currentTenantId);
+  resetHubUserOverridesConfState(currentTenantId);
   hubClientUiState.expandedByTenant = {};
   hubClientUiState.seenSitesByTenant = {};
   hubVmServerSelectedSpoke = null;
@@ -3019,7 +3022,7 @@ async function setCurrentTenant(tenantId, reload = true) {
   aggregateCentralData = null;
   hubConfigDraft = "";
   resetHubSimulationConfState(tenantId);
-  delete hubClientUiState.expandedByTenant[tenantId];
+  resetHubUserOverridesConfState(tenantId);
   delete hubClientUiState.seenSitesByTenant[tenantId];
   hubVmServerSelectedSpoke = null;
   syncRoleBadge();
@@ -3199,7 +3202,11 @@ const HUB_SIM_SLOT_KEYS = ["central_check", "wsite", "ssid", "ssidpw", "dhcp_fai
 const HUB_SIM_SELECT_FIELDS = { sim_phy: ["wireless", "ethernet"] };
 
 function resetHubSimulationConfState(tenantId = currentTenantId) {
-  hubSimulationConfState = { tenantId, loaded: false, loading: false, rawContent: "", sha: "", fetchedAt: "", sections: {}, sectionOrder: [], keyOrder: {}, error: "" };
+  hubSimulationConfState = { tenantId, loaded: false, loading: false, rawContent: "", sha: "", fetchedAt: "", sections: {}, sectionOrder: [], keyOrder: {}, error: "", mode: "github" };
+}
+
+function resetHubUserOverridesConfState(tenantId = currentTenantId) {
+  hubUserOverridesConfState = { tenantId, loaded: false, loading: false, rawContent: "", fetchedAt: "", sections: {}, sectionOrder: [], keyOrder: {}, error: "" };
 }
 
 function hubSimFieldLabel(key) {
@@ -3772,6 +3779,7 @@ async function saveTenantGithubSettings() {
   resetSecretInput(fields.token);
   hydrateTenantSetupPanel({ settings: { github: githubData } });
   resetHubSimulationConfState(tenantId);
+  resetHubUserOverridesConfState(tenantId);
   const pushedToSpokes = Number.isFinite(data?.pushed_to_spokes) ? data.pushed_to_spokes : null;
   setFormMessage(fields.messageId, pushedToSpokes === null ? "GitHub settings saved." : `GitHub settings saved. Queued ${pushedToSpokes} spoke${pushedToSpokes === 1 ? "" : "s"}.`, true);
 }
@@ -4104,22 +4112,24 @@ function renderSetupSimulationConfigEditor() {
     return;
   }
   const disabled = canManageTenant(tenantId) ? "" : " disabled";
-  const fetched = hubSimulationConfState.fetchedAt ? fmtDate(hubSimulationConfState.fetchedAt) : "—";
+  const isOverride = hubSimulationConfState.mode === "override";
+  const saveLabel = isOverride ? "Save" : "Save to GitHub";
+  const sourceLabel = isOverride ? "Hub-managed override (no GitHub API key)" : `Last fetched from GitHub: ${escHtml(hubSimulationConfState.fetchedAt ? fmtDate(hubSimulationConfState.fetchedAt) : "—")}`;
   
   if (hubSimulationConfState.loading) {
     container.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
         <div>
           <div style="font-weight:600;">configs/simulation.conf</div>
-          <div class="muted" style="font-size:0.85rem;">Last fetched from GitHub: ${escHtml(fetched)}</div>
+          <div class="muted" style="font-size:0.85rem;">${sourceLabel}</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <button id="setup-sim-config-refresh-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
-          <button id="setup-sim-config-save-btn" class="btn btn-primary btn-small" type="button"${disabled}>Save to GitHub</button>
+          <button id="setup-sim-config-save-btn" class="btn btn-primary btn-small" type="button"${disabled}>${escHtml(saveLabel)}</button>
         </div>
       </div>
       <div id="setup-sim-config-msg" class="form-msg" style="margin-bottom:10px;"></div>
-      <div class="empty-state">Loading simulation.conf from GitHub…</div>
+      <div class="empty-state">Loading simulation.conf…</div>
     `;
     return;
   }
@@ -4129,11 +4139,11 @@ function renderSetupSimulationConfigEditor() {
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
         <div>
           <div style="font-weight:600;">configs/simulation.conf</div>
-          <div class="muted" style="font-size:0.85rem;">Last fetched from GitHub: ${escHtml(fetched)}</div>
+          <div class="muted" style="font-size:0.85rem;">${sourceLabel}</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <button id="setup-sim-config-refresh-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
-          <button id="setup-sim-config-save-btn" class="btn btn-primary btn-small" type="button"${disabled}>Save to GitHub</button>
+          <button id="setup-sim-config-save-btn" class="btn btn-primary btn-small" type="button"${disabled}>${escHtml(saveLabel)}</button>
         </div>
       </div>
       <div id="setup-sim-config-msg" class="form-msg" style="margin-bottom:10px;"></div>
@@ -4151,11 +4161,11 @@ function renderSetupSimulationConfigEditor() {
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
       <div>
         <div style="font-weight:600;">configs/simulation.conf</div>
-        <div class="muted" style="font-size:0.85rem;">Last fetched from GitHub: ${escHtml(fetched)}</div>
+        <div class="muted" style="font-size:0.85rem;">${sourceLabel}</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <button id="setup-sim-config-refresh-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
-        <button id="setup-sim-config-save-btn" class="btn btn-primary btn-small" type="button"${disabled}>Save to GitHub</button>
+        <button id="setup-sim-config-save-btn" class="btn btn-primary btn-small" type="button"${disabled}>${escHtml(saveLabel)}</button>
       </div>
     </div>
     <div id="setup-sim-config-msg" class="form-msg" style="margin-bottom:10px;"></div>
@@ -4166,6 +4176,100 @@ function renderSetupSimulationConfigEditor() {
   `;
   
   wireSetupSimConfigButtons(tenantId);
+  // Also render the user-overrides section below
+  renderSetupUserOverridesEditor();
+}
+
+function renderSetupUserOverridesEditor() {
+  let container = $("#setup-user-overrides-editor");
+  if (!container) {
+    // Create and append the user-overrides section after the sim-config editor
+    const simEditor = $("#setup-sim-config-editor");
+    if (!simEditor) return;
+    container = document.createElement("div");
+    container.id = "setup-user-overrides-editor";
+    container.style.marginTop = "24px";
+    simEditor.parentNode.insertBefore(container, simEditor.nextSibling);
+  }
+  const tenantId = currentTenantId || getActiveTenantId();
+  if (!tenantId) { container.innerHTML = ""; return; }
+  const disabled = canManageTenant(tenantId) ? "" : " disabled";
+  const fetched = hubUserOverridesConfState.fetchedAt ? fmtDate(hubUserOverridesConfState.fetchedAt) : "—";
+
+  if (hubUserOverridesConfState.loading) {
+    container.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+        <div>
+          <div style="font-weight:600;">configs/user-overrides.conf</div>
+          <div class="muted" style="font-size:0.85rem;">Hub-managed override · Last saved: ${escHtml(fetched)}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button id="setup-user-overrides-refresh-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+          <button id="setup-user-overrides-save-btn" class="btn btn-primary btn-small" type="button"${disabled}>Save</button>
+        </div>
+      </div>
+      <div id="setup-user-overrides-msg" class="form-msg" style="margin-bottom:10px;"></div>
+      <div class="empty-state">Loading user-overrides.conf…</div>
+    `;
+    return;
+  }
+
+  if (hubUserOverridesConfState.error) {
+    container.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+        <div>
+          <div style="font-weight:600;">configs/user-overrides.conf</div>
+          <div class="muted" style="font-size:0.85rem;">Hub-managed override · Last saved: ${escHtml(fetched)}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button id="setup-user-overrides-refresh-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+          <button id="setup-user-overrides-save-btn" class="btn btn-primary btn-small" type="button"${disabled}>Save</button>
+        </div>
+      </div>
+      <div id="setup-user-overrides-msg" class="form-msg" style="margin-bottom:10px;"></div>
+      <div class="empty-state">${escHtml(hubUserOverridesConfState.error)}</div>
+    `;
+    wireSetupUserOverridesButtons(tenantId);
+    return;
+  }
+
+  const sections = hubUserOverridesConfState.sections || {};
+  const orderedSections = Object.keys(sections);
+  const slotSections = orderedSections.length ? [] : HUB_SIM_FIXED_SECTION_ORDER.filter((s) => /^s\d+$/.test(s));
+
+  container.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+      <div>
+        <div style="font-weight:600;">configs/user-overrides.conf</div>
+        <div class="muted" style="font-size:0.85rem;">Hub-managed override — overrides simulation.conf per-user flags · Last saved: ${escHtml(fetched)}</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <button id="setup-user-overrides-refresh-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+        <button id="setup-user-overrides-save-btn" class="btn btn-primary btn-small" type="button"${disabled}>Save</button>
+      </div>
+    </div>
+    <div id="setup-user-overrides-msg" class="form-msg" style="margin-bottom:10px;"></div>
+    <div id="setup-user-overrides-form">
+      ${orderedSections.map((section, index) => renderHubSimulationSection(section, sections[section] || {}, { open: index === 0 })).join("")}
+      ${slotSections.map((section, index) => renderHubSimulationSection(section, sections[section] || {}, { open: index === 0 && orderedSections.length === 0 })).join("")}
+      ${!orderedSections.length && !slotSections.length ? '<div class="muted" style="padding:12px 0">No overrides configured. Fields left blank will use simulation.conf defaults.</div>' : ""}
+    </div>
+  `;
+
+  wireSetupUserOverridesButtons(tenantId);
+}
+
+function wireSetupUserOverridesButtons(tenantId) {
+  const refreshBtn = $("#setup-user-overrides-refresh-btn");
+  const saveBtn = $("#setup-user-overrides-save-btn");
+  if (refreshBtn && !refreshBtn._bound) {
+    refreshBtn._bound = true;
+    refreshBtn.addEventListener("click", async () => { await loadSetupUserOverridesConf(tenantId, true); });
+  }
+  if (saveBtn && !saveBtn._bound) {
+    saveBtn._bound = true;
+    saveBtn.addEventListener("click", async () => { await saveSetupUserOverridesConf(tenantId); });
+  }
 }
 
 function wireSetupSimConfigButtons(tenantId) {
@@ -4202,7 +4306,7 @@ async function loadSetupSimulationConf(tenantId, force = false) {
   if (!res || !res.ok) {
     hubSimulationConfState.loading = false;
     hubSimulationConfState.loaded = false;
-    hubSimulationConfState.error = data?.detail || "Unable to load simulation.conf from GitHub.";
+    hubSimulationConfState.error = data?.detail || "Unable to load simulation.conf.";
     renderSetupSimulationConfigEditor();
     return null;
   }
@@ -4218,9 +4322,45 @@ async function loadSetupSimulationConf(tenantId, force = false) {
     sectionOrder: parsed.sectionOrder,
     keyOrder: parsed.keyOrder,
     error: "",
+    mode: data?.mode || "github",
   };
   renderSetupSimulationConfigEditor();
   return hubSimulationConfState;
+}
+
+async function loadSetupUserOverridesConf(tenantId, force = false) {
+  if (!tenantId || !currentUser) return null;
+  if (hubUserOverridesConfState.tenantId !== tenantId) resetHubUserOverridesConfState(tenantId);
+  if (!force && hubUserOverridesConfState.loaded) {
+    renderSetupUserOverridesEditor();
+    return hubUserOverridesConfState;
+  }
+  hubUserOverridesConfState.loading = true;
+  hubUserOverridesConfState.error = "";
+  renderSetupUserOverridesEditor();
+  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/config/user-overrides-conf`);
+  const data = await readJson(res);
+  if (!res || !res.ok) {
+    hubUserOverridesConfState.loading = false;
+    hubUserOverridesConfState.loaded = false;
+    hubUserOverridesConfState.error = data?.detail || "Unable to load user-overrides.conf.";
+    renderSetupUserOverridesEditor();
+    return null;
+  }
+  const parsed = parseHubSimulationIni(data?.content || "");
+  hubUserOverridesConfState = {
+    tenantId,
+    loaded: true,
+    loading: false,
+    rawContent: data?.content || "",
+    fetchedAt: data?.fetched_at || "",
+    sections: parsed.sections,
+    sectionOrder: parsed.sectionOrder,
+    keyOrder: parsed.keyOrder,
+    error: "",
+  };
+  renderSetupUserOverridesEditor();
+  return hubUserOverridesConfState;
 }
 
 function collectSetupSimulationConfContent() {
@@ -4240,13 +4380,31 @@ function collectSetupSimulationConfContent() {
   return serializeHubSimulationIni(sections, hubSimulationConfState.sectionOrder, hubSimulationConfState.keyOrder);
 }
 
+function collectSetupUserOverridesContent() {
+  const form = $("#setup-user-overrides-form");
+  if (!form) return hubUserOverridesConfState.rawContent || "";
+  const sections = JSON.parse(JSON.stringify(hubUserOverridesConfState.sections || {}));
+  form.querySelectorAll("[data-section][data-key]").forEach((input) => {
+    const section = input.dataset.section;
+    const key = input.dataset.key;
+    if (!sections[section]) sections[section] = {};
+    if (input.type === "checkbox") {
+      sections[section][key] = input.checked ? (input.dataset.on || "on") : (input.dataset.off || "off");
+      return;
+    }
+    sections[section][key] = input.value.trim();
+  });
+  return serializeHubSimulationIni(sections, hubUserOverridesConfState.sectionOrder, hubUserOverridesConfState.keyOrder);
+}
+
 async function saveSetupSimulationConf(tenantId) {
   if (!canManageTenant(tenantId)) {
     setFormMessage("setup-sim-config-msg", "Tenant Viewer access is read-only.", false);
     return;
   }
   if (!tenantId) return;
-  setFormMessage("setup-sim-config-msg", "Saving to GitHub…", true);
+  const isOverride = hubSimulationConfState.mode === "override";
+  setFormMessage("setup-sim-config-msg", isOverride ? "Saving…" : "Saving to GitHub…", true);
   const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/config/simulation-conf`, {
     method: "PUT",
     body: { content: collectSetupSimulationConfContent() },
@@ -4257,7 +4415,31 @@ async function saveSetupSimulationConf(tenantId) {
     return;
   }
   await loadSetupSimulationConf(tenantId, true);
-  setFormMessage("setup-sim-config-msg", `Saved to GitHub. Repo sync queued for ${data?.synced_spokes ?? 0} spoke(s).`, true);
+  if (isOverride) {
+    setFormMessage("setup-sim-config-msg", `Saved. Pushed to ${data?.pushed_to_spokes ?? 0} spoke(s).`, true);
+  } else {
+    setFormMessage("setup-sim-config-msg", `Saved to GitHub. Repo sync queued for ${data?.synced_spokes ?? 0} spoke(s).`, true);
+  }
+}
+
+async function saveSetupUserOverridesConf(tenantId) {
+  if (!canManageTenant(tenantId)) {
+    setFormMessage("setup-user-overrides-msg", "Tenant Viewer access is read-only.", false);
+    return;
+  }
+  if (!tenantId) return;
+  setFormMessage("setup-user-overrides-msg", "Saving…", true);
+  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/config/user-overrides-conf`, {
+    method: "PUT",
+    body: { content: collectSetupUserOverridesContent() },
+  });
+  const data = await readJson(res);
+  if (!res || !res.ok) {
+    setFormMessage("setup-user-overrides-msg", data?.detail || "Unable to save user-overrides.conf.", false);
+    return;
+  }
+  await loadSetupUserOverridesConf(tenantId, true);
+  setFormMessage("setup-user-overrides-msg", `Saved. Pushed to ${data?.pushed_to_spokes ?? 0} spoke(s).`, true);
 }
 
 function renderTenantDetail(data = tenantDetailState.data[tenantDetailState.tenantId]) {
@@ -7441,7 +7623,10 @@ async function initTsProcessingTab(tenantId) {
 }
 
 function initTsSimulationsTab() {
+  const tenantId = currentTenantId || getActiveTenantId();
   renderSetupSimulationConfigEditor();
+  if (tenantId && !hubSimulationConfState.loaded) loadSetupSimulationConf(tenantId);
+  if (tenantId && !hubUserOverridesConfState.loaded) loadSetupUserOverridesConf(tenantId);
 }
 
 async function activateHubTenantSetupSubtab(subtab = "ts-central-api", force = false) {

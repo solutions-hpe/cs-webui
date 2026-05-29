@@ -2816,6 +2816,17 @@ function syncTenantContextChrome() {
   $("#tenant-context-indicator")?.classList.toggle("hidden", !active);
   $("#tenant-context-name") && ($("#tenant-context-name").textContent = tenantName(currentTenantId) || currentTenantId || "—");
   document.body.classList.toggle("tenant-context-active", active);
+  // Show SA subtab items in left sidebar only when the superadmin tab is active
+  const saActive = !active && activeTab === "superadmin";
+  const saContextNav = $("#sa-context-nav");
+  if (saContextNav) {
+    saContextNav.classList.toggle("hidden", !saActive);
+    if (saActive) {
+      saContextNav.querySelectorAll(".sa-subtab[data-subtab]").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.subtab === superadminActiveSubtab);
+      });
+    }
+  }
 }
 
 function syncHubPermissionUI() {

@@ -2483,6 +2483,30 @@ details[open] > summary.panel-header { margin-bottom: 16px; }
 .tenant-context-nav.hidden { display: none; }
 .spoke-nav-row { display: flex; flex-direction: column; align-items: stretch; flex: 1; }
 
+/* SA context nav — left sidebar items shown when superadmin tab is active */
+#sa-context-nav {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+#sa-context-nav.hidden { display: none; }
+.sa-nav-section-label {
+  padding: 10px 18px 3px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  pointer-events: none;
+  user-select: none;
+}
+#sa-context-nav .tab {
+  padding-left: 26px;
+  font-size: 0.85rem;
+}
+/* Hide the legacy horizontal subnav inside the superadmin panel — left nav takes over */
+#sa-horizontal-subnav { display: none; }
+
 /* Two-row tenant context nav — vertical sidebar layout */
 .tenant-context-nav { flex-direction: column; align-items: stretch; }
 .tenant-context-nav-row1 {

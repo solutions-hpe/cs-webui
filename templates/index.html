@@ -125,6 +125,17 @@
     <div class="hub-only hub-nav-wrap">
       <div id="hub-admin-nav" class="hub-admin-nav">
         <button class="tab superadmin-tab hidden" data-tab="hub-superadmin" type="button">Superadmin</button>
+        <!-- SA subtab items shown in left sidebar when the Superadmin tab is active -->
+        <div id="sa-context-nav" class="sa-context-nav hidden">
+          <span class="sa-nav-section-label">Superadmin</span>
+          <button class="tab sa-subtab" data-subtab="sa-pending" type="button">Pending Spokes</button>
+          <button class="tab sa-subtab" data-subtab="sa-tenants" type="button">Tenants</button>
+          <button class="tab sa-subtab" data-subtab="sa-users" type="button">Users</button>
+          <button class="tab sa-subtab" data-subtab="sa-security" type="button">Security</button>
+          <button class="tab sa-subtab" data-subtab="sa-gkill" type="button">GKill</button>
+          <button class="tab sa-subtab" data-subtab="sa-global-usb" type="button">Global USB</button>
+          <button class="tab sa-subtab" data-subtab="sa-qa" type="button">QA</button>
+        </div>
         <span class="tab-nav-sep" aria-hidden="true"></span>
         <button class="tab auth-tab hidden tab-nav-right" data-tab="hub-setup" type="button">⚙ Hub Setup</button>
       </div>
@@ -1181,7 +1192,7 @@
         </div>
       </main>
       <main id="tab-hub-superadmin" class="page tab-content hidden">
-        <nav class="setup-subnav">
+        <nav class="setup-subnav" id="sa-horizontal-subnav">
           <button class="setup-subtab sa-subtab active" data-subtab="sa-pending" type="button">Pending Spokes</button>
           <button class="setup-subtab sa-subtab" data-subtab="sa-tenants" type="button">Tenants</button>
           <button class="setup-subtab sa-subtab" data-subtab="sa-users" type="button">Users</button>

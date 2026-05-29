@@ -12364,7 +12364,7 @@ function renderHubVmServerVmsPanel(tenantId, spokeId, { simVms, otherVms, contai
         </div>
         <div id="hub-vm-empty-${c.id}" class="empty-state"
              style="${c.vms.length ? "display:none;" : ""}padding:32px;text-align:center;color:var(--muted);">
-          ${c.id === "sim" ? "Waiting for Proxmox agent to check in…" : c.label + ": none."}
+          ${c.id === "sim" ? (px.last_seen ? "No Deployed VMs" : "Waiting for Proxmox agent to check in…") : c.label + ": none."}
         </div>
       </div>`).join("")}`;
 }

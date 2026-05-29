@@ -1019,7 +1019,7 @@ function renderHubStatusTab() {
         </div>${emptyMsg}</div>`;
 
     const extraHeader = extraColHeader ? `<th style="padding:5px 10px;white-space:nowrap;">${escHtml(extraColHeader)}</th>` : "";
-    const removeHeader = showRemove ? `<th style="padding:5px 10px;"></th>` : "";
+    const removeHeader = showRemove ? `<th style="padding:5px 10px;width:100px;text-align:right;"></th>` : "";
     const lastSeenHeader = showLastSeen ? `<th style="padding:5px 10px;white-space:nowrap;">Last Seen</th>` : "";
     const rowsHtml = rows.map((r) => {
       const extraCell = extraColHeader
@@ -1027,8 +1027,8 @@ function renderHubStatusTab() {
         : "";
       const lastSeenCell = showLastSeen ? `<td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;vertical-align:top;${tdP}">${r._lastSeen ? escHtml(r._lastSeen) : "—"}</td>` : "";
       const removeCell = showRemove && r._itemId
-        ? `<td style="white-space:nowrap;vertical-align:top;${tdP}"><button class="btn btn-small btn-secondary hub-monitored-remove-btn" data-item-id="${escHtml(r._itemId)}" type="button">Remove</button></td>`
-        : (showRemove ? `<td></td>` : "");
+        ? `<td style="white-space:nowrap;vertical-align:top;width:100px;text-align:right;${tdP}"><button class="btn btn-small btn-secondary hub-monitored-remove-btn" data-item-id="${escHtml(r._itemId)}" type="button">Remove</button></td>`
+        : (showRemove ? `<td style="width:100px;"></td>` : "");
       return `<tr>
         <td style="font-weight:600;word-break:break-word;width:260px;vertical-align:top;${tdP}">${r._name}</td>
         <td style="white-space:nowrap;width:180px;vertical-align:top;${tdP}">${statusBadge(r._tone, r._label)}</td>
@@ -1485,7 +1485,12 @@ function renderHubHwPanel() {
   if (!container) return;
   container.textContent = "";
   const hwChecks = hubAggregateHardware(hubCentralData?.spokes || []);
-  if (!hwChecks.length) {
+
+  // Also include manually-monitored gateway items
+  const gatewayItems = (Array.isArray(_hubMonitoredItemsData) ? _hubMonitoredItemsData : [])
+    .filter((item) => item.type === "gateway");
+
+  if (!hwChecks.length && !gatewayItems.length) {
     container.innerHTML = '<div class="central-empty">No hardware alerts data from any spoke.</div>';
     return;
   }
@@ -1509,6 +1514,24 @@ function renderHubHwPanel() {
         openHubHwDetail(hw.id);
       }
     });
+    container.appendChild(row);
+  }
+
+  // Render manually-monitored gateway items
+  for (const item of gatewayItems) {
+    const { tone, label } = getMonitoredItemStatusMeta(item);
+    const row = document.createElement("div");
+    row.className = "check-row";
+    const lastSeen = item.central_last_seen
+      ? new Date(item.central_last_seen).toLocaleString()
+      : (item.last_seen ? new Date(item.last_seen * 1000).toLocaleString() : "—");
+    row.innerHTML = `
+      <span class="check-dot ${tone === "red" ? "dot-err" : tone === "yellow" ? "dot-warn" : "dot-ok"}"></span>
+      <span class="check-name">${escHtml(item.name || item.identifier || "—")}</span>
+      <span class="check-badge ${tone === "red" ? "sim-fail" : tone === "yellow" ? "sim-warn" : "sim-pass"}">${escHtml(label)}</span>
+      <span class="check-detail">Gateway · last seen ${escHtml(lastSeen)}</span>
+      <span class="check-ts"></span>
+    `;
     container.appendChild(row);
   }
 }

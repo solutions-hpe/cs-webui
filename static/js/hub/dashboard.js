@@ -1043,6 +1043,7 @@ function renderHubStatusTab() {
     const dropPct = Number.isFinite(Number(cc.drop_pct)) ? Math.round(cc.drop_pct) : 0;
     const rawLabel = cs.label || "NO_DATA";
     const displayLabel = rawLabel === "NO_DATA" ? "Collecting" : rawLabel === "DEGRADED" ? `↓${dropPct}% clients` : rawLabel;
+    const displayTone = rawLabel === "NO_DATA" ? "yellow" : cs.tone || "gray";
     // Use wireless_clients from Central API directly; fall back to tracked metric current
     const wirelessClients = Number.isFinite(Number(site.wireless_clients)) ? Number(site.wireless_clients) : null;
     const fallbackCurrent = Number.isFinite(Number(cc.current)) ? Number(cc.current) : null;
@@ -1050,7 +1051,7 @@ function renderHubStatusTab() {
     const detail = clientNum !== null ? `${clientNum} clients` : null;
     const lastSeen = cc.ts ? new Date(cc.ts * 1000).toLocaleString() : null;
     return {
-      _tone: cs.tone || "gray",
+      _tone: displayTone,
       _label: displayLabel,
       _name: escHtml(site.wsite),
       _detail: detail,

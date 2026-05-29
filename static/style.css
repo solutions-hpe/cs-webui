@@ -819,6 +819,7 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   padding: 10px 32px;
   border-bottom: 1px solid var(--border);
   word-break: break-word;
+  vertical-align: top;
 }
 
 .vm-row-template td {

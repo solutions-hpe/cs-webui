@@ -7877,7 +7877,7 @@ function _caClientIsWireless(c) {
 function renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search) {
   const tdP = "padding:6px 10px;";
   const monitoredSites = _caMonitoredSiteNames();
-  const activeTab = container._caClientTab || "wireless";
+  const activeTab = container._caClientTab || "all";
 
   // Prefer individual client records; fall back to count-only mode if no individual data
   const allClients = (clientsLegacy || []).filter((client) => hubCaIsIndividualClientRecord(client));
@@ -7886,26 +7886,33 @@ function renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search) 
     : null;
 
   const tabPills = `<div style="margin-bottom:8px;">
+    <button class="btn btn-small ${activeTab === "all" ? "btn-primary" : "btn-secondary"} ca-client-tab-btn" data-tab="all" style="margin:0 2px 4px;">All</button>
     <button class="btn btn-small ${activeTab === "wireless" ? "btn-primary" : "btn-secondary"} ca-client-tab-btn" data-tab="wireless" style="margin:0 2px 4px;">Wireless</button>
     <button class="btn btn-small ${activeTab === "wired" ? "btn-primary" : "btn-secondary"} ca-client-tab-btn" data-tab="wired" style="margin:0 2px 4px;">Wired</button>
   </div>`;
 
   if (clientSource) {
-    const tabFiltered = clientSource.filter((c) => activeTab === "wireless" ? _caClientIsWireless(c) : !_caClientIsWireless(c));
+    const tabFiltered = activeTab === "all" ? clientSource
+      : clientSource.filter((c) => activeTab === "wireless" ? _caClientIsWireless(c) : !_caClientIsWireless(c));
     const filtered = tabFiltered.filter((c) => !search || JSON.stringify(c).toLowerCase().includes(search));
-    const emptyMsg = search ? "No clients match your search." : `No ${activeTab} clients returned from Central.`;
+    const emptyMsg = search ? "No clients match your search." : `No ${activeTab === "all" ? "" : activeTab + " "}clients returned from Central.`;
     if (!filtered.length) {
       container.innerHTML = tabPills + `<div class="empty-state">${emptyMsg}</div>`;
     } else {
       const isWireless = activeTab === "wireless";
+      const isAll = activeTab === "all";
       const rows = filtered.map((c) => {
         const statusColor = (c.status || "").toLowerCase() === "connected" ? "#27ae60"
           : (c.status || "").toLowerCase() === "disconnected" ? "#e74c3c" : "#aaa";
         const statusDot = `<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:8px;height:8px;border-radius:50%;background:${statusColor};display:inline-block;flex-shrink:0;"></span>${escHtml(c.status || "—")}</span>`;
-        const wirelessCells = isWireless
+        const wirelessCells = isAll
           ? `<td style="white-space:nowrap;${tdP}">${escHtml(c.ap || "—")}</td>
-             <td style="white-space:nowrap;${tdP}">${escHtml(c.ssid || "—")}</td>`
-          : `<td style="white-space:nowrap;${tdP}">${escHtml(c.vlan || "—")}</td>`;
+             <td style="white-space:nowrap;${tdP}">${escHtml(c.ssid || "—")}</td>
+             <td style="white-space:nowrap;${tdP}">${escHtml(c.vlan || "—")}</td>`
+          : isWireless
+            ? `<td style="white-space:nowrap;${tdP}">${escHtml(c.ap || "—")}</td>
+               <td style="white-space:nowrap;${tdP}">${escHtml(c.ssid || "—")}</td>`
+            : `<td style="white-space:nowrap;${tdP}">${escHtml(c.vlan || "—")}</td>`;
         return `<tr>
           <td style="width:30%;${tdP}"><strong>${escHtml(c.hostname || "—")}</strong><div style="font-size:11px;color:var(--muted);">${escHtml(c.mac || "")}</div></td>
           <td style="white-space:nowrap;${tdP}">${escHtml(c.site || "—")}</td>
@@ -7920,18 +7927,22 @@ function renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search) 
           })}</td>
         </tr>`;
       }).join("");
-      const wirelessHeaders = isWireless
+      const extraHeaders = isAll
         ? `<th style="padding:5px 10px;white-space:nowrap;">AP</th>
-           <th style="padding:5px 10px;white-space:nowrap;">SSID</th>`
-        : `<th style="padding:5px 10px;white-space:nowrap;">VLAN</th>`;
+           <th style="padding:5px 10px;white-space:nowrap;">SSID</th>
+           <th style="padding:5px 10px;white-space:nowrap;">VLAN</th>`
+        : isWireless
+          ? `<th style="padding:5px 10px;white-space:nowrap;">AP</th>
+             <th style="padding:5px 10px;white-space:nowrap;">SSID</th>`
+          : `<th style="padding:5px 10px;white-space:nowrap;">VLAN</th>`;
       container.innerHTML = tabPills + `
         <div class="setup-card" style="overflow-x:auto;padding:0;">
-          <table class="data-table" style="font-size:0.82rem;margin:0;min-width:${isWireless ? 700 : 600}px;width:100%;">
+          <table class="data-table" style="font-size:0.82rem;margin:0;min-width:${isAll ? 800 : isWireless ? 700 : 600}px;width:100%;">
             <thead><tr>
               <th style="width:30%;padding:5px 10px;">Client</th>
               <th style="padding:5px 10px;white-space:nowrap;">Site</th>
               <th style="padding:5px 10px;white-space:nowrap;">IP</th>
-              ${wirelessHeaders}
+              ${extraHeaders}
               <th style="padding:5px 10px;white-space:nowrap;">Status</th>
               <th style="padding:5px 10px;"></th>
             </tr></thead>
@@ -7944,23 +7955,32 @@ function renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search) 
     let entries = Object.entries(clientsBySite || {});
     if (monitoredSites) entries = entries.filter(([site]) => monitoredSites.has(site.toLowerCase().trim()));
     const filtered = entries.filter(([site]) => !search || site.toLowerCase().includes(search));
-    const countKey = activeTab === "wireless" ? "wireless" : "wired";
-    const emptyMsg = search ? "No clients match your search." : `No ${activeTab} clients returned from Central.`;
+    const emptyMsg = search ? "No clients match your search." : "No clients returned from Central.";
     if (!filtered.length) {
       container.innerHTML = tabPills + `<div class="empty-state">${emptyMsg}</div>`;
     } else {
-      const rows = filtered.sort((a, b) => (b[1][countKey] || 0) - (a[1][countKey] || 0)).map(([site, counts]) => `
+      const isAll = activeTab === "all";
+      const countKey = activeTab === "wired" ? "wired" : "wireless";
+      const rows = filtered.sort((a, b) => (b[1].total || 0) - (a[1].total || 0)).map(([site, counts]) => `
         <tr>
-          <td style="width:50%;${tdP}"><strong>${escHtml(site)}</strong></td>
-          <td style="white-space:nowrap;${tdP}">${counts[countKey] ?? "—"}</td>
+          <td style="width:40%;${tdP}"><strong>${escHtml(site)}</strong></td>
+          ${isAll ? `<td style="white-space:nowrap;${tdP}">${counts.total ?? "—"}</td>
+          <td style="white-space:nowrap;${tdP}">${counts.wireless ?? "—"}</td>
+          <td style="white-space:nowrap;${tdP}">${counts.wired ?? "—"}</td>`
+          : `<td style="white-space:nowrap;${tdP}">${counts[countKey] ?? "—"}</td>`}
           <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("client", { name: `Client Count: ${site}`, site })}</td>
         </tr>`).join("");
+      const countHeaders = isAll
+        ? `<th style="padding:5px 10px;white-space:nowrap;">Total</th>
+           <th style="padding:5px 10px;white-space:nowrap;">Wireless</th>
+           <th style="padding:5px 10px;white-space:nowrap;">Wired</th>`
+        : `<th style="padding:5px 10px;white-space:nowrap;">${activeTab === "wired" ? "Wired" : "Wireless"} Clients</th>`;
       container.innerHTML = tabPills + `
         <div class="setup-card" style="overflow-x:auto;padding:0;">
-          <table class="data-table" style="font-size:0.82rem;margin:0;min-width:400px;width:100%;">
+          <table class="data-table" style="font-size:0.82rem;margin:0;min-width:${isAll ? 500 : 400}px;width:100%;">
             <thead><tr>
-              <th style="width:50%;padding:5px 10px;">Site</th>
-              <th style="padding:5px 10px;white-space:nowrap;">${activeTab === "wireless" ? "Wireless" : "Wired"} Clients</th>
+              <th style="width:40%;padding:5px 10px;">Site</th>
+              ${countHeaders}
               <th style="padding:5px 10px;"></th>
             </tr></thead>
             <tbody>${rows}</tbody>
@@ -7985,23 +8005,25 @@ function _caDeviceTabType(d) {
 
 function renderHubCaDevicesTab(container, devicesBySite, search) {
   const monitoredSites = _caMonitoredSiteNames();
-  const activeTab = container._caDeviceTab || "ap";
+  const activeTab = container._caDeviceTab || "all";
   const allDevices = Object.entries(devicesBySite || [])
     .filter(([site]) => !monitoredSites || monitoredSites.has(site.toLowerCase().trim()))
     .flatMap(([site, devs]) => devs.map((d) => ({ ...d, site })));
 
   const tabPills = `<div style="margin-bottom:8px;">
+    <button class="btn btn-small ${activeTab === "all" ? "btn-primary" : "btn-secondary"} ca-device-tab-btn" data-tab="all" style="margin:0 2px 4px;">All</button>
     <button class="btn btn-small ${activeTab === "ap" ? "btn-primary" : "btn-secondary"} ca-device-tab-btn" data-tab="ap" style="margin:0 2px 4px;">Access Points</button>
     <button class="btn btn-small ${activeTab === "gateway" ? "btn-primary" : "btn-secondary"} ca-device-tab-btn" data-tab="gateway" style="margin:0 2px 4px;">Gateway</button>
     <button class="btn btn-small ${activeTab === "switch" ? "btn-primary" : "btn-secondary"} ca-device-tab-btn" data-tab="switch" style="margin:0 2px 4px;">Switch</button>
   </div>`;
 
-  const tabDevices = allDevices.filter((d) => _caDeviceTabType(d) === activeTab);
+  const tabDevices = activeTab === "all" ? allDevices : allDevices.filter((d) => _caDeviceTabType(d) === activeTab);
   const filtered = tabDevices.filter((d) =>
     !search || JSON.stringify(d).toLowerCase().includes(search)
   );
   if (!filtered.length) {
-    container.innerHTML = tabPills + `<div class="empty-state">${search ? "No devices match your search." : `No ${activeTab === "ap" ? "access points" : activeTab === "gateway" ? "gateways" : "switches"} returned from Central.`}</div>`;
+    const emptyLabel = activeTab === "all" ? "devices" : activeTab === "ap" ? "access points" : activeTab === "gateway" ? "gateways" : "switches";
+    container.innerHTML = tabPills + `<div class="empty-state">${search ? "No devices match your search." : `No ${emptyLabel} returned from Central.`}</div>`;
     container.querySelectorAll(".ca-device-tab-btn").forEach((btn) => {
       btn.onclick = () => { container._caDeviceTab = btn.dataset.tab; renderHubCaDevicesTab(container, devicesBySite, search); };
     });

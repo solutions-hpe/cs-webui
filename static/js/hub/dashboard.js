@@ -11837,6 +11837,49 @@ function _qaModuleChecks(tenantId) {
             : { status: "PASS", detail: `${d.length} spoke(s) heartbeat OK` };
         }},
     ],
+
+    // ── Destructive / Long-running tests ──────────────────────────────────
+    teardown: [
+      { name: "Trigger VM teardown (all sim VMs)", method: "POST", url: `/api/${T}/qa/teardown-all-vms`,
+        jsonTest: d => {
+          if (!d) return { status: "FAIL", detail: "No response" };
+          if (!d.ok) return { status: "FAIL", detail: JSON.stringify(d) };
+          if (d.total_vms_queued === 0) return { status: "SKIP", detail: "No sim VMs found (vmid > 9000) — nothing to tear down" };
+          return { status: "PASS", detail: `Queued delete_vm for ${d.total_vms_queued} VM(s) across ${(d.spokes||[]).length} spoke(s)` };
+        }},
+      { name: "All sim VMs deleted", url: `/api/${T}/qa/teardown-status`,
+        poll: { intervalMs: 10000, timeoutMs: 300000 },
+        jsonTest: d => {
+          if (!d) return { status: "FAIL", detail: "No response" };
+          if (d.total_remaining === 0 && d.complete) return { status: "PASS", detail: "total_remaining=0 — all sim VMs gone" };
+          return null; // null = keep polling
+        },
+        skipIf: d => d && d.total_remaining === 0 && !d.complete,
+      },
+    ],
+
+    autoprov_e2e: [
+      { name: "Dongles present", url: `/api/${T}/aggregate/usb-provisioning-status`,
+        jsonTest: d => {
+          if (!d) return { status: "FAIL", detail: "No response" };
+          if ((d.total_dongles || 0) === 0) return { status: "SKIP", detail: "No USB dongles detected — cannot run E2E test" };
+          return { status: "PASS", detail: `total_dongles=${d.total_dongles}` };
+        }},
+      { name: "Enable Auto-Provisioning fleet-wide", method: "POST", url: `/api/${T}/qa/enable-autoprov`,
+        jsonTest: d => {
+          if (!d?.ok) return { status: "FAIL", detail: JSON.stringify(d) };
+          return { status: "PASS", detail: `expected_clients=${d.expected_clients}, updated_spokes=${d.updated_spokes}` };
+        }},
+      { name: "All clients online", url: `/api/${T}/qa/provisioning-check`,
+        poll: { intervalMs: 15000, timeoutMs: 600000 },
+        jsonTest: d => {
+          if (!d) return { status: "FAIL", detail: "No response" };
+          if (d.expected_clients === 0) return { status: "SKIP", detail: "expected_clients=0 — no dongles to provision" };
+          if (d.overall_pass && d.actual_clients >= d.expected_clients)
+            return { status: "PASS", detail: `${d.actual_clients}/${d.expected_clients} clients online` };
+          return null; // keep polling
+        }},
+    ],
   };
 }
 
@@ -11863,9 +11906,53 @@ async function _runQaChecks(tenantId, module) {
       tempRow.innerHTML = `<td>${_qaBadge("RUN")}</td><td style="font-size:0.8rem;">${modLabel}</td><td>${check.name}</td><td></td>`;
       tbody.appendChild(tempRow);
 
-      const { status, detail } = await _qaCheck(check.method || "GET", check.url, check.name, {
-        jsonTest: check.jsonTest,
-      });
+      let status, detail;
+
+      if (check.poll) {
+        // Polling check: keep calling until jsonTest returns non-null or timeout
+        const { intervalMs, timeoutMs } = check.poll;
+        const deadline = Date.now() + timeoutMs;
+        let lastData = null;
+        let resolved = false;
+
+        while (Date.now() < deadline) {
+          const res = await apiFetch(check.url, { method: check.method || "GET" });
+          if (!res) { status = "FAIL"; detail = "No response / network error"; break; }
+          lastData = await readJson(res);
+          const result = check.jsonTest ? check.jsonTest(lastData) : null;
+          if (result !== null) {
+            status = result.status; detail = result.detail || "";
+            resolved = true;
+            break;
+          }
+          // Update placeholder with live progress
+          const remaining = lastData?.total_remaining ?? lastData?.actual_clients ?? "?";
+          const expected = lastData?.expected_clients;
+          const progressNote = expected != null
+            ? `${remaining}/${expected} — waiting…`
+            : `remaining=${remaining} — waiting…`;
+          tempRow.innerHTML = `<td>${_qaBadge("RUN")}</td><td style="font-size:0.8rem;">${modLabel}</td><td>${check.name}</td><td style="font-size:0.8rem;color:var(--text-muted);">${progressNote}</td>`;
+          await new Promise(r => setTimeout(r, intervalMs));
+        }
+
+        if (!resolved && !status) {
+          // Timed out — do one final check to report state
+          const res = await apiFetch(check.url, { method: check.method || "GET" });
+          lastData = res ? await readJson(res) : null;
+          const timeoutSec = Math.round(timeoutMs / 1000);
+          const remaining = lastData?.total_remaining ?? lastData?.actual_clients ?? "?";
+          const expected = lastData?.expected_clients;
+          detail = expected != null
+            ? `Timed out after ${timeoutSec}s — ${remaining}/${expected}`
+            : `Timed out after ${timeoutSec}s — ${remaining} remaining`;
+          status = "FAIL";
+        }
+      } else {
+        const result = await _qaCheck(check.method || "GET", check.url, check.name, {
+          jsonTest: check.jsonTest,
+        });
+        status = result.status; detail = result.detail;
+      }
 
       // Replace placeholder with real result
       tempRow.innerHTML = `<td>${_qaBadge(status)}</td><td style="font-size:0.8rem;">${modLabel}</td><td>${check.name}</td><td style="font-size:0.8rem;color:var(--text-muted);">${detail}</td>`;

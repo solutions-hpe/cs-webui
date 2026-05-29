@@ -11244,7 +11244,7 @@ function bindEvents() {
       return;
     }
  
-    const tabButton = event.target.closest("#tab-nav .tab");
+    const tabButton = event.target.closest("#tab-nav .tab:not(.sa-subtab)");
     if (tabButton) {
       if (tabButton.dataset.tenantId) setCurrentTenant(tabButton.dataset.tenantId, false);
       // Row-1 back-nav buttons in tenant context exit tenant context first

@@ -11679,7 +11679,7 @@ function _wireQaPanel() {
 function _qaBadge(status) {
   const colors = { PASS: "#22c55e", FAIL: "#ef4444", WARN: "#f59e0b", SKIP: "#6b7280", RUN: "#3b82f6" };
   const col = colors[status] || "#6b7280";
-  return `<span style="display:inline-block;min-width:44px;padding:2px 6px;border-radius:4px;background:${col};color:#fff;font-size:0.75rem;font-weight:700;text-align:center;">${status}</span>`;
+  return `<span style="display:inline-block;min-width:54px;padding:2px 8px;border-radius:4px;background:${col};color:#fff;font-size:0.75rem;font-weight:700;text-align:center;white-space:nowrap;">${status}</span>`;
 }
 
 /** Append a result row to the QA results table. */

@@ -1041,19 +1041,6 @@ function renderHubStatusTab() {
     };
   }).sort(sortByTone);
 
-  // — Hardware — auto hardware alerts from spokes + manually monitored gateway devices
-  const hwChecks = hubAggregateHardware(hubCentralData?.spokes || []);
-  const hwRows = [
-    ...hwChecks.map((hw) => ({
-      _tone: hw.total > 0 ? "red" : "green",
-      _label: hw.total > 0 ? `${hw.total} DOWN` : "CLEAR",
-      _name: escHtml(hw.name),
-      _detail: "",
-      _lastSeen: null,
-    })),
-    ...monRows("gateway"),
-  ].sort(sortByTone);
-
   // — Monitored items (alerts, insights, clients) —
   const items = Array.isArray(_hubMonitoredItemsData) ? _hubMonitoredItemsData : [];
   const monRows = (type) => items
@@ -1075,6 +1062,19 @@ function renderHubStatusTab() {
         _itemId: item.id || "",
       };
     }).sort(sortByTone);
+
+  // — Hardware — auto hardware alerts from spokes + manually monitored gateway devices
+  const hwChecks = hubAggregateHardware(hubCentralData?.spokes || []);
+  const hwRows = [
+    ...hwChecks.map((hw) => ({
+      _tone: hw.total > 0 ? "red" : "green",
+      _label: hw.total > 0 ? `${hw.total} DOWN` : "CLEAR",
+      _name: escHtml(hw.name),
+      _detail: "",
+      _lastSeen: null,
+    })),
+    ...monRows("gateway"),
+  ].sort(sortByTone);
 
   container.innerHTML =
     makeSection("Sites", siteRows, "Clients", false, false) +

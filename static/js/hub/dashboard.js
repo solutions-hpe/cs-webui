@@ -43,6 +43,9 @@ let hubConfigDraft = "";
 let hubConfigActiveSubtab = "api";
 let hubSimulationConfState = { tenantId: null, loaded: false, loading: false, rawContent: "", sha: "", fetchedAt: "", sections: {}, sectionOrder: [], keyOrder: {}, error: "" };
 let hubConfOverrideState = { tenantId: null, simContent: null, userContent: null, loading: false, error: "" };
+// Hub demo scenario state: tenantId → { hostname → {scenario, minutes_remaining} }
+let hubDemoActiveMap = {};
+let hubDemoTenantId = null;
 let hubSimActiveTab = "hub-simtop-checks";
 let hubSimChecksFilter = "failing";
 let hubSimChecksSearch = "";
@@ -515,11 +518,14 @@ function renderHubT3PciSection(site) {
     </div>`;
 }
 
-function renderHubSimulationBadges(simulations = [], emptyLabel = "—") {
+function renderHubSimulationBadges(simulations = [], emptyLabel = "—", demoScenario = null) {
   const uniqueSimulations = [...new Set((simulations || []).filter(Boolean))]
     .sort((left, right) => String(left).localeCompare(String(right), undefined, { sensitivity: "base" }));
   if (uniqueSimulations.length) {
-    return `<div class="badge-list">${uniqueSimulations.map(sim => `<span class="${hubSimulationBadgeClass(sim)}">${escHtml(sim)}</span>`).join("")}</div>`;
+    return `<div class="badge-list">${uniqueSimulations.map(sim => {
+      const isDemo = demoScenario && sim === demoScenario;
+      return `<span class="${hubSimulationBadgeClass(sim)}${isDemo ? ' badge-demo-active' : ''}">${escHtml(sim)}${isDemo ? ' ⚡' : ''}</span>`;
+    }).join("")}</div>`;
   }
   return emptyLabel ? `<span class="muted">${escHtml(emptyLabel)}</span>` : "";
 }
@@ -1190,7 +1196,14 @@ function activateHubSimTopTab(tabId = "hub-simtop-checks") {
   hubSimActiveTab = tabId;
   if (tabId === "hub-simtop-checks") renderHubStatusTab();
   if (tabId === "hub-simtop-hardware") { renderHubHwPanel(); }
-  if (tabId === "hub-simtop-clients") loadAndRenderHubMonitoredItems();
+  if (tabId === "hub-simtop-clients") {
+    const myRole = currentRoleForTenant(currentTenantId);
+    if (myRole === 'admin' || myRole === 'demo' || myRole === 'superadmin') {
+      loadHubDemoActive().then(() => renderClientRowsForHub());
+    } else {
+      loadAndRenderHubMonitoredItems();
+    }
+  }
   if (tabId === "hub-simtop-sites") renderHubSitesTab();
   if (tabId === "hub-simtop-alerts" || tabId === "hub-simtop-insights") loadAndRenderHubMonitoredItems();
 }
@@ -1650,6 +1663,8 @@ function renderClientRowsForHub() {
   syncHubClientTypeTabs();
   updateHubClientTypeCounts(aggregateClientRows);
   const search = hubClientUiState.search.trim().toLowerCase();
+  const myRole = currentRoleForTenant(currentTenantId);
+  const showDemoButtons = myRole === 'admin' || myRole === 'demo' || myRole === 'superadmin';
   const rows = aggregateClientRows.filter(client => {
     const typeMatch = hubClientTypeFilter === "all" || classifyHubClient(client) === hubClientTypeFilter;
     if (!typeMatch) return false;
@@ -1725,19 +1740,26 @@ function renderClientRowsForHub() {
               ${hubClientTypeFilter === 't3' ? renderHubT3PciSection(site) : ""}
               <div class="table-scroll">
                 <table class="data-table hub-client-site-table">
-                  <thead><tr><th>Status</th><th>Hostname</th><th>Platform</th><th>SSID</th><th>Active Simulations</th><th style="white-space:nowrap">Last Seen</th><th>Errors</th></tr></thead>
+                  <thead><tr><th>Status</th><th>Hostname</th><th>Platform</th><th>SSID</th><th style="white-space:nowrap">Last Seen</th><th>Errors</th>${showDemoButtons ? '<th>Demo Scenario</th>' : ''}</tr></thead>
                   <tbody>
-                    ${site.clients.map(client => `
-                      <tr>
-                        <td class="status-cell">${statusDot(Boolean(client.online))}</td>
-                        <td class="hostname-cell">${escHtml(client.hostname || "—")}</td>
-                        <td>${escHtml(client.platform || client.hw_type || "—")}</td>
-                        <td>${escHtml(client.connected_ssid || "—")}</td>
-                        <td>${renderHubSimulationBadges(normalizeHubClientActiveSimulations(client.active_simulations))}</td>
-                        <td class="nowrap-cell"><span title="${escHtml(fmtDate(client.last_seen))}">${escHtml(relativeTime(client.last_seen))}</span></td>
-                        <td>${Number(client.error_count || 0)}</td>
-                      </tr>
-                    `).join("")}
+                    ${site.clients.map(client => {
+                      const sims = normalizeHubClientActiveSimulations(client.active_simulations);
+                      const demoScenario = hubDemoActiveMap[client.hostname]?.scenario || null;
+                      const colSpan = showDemoButtons ? 6 : 5;
+                      const simsRow = sims.length
+                        ? `<tr class="hub-client-sims-row"><td colspan="${colSpan + 1}" class="hub-client-sims-cell">${renderHubSimulationBadges(sims, "", demoScenario)}</td></tr>`
+                        : "";
+                      return `
+                        <tr class="hub-client-main-row">
+                          <td class="status-cell">${statusDot(Boolean(client.online))}</td>
+                          <td class="hostname-cell">${escHtml(client.hostname || "—")}</td>
+                          <td>${escHtml(client.platform || client.hw_type || "—")}</td>
+                          <td>${escHtml(client.connected_ssid || "—")}</td>
+                          <td class="nowrap-cell"><span title="${escHtml(fmtDate(client.last_seen))}">${escHtml(relativeTime(client.last_seen))}</span></td>
+                          <td>${Number(client.error_count || 0)}</td>
+                          ${showDemoButtons ? `<td class="hub-demo-btn-cell" data-hostname="${escHtml(client.hostname || '')}" data-spoke-id="${escHtml(client.spoke_id || '')}"></td>` : ''}
+                        </tr>${simsRow}`;
+                    }).join("")}
                   </tbody>
                 </table>
               </div>
@@ -1754,6 +1776,12 @@ function renderClientRowsForHub() {
   container.querySelectorAll(".hub-client-site-header[data-site-key]").forEach(button => {
     button.addEventListener("click", () => toggleHubSiteExpand(button.dataset.siteKey || ""));
   });
+  // Populate demo scenario buttons in empty cells
+  if (showDemoButtons) {
+    container.querySelectorAll("td.hub-demo-btn-cell[data-hostname]").forEach(cell => {
+      buildHubDemoSelect({ hostname: cell.dataset.hostname, spoke_id: cell.dataset.spokeId }, cell);
+    });
+  }
 }
 
 function buildTenantUserCounts(users = []) {
@@ -2761,6 +2789,8 @@ function syncTenantContextChrome() {
 function syncHubPermissionUI() {
   ensureHubReseedUi();
   const isSuperadmin = Boolean(currentUser?.is_superadmin);
+  const myRole = currentRoleForTenant(currentTenantId);
+  const isDemo = tenantContextActive && myRole === 'demo';
   [
     '#hub-admin-nav .tab[data-tab="hub-setup"]',
     '#tenant-context-nav .tab-back[data-tab="hub-setup"]',
@@ -2771,6 +2801,23 @@ function syncHubPermissionUI() {
   $$(".tenant-context-nav-row1").forEach(el => el.classList.toggle("hidden", !isSuperadmin));
   $("#dashboard-add-tenant-btn")?.classList.toggle("hidden", !isSuperadmin);
   syncSuperadminBackupAccess();
+
+  // Demo role: hide all tenant tabs except Simulations → Clients
+  const demoHideSelectors = [
+    '#tenant-context-nav .tab[data-tab="hub-spokes"]',
+    '#tenant-context-nav .tab[data-tab="hub-config"]',
+    '#tenant-context-nav .tab[data-tab="hub-central"]',
+    '#tenant-context-nav .tab[data-tab="hub-vm-server"]',
+    '#tenant-context-nav .tab[data-tab="hub-commands"]',
+  ];
+  demoHideSelectors.forEach(sel => {
+    $$(sel).forEach(el => el.classList.toggle("hidden", isDemo));
+  });
+  // Auto-redirect demo users to simulations → clients on tab load
+  if (isDemo && tenantContextActive && activeTab !== 'simulations' && activeTab !== 'clients') {
+    showTab('simulations', { source: 'tenant' });
+    setTimeout(() => activateHubSimTopTab('hub-simtop-clients'), 200);
+  }
 }
 
 function exitTenantContext() {
@@ -2788,7 +2835,13 @@ async function enterTenantContext(tenantId, tabId = "simulations", force = true)
   tenantContextActive = true;
   await setCurrentTenant(tenantId, false);
   syncTenantContextChrome();
-  showTab(tabId, { source: "tenant" });
+  // Demo role always goes to simulations → clients
+  const myRole = currentRoleForTenant(tenantId);
+  const targetTab = myRole === 'demo' ? 'simulations' : tabId;
+  showTab(targetTab, { source: "tenant" });
+  if (myRole === 'demo') {
+    setTimeout(() => activateHubSimTopTab('hub-simtop-clients'), 300);
+  }
   if (force) refreshCurrentView(true).catch(() => {});
 }
 
@@ -3559,8 +3612,74 @@ async function clearHubConfOverride(type) {
   renderHubConfOverridesPanel();
 }
 
+// ─── Hub Demo Scenario Functions ─────────────────────────────────────────────
 
-  const candidates = [
+const HUB_DEMO_SCENARIOS = [
+  { key: 'normal',      label: '— Normal (no failure) —' },
+  { key: 'dns_fail',    label: 'DNS Fail'   },
+  { key: 'dhcp_fail',   label: 'DHCP Fail'  },
+  { key: 'assoc_fail',  label: 'Assoc Fail' },
+  { key: 'auth_fail',   label: 'Auth Fail'  },
+  { key: 'ssidpw_fail', label: 'SSID PW Fail' },
+  { key: 'port_flap',   label: 'Port Flap'  },
+];
+
+async function loadHubDemoActive(tenantId = currentTenantId) {
+  if (hubDemoTenantId !== tenantId) {
+    hubDemoActiveMap = {};
+    hubDemoTenantId = tenantId;
+  }
+}
+
+async function triggerHubDemoScenario(tenantId, spokeId, hostname, scenario) {
+  try {
+    const r = await fetch(`/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/clients/${encodeURIComponent(hostname)}/demo-scenario`, {
+      method: scenario === 'normal' ? 'DELETE' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      ...(scenario !== 'normal' ? { body: JSON.stringify({ scenario }) } : {}),
+    });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || 'Request failed'); }
+    if (scenario === 'normal') {
+      delete hubDemoActiveMap[hostname];
+    } else {
+      hubDemoActiveMap[hostname] = { hostname, scenario, minutes_remaining: 120, spoke_id: spokeId };
+    }
+    return true;
+  } catch (e) {
+    showToast(`Demo scenario failed: ${e.message}`, 'error');
+    return false;
+  }
+}
+
+function buildHubDemoSelect(client, cell) {
+  const hostname = client.hostname;
+  const spokeId = client.spoke_id;
+  const active = hubDemoActiveMap[hostname];
+  const activeScenario = active?.scenario || 'normal';
+
+  const sel = document.createElement('select');
+  sel.className = 'demo-scenario-select' + (activeScenario !== 'normal' ? ' demo-scenario-select--active' : '');
+  sel.title = 'Select a failure scenario to simulate';
+  HUB_DEMO_SCENARIOS.forEach(({ key, label }) => {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = label;
+    if (key === activeScenario) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener('change', async () => {
+    const scenario = sel.value;
+    sel.disabled = true;
+    const ok = await triggerHubDemoScenario(currentTenantId, spokeId, hostname, scenario);
+    sel.disabled = false;
+    if (ok) {
+      sel.className = 'demo-scenario-select' + (scenario !== 'normal' ? ' demo-scenario-select--active' : '');
+    } else {
+      sel.value = activeScenario; // revert
+    }
+  });
+  cell.appendChild(sel);
+}
     {
       repoUrl: $("#hub-github-sim-repo-url"),
       repoBranch: $("#hub-github-sim-repo-branch"),

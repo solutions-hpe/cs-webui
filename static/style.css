@@ -1485,6 +1485,7 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 .sim-client-card {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   background: var(--card-bg, rgba(255,255,255,0.05));
   border: 1px solid rgba(255,255,255,0.08);
@@ -1527,6 +1528,29 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 .sim-client-indicator .ind-dot.red    { background: #e74c3c; box-shadow: 0 0 4px #e74c3caa; }
 .sim-client-indicator .ind-dot.grey   { background: #666; }
 .sim-client-indicator .ind-dot.unknown { background: transparent; border: 1.5px solid #555; }
+
+/* Demo scenario select dropdown */
+.demo-scenario-select {
+  font-size: 0.78rem;
+  padding: 3px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--border, rgba(0,0,0,0.15));
+  background: var(--card-bg, #fff);
+  color: var(--text);
+  cursor: pointer;
+  min-width: 140px;
+}
+.demo-scenario-select--active {
+  border-color: #e74c3c;
+  color: #e74c3c;
+  font-weight: 600;
+}
+.demo-scenario-select:disabled { opacity: 0.5; cursor: default; }
+/* Active simulation badge with demo bolt */
+.badge-demo-active {
+  outline: 1.5px solid currentColor;
+  outline-offset: 1px;
+}
 
 /* Clients table — same setup-card/data-table style but tighter padding for 10 columns */
 #clients-table { table-layout: auto; }
@@ -1597,6 +1621,23 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 .hub-client-site-table td {
   padding-top: 8px;
   padding-bottom: 8px;
+}
+/* Sims sub-row — no top border, tight padding, flows below the main client row */
+.hub-client-sims-row td {
+  border-top: none !important;
+  padding-top: 0;
+  padding-bottom: 10px;
+}
+.hub-client-main-row td {
+  padding-bottom: 4px;
+}
+.hub-client-sims-cell {
+  padding-left: 36px; /* align with Hostname column */
+}
+/* Demo bolt on badge */
+.badge-demo-active {
+  outline: 1.5px solid currentColor;
+  outline-offset: 1px;
 }
 .hub-table-section td {
   background: var(--bg-secondary) !important;

@@ -67,6 +67,9 @@ let clientCountData = {};   // wsite → { site_name, current, hourly_avg, drop_
 let _hwRowsCache    = [];   // cached hw check rows for renderHwPanel
 let _ccRowsCache    = [];   // cached cc check rows for renderCcPanel
 let availableChecks = { alerts: [], insights: [] };
+// Demo scenario state: hostname → {scenario, minutes_remaining, expires_at}
+let _demoActiveMap = {};
+let _demoRefreshTimer = null;
 let currentSettings = {
   repo_url: '',
   repo_branch: '',
@@ -1059,10 +1062,17 @@ function updateSpokeUserUi() {
 
 function applySpokeViewerMode() {
   const isViewer = WEBUI_MODE === 'spoke' && spokeCurrentUser?.role === 'viewer';
+
   spokeSetupTabButtons.forEach((button) => button.classList.toggle('hidden', isViewer));
   if (isViewer && activeSpokeTab === 'setup') {
     simTabButtons[0]?.click();
   }
+
+  // Restore tabs (no demo role on spoke)
+  centralTabButtons.forEach((b) => b.classList.remove('hidden'));
+  configTabButtons.forEach((b) => b.classList.remove('hidden'));
+  Array.from(spokeNavRoot?.querySelectorAll('.tab[data-tab="server"]') || []).forEach((b) => b.classList.remove('hidden'));
+
   topbarUpdateAllBtn?.classList.toggle('hidden', isViewer);
   document.getElementById('reclone-now-btn')?.classList.toggle('hidden', isViewer);
   document.getElementById('reclone-clear-btn')?.classList.toggle('hidden', isViewer);
@@ -6197,8 +6207,88 @@ function openSimGroup(key) {
   }
 }
 
+// ─── Demo Scenario UI ────────────────────────────────────────────────────────
+
+const DEMO_SCENARIO_LABELS = {
+  normal:      { label: 'Normal',    icon: '✓', cls: 'demo-btn-normal'   },
+  dns_fail:    { label: 'DNS Fail',  icon: '✗', cls: 'demo-btn-fail'    },
+  dhcp_fail:   { label: 'DHCP Fail', icon: '✗', cls: 'demo-btn-fail'    },
+  assoc_fail:  { label: 'Assoc Fail',icon: '✗', cls: 'demo-btn-fail'    },
+  auth_fail:   { label: 'Auth Fail', icon: '✗', cls: 'demo-btn-fail'    },
+  ssidpw_fail: { label: 'SSID PW',   icon: '✗', cls: 'demo-btn-fail'    },
+  port_flap:   { label: 'Port Flap', icon: '⚡', cls: 'demo-btn-fail'    },
+};
+
+const DEMO_SCENARIOS_LIST = [
+  { key: 'normal',      label: '— Normal (no failure) —' },
+  { key: 'dns_fail',    label: 'DNS Fail'    },
+  { key: 'dhcp_fail',   label: 'DHCP Fail'   },
+  { key: 'assoc_fail',  label: 'Assoc Fail'  },
+  { key: 'auth_fail',   label: 'Auth Fail'   },
+  { key: 'ssidpw_fail', label: 'SSID PW Fail' },
+  { key: 'port_flap',   label: 'Port Flap'   },
+];
+
+async function _loadDemoActive() {
+  try {
+    const r = await fetch('/api/demo/active');
+    if (!r.ok) return;
+    const d = await r.json();
+    _demoActiveMap = {};
+    (d.active || []).forEach((e) => { _demoActiveMap[e.hostname] = e; });
+  } catch (_) {}
+}
+
+async function _triggerDemoScenario(hostname, scenario) {
+  try {
+    const r = await fetch(`/api/demo/client/${encodeURIComponent(hostname)}/scenario`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scenario }),
+    });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || 'Request failed'); }
+    const d = await r.json();
+    if (scenario === 'normal') {
+      delete _demoActiveMap[hostname];
+    } else {
+      _demoActiveMap[hostname] = { hostname, scenario, minutes_remaining: 120 };
+    }
+    return d;
+  } catch (e) {
+    showNotification(`Demo scenario failed: ${e.message}`, 'error');
+    return null;
+  }
+}
+
+function _buildDemoScenarioSelect(hostname) {
+  const active = _demoActiveMap[hostname];
+  const activeScenario = active?.scenario || 'normal';
+
+  const sel = document.createElement('select');
+  sel.className = 'demo-scenario-select' + (activeScenario !== 'normal' ? ' demo-scenario-select--active' : '');
+  sel.title = 'Select a failure scenario to simulate on this client';
+  DEMO_SCENARIOS_LIST.forEach(({ key, label }) => {
+    const opt = document.createElement('option');
+    opt.value = key;
+    opt.textContent = label;
+    if (key === activeScenario) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener('change', async () => {
+    const scenario = sel.value;
+    sel.disabled = true;
+    const result = await _triggerDemoScenario(hostname, scenario);
+    sel.disabled = false;
+    if (result) {
+      sel.className = 'demo-scenario-select' + (scenario !== 'normal' ? ' demo-scenario-select--active' : '');
+    } else {
+      sel.value = activeScenario; // revert on failure
+    }
+  });
+  return sel;
+}
+
 async function openSimClients(simId, wsite, testKey, alertPf, checkLabel) {
-  if (!simClientsPanel || !simDetail) return;
   simDetail.classList.add('hidden');
   simClientsPanel.classList.remove('hidden');
 
@@ -6211,6 +6301,9 @@ async function openSimClients(simId, wsite, testKey, alertPf, checkLabel) {
   const alertFiring    = alertMonitored && alertPf.firing === true;
 
   try {
+    const isAdmin = spokeCurrentUser?.role === 'admin';
+    if (isAdmin) await _loadDemoActive();
+
     const data = await requestJson(`/api/simulations/${encodeURIComponent(simId)}/clients`);
     const clientList = data.clients || [];
     if (!simClientsList) return;
@@ -6288,6 +6381,12 @@ async function openSimClients(simId, wsite, testKey, alertPf, checkLabel) {
       card.appendChild(hostname);
       card.appendChild(lastSeen);
       card.appendChild(indicators);
+
+      // Demo scenario select (admin only on spoke)
+      if (isAdmin) {
+        card.appendChild(_buildDemoScenarioSelect(c.hostname));
+      }
+
       simClientsList.appendChild(card);
     }
   } catch (err) {

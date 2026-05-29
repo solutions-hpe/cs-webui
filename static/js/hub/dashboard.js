@@ -3680,6 +3680,9 @@ function buildHubDemoSelect(client, cell) {
   });
   cell.appendChild(sel);
 }
+
+function getTenantGithubSettingsElements() {
+  const candidates = [
     {
       repoUrl: $("#hub-github-sim-repo-url"),
       repoBranch: $("#hub-github-sim-repo-branch"),
@@ -11201,6 +11204,7 @@ function bindEvents() {
       clearHubConfOverride("user");
       return;
     }
+  });
 
   document.addEventListener("change", event => {
     const spokeSelect = event.target.closest("#sa-spoke-select");

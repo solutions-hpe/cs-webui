@@ -6811,6 +6811,7 @@ async function clearSpokeConfOverride(type) {
 }
 
 
+document.querySelectorAll('.config-subtab').forEach((btn) => {
   btn.addEventListener('click', () => activateConfigSubtab(btn.dataset.subtab));
 });
 

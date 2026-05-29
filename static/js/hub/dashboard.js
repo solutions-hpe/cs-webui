@@ -218,7 +218,7 @@ function showToast(message, level = "ok") {
 function isOnline(lastSeenIso) {
   if (!lastSeenIso) return false;
   const ts = new Date(lastSeenIso).getTime();
-  return !Number.isNaN(ts) && Date.now() - ts < 300000;
+  return !Number.isNaN(ts) && Date.now() - ts < 90000;
 }
 
 function statusDot(online) {
@@ -5730,6 +5730,12 @@ function renderHubVmServerDetailsPanel(px, host) {
   const lastSeen = px.last_seen
     ? new Date(typeof px.last_seen === "number" ? px.last_seen * 1000 : px.last_seen).toLocaleString()
     : "—";
+  const rttMs = host.telemetry?.hub_rtt_ms;
+  const procMs = host.telemetry?.hub_processing_ms;
+  const rttColor = rttMs == null ? "" : rttMs < 500 ? "var(--accent-green)" : rttMs < 2000 ? "var(--accent-orange,#f39c12)" : "var(--danger)";
+  const procColor = procMs == null ? "" : procMs < 500 ? "var(--accent-green)" : procMs < 2000 ? "var(--accent-orange,#f39c12)" : "var(--danger)";
+  const rttCell = rttMs != null ? `<span style="color:${rttColor};font-weight:600;">${rttMs} ms</span>` : `<span class="muted">—</span>`;
+  const procCell = procMs != null ? `<span style="color:${procColor};font-weight:600;">${procMs} ms</span>` : `<span class="muted">—</span>`;
 
   return `
     <div class="setup-card setup-section-gap">
@@ -5751,6 +5757,8 @@ function renderHubVmServerDetailsPanel(px, host) {
           ${storageRows}
           <tr><th>VMs</th><td>${escHtml(String(px.vm_count ?? "—"))} total, ${escHtml(String(px.running_count ?? "—"))} running</td></tr>
           <tr><th>Last Agent Check-in</th><td>${escHtml(lastSeen)}</td></tr>
+          <tr><th>Hub Round-Trip (RTT)</th><td>${rttCell}</td></tr>
+          <tr><th>Hub Processing Time</th><td>${procCell}</td></tr>
         </tbody>
       </table>
     </div>

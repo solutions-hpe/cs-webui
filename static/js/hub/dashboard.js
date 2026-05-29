@@ -11310,7 +11310,7 @@ function bindEvents() {
       const subtab = saButton.dataset.subtab;
       superadminActiveSubtab = subtab;
       $$(".sa-subtab").forEach(button => button.classList.toggle("active", button.dataset.subtab === subtab));
-      ["sa-pending", "sa-tenants", "sa-users", "sa-security", "sa-gkill", "sa-global-usb"].forEach(panelId => {
+      ["sa-pending", "sa-tenants", "sa-users", "sa-security", "sa-gkill", "sa-global-usb", "sa-qa"].forEach(panelId => {
         document.getElementById(panelId)?.classList.toggle("hidden", panelId !== subtab);
       });
       const wasPaused = refreshPaused;
@@ -11319,6 +11319,7 @@ function bindEvents() {
       if (subtab === "sa-security") loadHubAuthConfig().catch(() => {});
       if (subtab === "sa-gkill") loadGkillState(false).catch(() => {});
       if (subtab === "sa-global-usb") loadGlobalUsbVidpids().catch(() => {});
+      if (subtab === "sa-qa") initQaPanel().catch(() => {});
       if (wasPaused && !refreshPaused && subtab !== "sa-gkill") {
         refreshCurrentView(true).catch(() => {});
       }
@@ -11550,6 +11551,333 @@ document.getElementById("acme-dns-provider")?.addEventListener("change", toggleA
 
 
 
+// ── Superadmin QA Panel ─────────────────────────────────────────────────────
+
+let _qaKeysWired = false;
+
+/** Populate a <select> with the global tenants list */
+function _qaPopulateTenantSelect(selId) {
+  const sel = document.getElementById(selId);
+  if (!sel) return;
+  sel.innerHTML = tenants.length
+    ? tenants.map(t => `<option value="${t.id}">${t.name || t.id}</option>`).join("")
+    : '<option value="">No tenants</option>';
+}
+
+/** Called once when the sa-qa subtab is first opened (and on each revisit). */
+async function initQaPanel() {
+  _qaPopulateTenantSelect("qa-key-tenant-sel");
+  _qaPopulateTenantSelect("qa-run-tenant-sel");
+  await loadQaKeys();
+  if (!_qaKeysWired) {
+    _wireQaPanel();
+    _qaKeysWired = true;
+  }
+}
+
+/** Fetch + render the QA API keys table. */
+async function loadQaKeys() {
+  const tbody = document.getElementById("qa-keys-tbody");
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Loading…</td></tr>';
+  const res = await apiFetch("/api/superadmin/qa-api-keys");
+  if (!res?.ok) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state error-state">Failed to load QA API keys.</td></tr>';
+    return;
+  }
+  const keys = await readJson(res);
+  if (!Array.isArray(keys) || keys.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No QA API keys yet.</td></tr>';
+    return;
+  }
+  const fmt = ts => ts ? new Date(ts).toLocaleString() : "—";
+  tbody.innerHTML = keys.map(k => `
+    <tr data-key-id="${k.id}">
+      <td>${tenants.find(t => t.id === k.tenant_id)?.name || k.tenant_id}</td>
+      <td>${k.description || "—"}</td>
+      <td>${k.created_by || "—"}</td>
+      <td>${fmt(k.created_at)}</td>
+      <td>${fmt(k.last_used_at)}</td>
+      <td><button class="btn btn-danger btn-small qa-revoke-btn" data-key-id="${k.id}" type="button">Revoke</button></td>
+    </tr>`).join("");
+}
+
+/** Wire all QA panel button events (called once). */
+function _wireQaPanel() {
+  // Show / hide key generation form
+  document.getElementById("qa-key-new-btn")?.addEventListener("click", () => {
+    const form = document.getElementById("qa-key-form");
+    form?.classList.remove("hidden");
+    document.getElementById("qa-key-msg").textContent = "";
+  });
+
+  document.getElementById("qa-key-cancel-btn")?.addEventListener("click", () => {
+    document.getElementById("qa-key-form")?.classList.add("hidden");
+  });
+
+  // Generate key
+  document.getElementById("qa-key-save-btn")?.addEventListener("click", async () => {
+    const tenantId = document.getElementById("qa-key-tenant-sel")?.value;
+    const description = document.getElementById("qa-key-desc")?.value?.trim();
+    const msg = document.getElementById("qa-key-msg");
+    if (!tenantId) { msg.textContent = "Select a tenant."; return; }
+    msg.textContent = "Generating…";
+    const res = await apiFetch("/api/superadmin/qa-api-keys", {
+      method: "POST",
+      body: { tenant_id: tenantId, description: description || undefined },
+    });
+    if (!res?.ok) {
+      msg.textContent = "Error creating key.";
+      return;
+    }
+    const data = await readJson(res);
+    msg.textContent = "";
+    document.getElementById("qa-key-form")?.classList.add("hidden");
+    // Show one-time key banner
+    const banner = document.getElementById("qa-key-banner");
+    if (banner && data?.raw_key) {
+      banner.innerHTML = `
+        <strong>🔑 Copy this key now — it will NOT be shown again.</strong><br>
+        <code style="user-select:all;word-break:break-all;">${data.raw_key}</code>`;
+      banner.classList.remove("hidden");
+    }
+    await loadQaKeys();
+  });
+
+  // Revoke key (delegated)
+  document.getElementById("qa-keys-tbody")?.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".qa-revoke-btn");
+    if (!btn) return;
+    const keyId = btn.dataset.keyId;
+    if (!keyId || !confirm("Revoke this QA API key? This cannot be undone.")) return;
+    const res = await apiFetch(`/api/superadmin/qa-api-keys/${keyId}`, { method: "DELETE" });
+    if (res?.ok) {
+      document.getElementById("qa-key-banner")?.classList.add("hidden");
+      await loadQaKeys();
+    }
+  });
+
+  // Run QA
+  document.getElementById("qa-run-btn")?.addEventListener("click", async () => {
+    const tenantId = document.getElementById("qa-run-tenant-sel")?.value;
+    const module = document.getElementById("qa-run-module-sel")?.value || "all";
+    if (!tenantId) return;
+    await _runQaChecks(tenantId, module);
+  });
+
+  // Clear results
+  document.getElementById("qa-clear-btn")?.addEventListener("click", () => {
+    document.getElementById("qa-results-empty")?.classList.remove("hidden");
+    document.getElementById("qa-results-table")?.classList.add("hidden");
+    document.getElementById("qa-summary-bar")?.classList.add("hidden");
+    document.getElementById("qa-clear-btn")?.classList.add("hidden");
+    document.getElementById("qa-results-tbody").innerHTML = "";
+  });
+}
+
+/** Status badge HTML */
+function _qaBadge(status) {
+  const colors = { PASS: "#22c55e", FAIL: "#ef4444", WARN: "#f59e0b", SKIP: "#6b7280", RUN: "#3b82f6" };
+  const col = colors[status] || "#6b7280";
+  return `<span style="display:inline-block;min-width:44px;padding:2px 6px;border-radius:4px;background:${col};color:#fff;font-size:0.75rem;font-weight:700;text-align:center;">${status}</span>`;
+}
+
+/** Append a result row to the QA results table. */
+function _qaAppendRow(module, name, status, detail = "") {
+  const tbody = document.getElementById("qa-results-tbody");
+  if (!tbody) return;
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td>${_qaBadge(status)}</td><td style="font-size:0.8rem;">${module}</td><td>${name}</td><td style="font-size:0.8rem;color:var(--text-muted);">${detail}</td>`;
+  tbody.appendChild(tr);
+}
+
+/** Update summary counts. */
+function _qaUpdateSummary(startMs) {
+  const tbody = document.getElementById("qa-results-tbody");
+  if (!tbody) return;
+  const rows = [...tbody.querySelectorAll("tr")];
+  const counts = { PASS: 0, FAIL: 0, WARN: 0, SKIP: 0 };
+  rows.forEach(r => {
+    const badge = r.querySelector("span");
+    if (badge) {
+      const s = badge.textContent.trim();
+      if (s in counts) counts[s]++;
+    }
+  });
+  const fmt = (k, label) => `${counts[k]} ${label}`;
+  document.getElementById("qa-summary-pass").textContent = fmt("PASS", "Passed");
+  document.getElementById("qa-summary-fail").textContent = fmt("FAIL", "Failed");
+  document.getElementById("qa-summary-warn").textContent = fmt("WARN", "Warnings");
+  document.getElementById("qa-summary-skip").textContent = fmt("SKIP", "Skipped");
+  const elapsed = ((Date.now() - startMs) / 1000).toFixed(1);
+  document.getElementById("qa-summary-time").textContent = `Completed in ${elapsed}s`;
+  document.getElementById("qa-summary-bar")?.classList.remove("hidden");
+}
+
+/** Helper: run a single API check. Returns { status, detail }. */
+async function _qaCheck(method, url, label, opts = {}) {
+  const { expect200 = true, jsonTest } = opts;
+  try {
+    const res = await apiFetch(url, { method: method || "GET" });
+    if (!res) return { status: "FAIL", detail: "No response / network error" };
+    if (expect200 && !res.ok) return { status: "FAIL", detail: `HTTP ${res.status}` };
+    if (jsonTest) {
+      const data = await readJson(res);
+      const result = jsonTest(data);
+      return result || { status: "PASS", detail: "" };
+    }
+    return { status: "PASS", detail: `HTTP ${res.status}` };
+  } catch (err) {
+    return { status: "FAIL", detail: String(err) };
+  }
+}
+
+/** Map of module → list of checks. Each check: { name, method, url(tenantId), jsonTest? } */
+function _qaModuleChecks(tenantId) {
+  const T = tenantId;
+  return {
+    auth: [
+      { name: "Auth providers list",          url: "/api/auth/providers" },
+      { name: "Current user endpoint",         url: "/api/auth/me" },
+      { name: "Hub init returns mode=hub",     url: "/api/init",
+        jsonTest: d => d?.mode === "hub" ? null : { status: "FAIL", detail: `mode=${d?.mode}` } },
+    ],
+    hub: [
+      { name: "Hub health OK",                 url: "/api/health",
+        jsonTest: d => d?.status === "ok" ? null : { status: "FAIL", detail: JSON.stringify(d) } },
+      { name: "Hub config readable",           url: `/api/tenant/${T}/hub-config` },
+      { name: "Onboarding PSK present",        url: `/api/tenant/${T}/onboarding-psk` },
+      { name: "ACME status",                   url: "/api/acme/status" },
+      { name: "Aggregate dashboard responds",  url: "/api/aggregate/dashboard" },
+    ],
+    spokes: [
+      { name: "Approved spokes list",          url: `/api/${T}/spokes` },
+      { name: "Pending spokes list",           url: `/api/tenant/${T}/pending-spokes` },
+      { name: "Aggregate dashboard has spokes", url: "/api/aggregate/dashboard",
+        jsonTest: d => {
+          const n = d?.spokes_total ?? d?.spoke_count ?? 0;
+          return n > 0 ? null : { status: "WARN", detail: `spokes_total=${n} (no spokes?)` };
+        }},
+    ],
+    proxmox: [
+      { name: "Aggregate proxmox data",        url: "/api/aggregate/proxmox" },
+    ],
+    usb: [
+      { name: "Tenant USB VID/PIDs",           url: `/api/${T}/usb-vidpids` },
+      { name: "USB provisioning status",        url: `/api/${T}/aggregate/usb-provisioning-status` },
+      { name: "Global USB VID/PIDs",           url: "/api/superadmin/global-usb-vidpids" },
+      { name: "Discovered USB VID/PIDs",       url: "/api/superadmin/discovered-usb-vidpids" },
+    ],
+    provisioning: [
+      { name: "USB provisioning status",        url: `/api/${T}/aggregate/usb-provisioning-status` },
+      { name: "Provisioning check (NEW)",       url: `/api/${T}/qa/provisioning-check`,
+        jsonTest: d => {
+          if (!d) return { status: "FAIL", detail: "No data returned" };
+          const issues = d.spokes?.flatMap(s => s.issues || []) || [];
+          if (!d.overall_pass) return { status: "FAIL", detail: `delta=${d.delta}; ${issues.join(", ")}` };
+          return { status: "PASS", detail: `${d.actual_clients}/${d.expected_clients} clients reporting` };
+        }},
+      { name: "Fleet reclone status",          url: `/api/${T}/aggregate/fleet-reclone-status` },
+    ],
+    clients: [
+      { name: "Aggregate clients list",        url: "/api/aggregate/clients" },
+      { name: "Aggregate simulations",         url: "/api/aggregate/simulations" },
+      { name: "Aggregate dashboard client count", url: "/api/aggregate/dashboard",
+        jsonTest: d => {
+          const n = d?.client_count ?? d?.total_clients ?? 0;
+          return n > 0 ? null : { status: "WARN", detail: `client_count=${n}` };
+        }},
+    ],
+    commands: [
+      { name: "Commands list",                 url: `/api/${T}/commands` },
+      { name: "API server aggregate",          url: "/api/aggregate/api-server" },
+    ],
+    settings: [
+      { name: "Tenant settings",               url: `/api/${T}/settings` },
+      { name: "Processing mode",               url: `/api/${T}/settings/processing-mode` },
+      { name: "Processing summary",            url: `/api/${T}/processing-summary` },
+      { name: "Simulation config",             url: `/api/${T}/config/simulation-conf` },
+    ],
+    central: [
+      { name: "Central available",             url: "/central/available" },
+      { name: "Central status",                url: `/api/${T}/aggregate/central-status`,
+        jsonTest: d => d == null ? { status: "SKIP", detail: "No data (Central may not be configured)" } : null },
+    ],
+    backup: [
+      { name: "Backup config",                 url: "/api/backup/config" },
+      { name: "Backup templates",              url: "/api/backup/templates" },
+      { name: "Installer SAS token",           url: "/api/backup/installer/sas-token" },
+    ],
+    t3: [
+      { name: "OUI pool",                      url: "/api/oui-pool" },
+    ],
+    health: [
+      { name: "Hub system health",             url: "/api/system/health" },
+      { name: "QA system health (NEW)",        url: "/api/aggregate/qa/system-health",
+        jsonTest: d => {
+          if (!d) return { status: "FAIL", detail: "No data returned" };
+          if (!d.all_ok) return { status: "FAIL", detail: (d.issues || []).join(", ") || "Degraded" };
+          return { status: "PASS", detail: `${d.spokes_online}/${d.spokes_total} spokes, ${d.total_clients} clients` };
+        }},
+      { name: "Kill switch state",             url: "/api/superadmin/gkill-state" },
+    ],
+    background: [
+      { name: "Aggregate dashboard (baseline)", url: "/api/aggregate/dashboard",
+        jsonTest: d => d ? null : { status: "FAIL", detail: "No dashboard data" } },
+      { name: "Repo status (spoke proxy)",      url: `/api/${T}/spokes`,
+        jsonTest: d => {
+          if (!Array.isArray(d) || d.length === 0) return { status: "SKIP", detail: "No spokes to check" };
+          const stale = d.filter(s => {
+            if (!s.last_seen) return false;
+            const age = (Date.now() - new Date(s.last_seen).getTime()) / 1000;
+            return age > 90;
+          });
+          return stale.length > 0
+            ? { status: "WARN", detail: `${stale.length} spoke(s) last_seen > 90s ago` }
+            : { status: "PASS", detail: `${d.length} spoke(s) heartbeat OK` };
+        }},
+    ],
+  };
+}
+
+/** Run QA checks for the given module (or all) against the tenant. */
+async function _runQaChecks(tenantId, module) {
+  const startMs = Date.now();
+  const tbody = document.getElementById("qa-results-tbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  document.getElementById("qa-results-empty")?.classList.add("hidden");
+  document.getElementById("qa-results-table")?.classList.remove("hidden");
+  document.getElementById("qa-summary-bar")?.classList.add("hidden");
+  document.getElementById("qa-clear-btn")?.classList.remove("hidden");
+
+  const allModules = _qaModuleChecks(tenantId);
+  const modulesToRun = module === "all" ? Object.keys(allModules) : [module];
+
+  for (const mod of modulesToRun) {
+    const checks = allModules[mod] || [];
+    for (const check of checks) {
+      // Insert a "running" placeholder
+      const tempRow = document.createElement("tr");
+      const modLabel = mod;
+      tempRow.innerHTML = `<td>${_qaBadge("RUN")}</td><td style="font-size:0.8rem;">${modLabel}</td><td>${check.name}</td><td></td>`;
+      tbody.appendChild(tempRow);
+
+      const { status, detail } = await _qaCheck(check.method || "GET", check.url, check.name, {
+        jsonTest: check.jsonTest,
+      });
+
+      // Replace placeholder with real result
+      tempRow.innerHTML = `<td>${_qaBadge(status)}</td><td style="font-size:0.8rem;">${modLabel}</td><td>${check.name}</td><td style="font-size:0.8rem;color:var(--text-muted);">${detail}</td>`;
+
+      // Micro-delay so the browser can paint between rows
+      await new Promise(r => setTimeout(r, 0));
+    }
+  }
+
+  _qaUpdateSummary(startMs);
+}
+
 export {
   showTab as switchTab,
   showTab,
@@ -11565,4 +11893,6 @@ export {
   loadSetup,
   loadTenantSetup,
   loadConfig,
+  loadQaKeys,
+  initQaPanel,
 };

@@ -1188,6 +1188,7 @@
           <button class="setup-subtab sa-subtab" data-subtab="sa-security" type="button">Security</button>
           <button class="setup-subtab sa-subtab" data-subtab="sa-gkill" type="button">GKill</button>
           <button class="setup-subtab sa-subtab" data-subtab="sa-global-usb" type="button">Global USB</button>
+          <button class="setup-subtab sa-subtab" data-subtab="sa-qa" type="button">QA</button>
         </nav>
 
         <div id="sa-pending" class="setup-subpanel" style="margin-top:16px;">
@@ -1409,6 +1410,95 @@
             </div>
             <button id="sa-gkill-refresh-btn" class="btn btn-primary btn-small" style="margin-top:12px;" type="button">Refresh</button>
           </div>
+        </div>
+
+        <!-- ── QA Panel ── -->
+        <div id="sa-qa" class="setup-subpanel hidden" style="margin-top:16px;">
+
+          <!-- QA API Key Management -->
+          <div class="setup-card" style="margin-bottom:16px;">
+            <div class="setup-card-header sa-header-row">
+              <div>
+                <h2>QA API Keys</h2>
+                <p>Tenant-scoped keys used by the QA runner. Only superadmins can create them. Each key is shown <strong>once</strong> at creation.</p>
+              </div>
+              <button id="qa-key-new-btn" class="btn btn-primary btn-small" type="button">+ Generate Key</button>
+            </div>
+            <div id="qa-key-banner" class="key-once-banner hidden"></div>
+            <table class="data-table" id="qa-keys-table">
+              <thead><tr><th>Tenant</th><th>Description</th><th>Created By</th><th>Created</th><th>Last Used</th><th></th></tr></thead>
+              <tbody id="qa-keys-tbody"><tr><td colspan="6" class="empty-state">Loading…</td></tr></tbody>
+            </table>
+            <div id="qa-key-form" class="setup-form hidden" style="max-width:460px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+              <div class="setup-card-header"><h3>Generate QA API Key</h3></div>
+              <div class="form-group">
+                <label class="form-label" for="qa-key-tenant-sel">Tenant</label>
+                <select id="qa-key-tenant-sel" class="form-input"></select>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="qa-key-desc">Description <span class="form-hint">(optional)</span></label>
+                <input id="qa-key-desc" type="text" class="form-input" placeholder="e.g. Copilot CI key">
+              </div>
+              <div class="form-actions">
+                <button id="qa-key-save-btn" class="btn btn-primary" type="button">Generate</button>
+                <button id="qa-key-cancel-btn" class="btn btn-secondary" type="button">Cancel</button>
+                <span id="qa-key-msg" class="form-msg"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- QA Runner -->
+          <div class="setup-card">
+            <div class="setup-card-header sa-header-row">
+              <div>
+                <h2>QA Runner</h2>
+                <p>Run QA checks against a tenant directly from the hub. Select a module for a targeted check, or run the full suite.</p>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <select id="qa-run-tenant-sel" class="form-input" style="min-width:180px;"></select>
+                <select id="qa-run-module-sel" class="form-input" style="min-width:200px;">
+                  <option value="all">── Full Suite ──</option>
+                  <option value="auth">Auth &amp; Authorization</option>
+                  <option value="hub">Hub &amp; Tenant Health</option>
+                  <option value="spokes">Spoke Registration</option>
+                  <option value="proxmox">Proxmox Agent</option>
+                  <option value="usb">USB / Dongles</option>
+                  <option value="provisioning">Auto-Provisioning ⭐</option>
+                  <option value="clients">Client Status &amp; Simulations</option>
+                  <option value="commands">Commands &amp; Control</option>
+                  <option value="settings">Settings &amp; Config</option>
+                  <option value="central">Aruba Central</option>
+                  <option value="backup">Backup &amp; Restore</option>
+                  <option value="t3">T3 / MAC Profiles</option>
+                  <option value="health">System Health</option>
+                  <option value="background">Background Tasks</option>
+                </select>
+                <button id="qa-run-btn" class="btn btn-primary btn-small" type="button">▶ Run QA</button>
+                <button id="qa-clear-btn" class="btn btn-secondary btn-small hidden" type="button">Clear</button>
+              </div>
+            </div>
+
+            <!-- Summary bar (shown after run) -->
+            <div id="qa-summary-bar" class="hidden" style="display:flex;gap:16px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);margin-bottom:12px;flex-wrap:wrap;">
+              <span id="qa-summary-pass" class="badge-count" style="background:var(--success,#22c55e);color:#fff;"></span>
+              <span id="qa-summary-fail" class="badge-count" style="background:var(--danger,#ef4444);color:#fff;"></span>
+              <span id="qa-summary-warn" class="badge-count" style="background:var(--warning,#f59e0b);color:#fff;"></span>
+              <span id="qa-summary-skip" class="badge-count" style="background:var(--muted,#6b7280);color:#fff;"></span>
+              <span id="qa-summary-time" style="font-size:0.8rem;color:var(--text-muted);margin-left:auto;"></span>
+            </div>
+
+            <!-- Results table -->
+            <div id="qa-results-area" style="min-height:60px;">
+              <div id="qa-results-empty" class="empty-state" style="padding:32px 0;text-align:center;color:var(--text-muted);">
+                Select a module and click <strong>Run QA</strong> to start.
+              </div>
+              <table class="data-table hidden" id="qa-results-table">
+                <thead><tr><th style="width:60px;">Status</th><th style="width:140px;">Module</th><th>Check</th><th>Detail</th></tr></thead>
+                <tbody id="qa-results-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
         </div>
       </main>
 

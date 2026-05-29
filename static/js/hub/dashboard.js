@@ -5730,8 +5730,8 @@ function renderHubVmServerDetailsPanel(px, host) {
   const lastSeen = px.last_seen
     ? new Date(typeof px.last_seen === "number" ? px.last_seen * 1000 : px.last_seen).toLocaleString()
     : "—";
-  const rttMs = host.telemetry?.hub_rtt_ms;
-  const procMs = host.telemetry?.hub_processing_ms;
+  const rttMs = host.hub_rtt_ms ?? host.telemetry?.hub_rtt_ms;
+  const procMs = host.hub_processing_ms ?? host.telemetry?.hub_processing_ms;
   const rttColor = rttMs == null ? "" : rttMs < 500 ? "var(--accent-green)" : rttMs < 2000 ? "var(--accent-orange,#f39c12)" : "var(--danger)";
   const procColor = procMs == null ? "" : procMs < 500 ? "var(--accent-green)" : procMs < 2000 ? "var(--accent-orange,#f39c12)" : "var(--danger)";
   const rttCell = rttMs != null ? `<span style="color:${rttColor};font-weight:600;">${rttMs} ms</span>` : `<span class="muted">—</span>`;

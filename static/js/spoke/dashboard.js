@@ -345,6 +345,7 @@ function activateConfigSubtab(subtabId = 'config-general') {
     panel.classList.toggle('active', isActive);
     panel.classList.toggle('hidden', !isActive);
   });
+  if (subtabId === 'config-hub-overrides-panel') loadSpokeConfOverrides().catch(() => {});
 }
 
 function activateServerSubtab(subtabId = 'server-vms') {
@@ -6561,7 +6562,156 @@ configTabButtons.forEach((button) => {
 
 // configSimulationSaveBtn removed — each section now has its own per-section Save button
 
-document.querySelectorAll('.config-subtab').forEach((btn) => {
+// ─── Hub-managed conf overrides (spoke side) ───────────────────────────────
+
+let _spokeConfOverrideState = { simContent: null, userContent: null, loading: false };
+
+function _escHtml(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function _setOverrideMsg(id, text, ok) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = ok ? 'var(--hpe-green, #01A982)' : 'var(--danger, #c00)';
+  el.style.display = text ? '' : 'none';
+}
+
+async function loadSpokeConfOverrides(force = false) {
+  const container = document.getElementById('spoke-conf-overrides-content');
+  if (!container) return;
+  if (!force && _spokeConfOverrideState.simContent !== null) {
+    renderSpokeConfOverrides();
+    return;
+  }
+  _spokeConfOverrideState.loading = true;
+  container.innerHTML = '<div class="empty-state">Loading overrides…</div>';
+  const [simRes, userRes] = await Promise.all([
+    fetch('/api/config/hub-sim-override'),
+    fetch('/api/config/hub-user-override'),
+  ]);
+  _spokeConfOverrideState = {
+    simContent: simRes.ok ? await simRes.text() : '',
+    userContent: userRes.ok ? await userRes.text() : '',
+    loading: false,
+  };
+  renderSpokeConfOverrides();
+}
+
+function renderSpokeConfOverrides() {
+  const container = document.getElementById('spoke-conf-overrides-content');
+  if (!container) return;
+  const hubManaged = currentSettings.hub_managed;
+  const { simContent, userContent } = _spokeConfOverrideState;
+  const simActive = simContent !== null && simContent !== '';
+  const userActive = userContent !== null && userContent !== '';
+  const readonlyNote = hubManaged
+    ? '<p class="muted" style="font-size:0.85rem;">⚠ This spoke is hub-managed. Overrides are set by the hub and distributed automatically. Edits here apply in standalone mode only if the hub is unreachable.</p>'
+    : '';
+
+  container.innerHTML = `
+    <div class="setup-section-gap">
+      ${readonlyNote}
+      <section class="setup-card">
+        <div class="setup-card-header">
+          <h2>simulation.conf Override
+            <span class="site-status-pill ${simActive ? 'site-ok' : 'site-unknown'}" style="margin-left:8px;font-size:0.75rem;">${simActive ? 'ACTIVE' : 'NOT SET'}</span>
+          </h2>
+          <p>Override values from <code>simulation.conf</code> without pushing to GitHub. Uses the same INI format.
+             When connected to a hub, the hub manages this file; edits here are for standalone use only.</p>
+        </div>
+        <div class="setup-form">
+          <div class="form-group">
+            <textarea id="spoke-sim-override-textarea" class="form-input code-textarea" rows="12" spellcheck="false"
+              placeholder="[simulation]&#10;simulation_count = 10&#10;&#10;[server]&#10;some_key = value">${_escHtml(simContent || '')}</textarea>
+          </div>
+          <div class="form-actions">
+            <button id="spoke-sim-override-save-btn" class="btn btn-primary" type="button">Save Override</button>
+            <button id="spoke-sim-override-clear-btn" class="btn btn-secondary" type="button">Clear Override</button>
+            <span id="spoke-sim-override-msg" class="form-msg" style="display:none;margin-left:8px;"></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="setup-card">
+        <div class="setup-card-header">
+          <h2>user-overrides.conf Override
+            <span class="site-status-pill ${userActive ? 'site-ok' : 'site-unknown'}" style="margin-left:8px;font-size:0.75rem;">${userActive ? 'ACTIVE' : 'NOT SET'}</span>
+          </h2>
+          <p>Override per-user simulation flags from <code>user-overrides.conf</code> without pushing to GitHub.
+             Uses the same INI format. In hub-managed mode this is delivered by the hub.</p>
+        </div>
+        <div class="setup-form">
+          <div class="form-group">
+            <textarea id="spoke-user-override-textarea" class="form-input code-textarea" rows="12" spellcheck="false"
+              placeholder="[simulation]&#10;some_flag = value&#10;&#10;[alice]&#10;some_flag = alice-value">${_escHtml(userContent || '')}</textarea>
+          </div>
+          <div class="form-actions">
+            <button id="spoke-user-override-save-btn" class="btn btn-primary" type="button">Save Override</button>
+            <button id="spoke-user-override-clear-btn" class="btn btn-secondary" type="button">Clear Override</button>
+            <span id="spoke-user-override-msg" class="form-msg" style="display:none;margin-left:8px;"></span>
+          </div>
+        </div>
+      </section>
+    </div>
+  `;
+
+  document.getElementById('spoke-sim-override-save-btn')?.addEventListener('click', () => saveSpokeConfOverride('sim'));
+  document.getElementById('spoke-sim-override-clear-btn')?.addEventListener('click', () => clearSpokeConfOverride('sim'));
+  document.getElementById('spoke-user-override-save-btn')?.addEventListener('click', () => saveSpokeConfOverride('user'));
+  document.getElementById('spoke-user-override-clear-btn')?.addEventListener('click', () => clearSpokeConfOverride('user'));
+}
+
+async function saveSpokeConfOverride(type) {
+  const isSimType = type === 'sim';
+  const textareaId = isSimType ? 'spoke-sim-override-textarea' : 'spoke-user-override-textarea';
+  const msgId = isSimType ? 'spoke-sim-override-msg' : 'spoke-user-override-msg';
+  const endpoint = `/api/config/hub-${isSimType ? 'sim' : 'user'}-override`;
+  const content = document.getElementById(textareaId)?.value ?? '';
+  _setOverrideMsg(msgId, 'Saving…', true);
+  try {
+    const res = await fetch(endpoint, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      _setOverrideMsg(msgId, d?.detail || 'Unable to save.', false);
+      return;
+    }
+    if (isSimType) _spokeConfOverrideState.simContent = content;
+    else _spokeConfOverrideState.userContent = content;
+    _setOverrideMsg(msgId, 'Saved.', true);
+    renderSpokeConfOverrides();
+  } catch (e) {
+    _setOverrideMsg(msgId, `Error: ${e.message}`, false);
+  }
+}
+
+async function clearSpokeConfOverride(type) {
+  const isSimType = type === 'sim';
+  const msgId = isSimType ? 'spoke-sim-override-msg' : 'spoke-user-override-msg';
+  const endpoint = `/api/config/hub-${isSimType ? 'sim' : 'user'}-override`;
+  _setOverrideMsg(msgId, 'Clearing…', true);
+  try {
+    const res = await fetch(endpoint, { method: 'DELETE' });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      _setOverrideMsg(msgId, d?.detail || 'Unable to clear.', false);
+      return;
+    }
+    if (isSimType) _spokeConfOverrideState.simContent = '';
+    else _spokeConfOverrideState.userContent = '';
+    _setOverrideMsg(msgId, 'Cleared.', true);
+    renderSpokeConfOverrides();
+  } catch (e) {
+    _setOverrideMsg(msgId, `Error: ${e.message}`, false);
+  }
+}
+
+
   btn.addEventListener('click', () => activateConfigSubtab(btn.dataset.subtab));
 });
 

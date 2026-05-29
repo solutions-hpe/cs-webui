@@ -2248,6 +2248,7 @@
           <button class="config-subtab active" data-subtab="config-general" role="tab">General</button>
           <button class="config-subtab" data-subtab="config-addresses" role="tab">IP Addresses</button>
           <button class="config-subtab" data-subtab="config-buckets-panel" role="tab">Buckets</button>
+          <button class="config-subtab" data-subtab="config-hub-overrides-panel" role="tab">Hub Overrides</button>
         </nav>
 
         <!-- General: [simulation] section -->
@@ -2270,6 +2271,13 @@
             </div>
             <div id="config-buckets-container"></div>
             <div id="config-buckets-message" class="settings-message hidden" role="alert"></div>
+          </div>
+        </div>
+
+        <!-- Hub-managed conf overrides (standalone / read-only when hub connected) -->
+        <div id="config-hub-overrides-panel" class="config-subpanel hidden">
+          <div id="spoke-conf-overrides-content">
+            <div class="empty-state">Loading…</div>
           </div>
         </div>
       </main>

@@ -916,6 +916,15 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   box-shadow: inset 3px 0 0 var(--hpe-green), 0 0 0 3px rgba(1,169,130,0.15);
 }
 
+.form-input.code-textarea {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 0.82rem;
+  resize: vertical;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
+
 .input-readonly {
   background: #F5F5F5;
   color: var(--muted);

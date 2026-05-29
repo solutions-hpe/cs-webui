@@ -42,6 +42,7 @@ let hubCentralSiteOpen = null;
 let hubConfigDraft = "";
 let hubConfigActiveSubtab = "api";
 let hubSimulationConfState = { tenantId: null, loaded: false, loading: false, rawContent: "", sha: "", fetchedAt: "", sections: {}, sectionOrder: [], keyOrder: {}, error: "" };
+let hubConfOverrideState = { tenantId: null, simContent: null, userContent: null, loading: false, error: "" };
 let hubSimActiveTab = "hub-simtop-checks";
 let hubSimChecksFilter = "failing";
 let hubSimChecksSearch = "";
@@ -3417,7 +3418,148 @@ async function saveHubSimulationConf() {
   setFormMessage("hub-sim-config-msg", `Saved to GitHub. Repo sync queued for ${data?.synced_spokes ?? 0} spoke(s).`, true);
 }
 
-function getTenantGithubSettingsElements() {
+// ─── Hub-managed conf overrides (sim + user) ───────────────────────────────
+
+function renderHubConfOverridesPanel() {
+  const container = $("#hub-conf-overrides-panel");
+  if (!container) return;
+  const disabled = canManageTenant() ? "" : " disabled";
+  const readonly = canManageTenant() ? "" : " readonly";
+  const { simContent, userContent, loading, error } = hubConfOverrideState;
+  const simActive = simContent !== null && simContent !== "";
+  const userActive = userContent !== null && userContent !== "";
+
+  if (loading) {
+    container.innerHTML = '<div class="empty-state">Loading overrides…</div>';
+    return;
+  }
+  if (error) {
+    container.innerHTML = `<div class="empty-state">${escHtml(error)}</div>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="setup-section-gap">
+      <section class="setup-card">
+        <div class="setup-card-header">
+          <h2>simulation.conf Override
+            <span class="site-status-pill ${simActive ? "site-ok" : "site-unknown"}" style="margin-left:8px;font-size:0.75rem;">${simActive ? "ACTIVE" : "NOT SET"}</span>
+          </h2>
+          <p>Override specific values from <code>simulation.conf</code> without pushing to GitHub.
+            Uses the same INI format as the file — only the keys you define here will be overridden on connected spokes.
+            Leave blank or click <strong>Clear</strong> to revert spokes to the GitHub version.</p>
+        </div>
+        <div class="setup-form">
+          <div class="form-group">
+            <textarea id="hub-sim-override-textarea" class="form-input code-textarea" rows="12" spellcheck="false"
+              placeholder="[simulation]&#10;simulation_count = 10&#10;&#10;[server]&#10;some_key = value"${readonly}>${escHtml(simContent || "")}</textarea>
+          </div>
+          <div class="form-actions">
+            <button id="hub-sim-override-save-btn" class="btn btn-primary" type="button"${disabled}>Save Override</button>
+            <button id="hub-sim-override-clear-btn" class="btn btn-secondary" type="button"${disabled}>Clear Override</button>
+            <span id="hub-sim-override-msg" class="form-msg"></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="setup-card">
+        <div class="setup-card-header">
+          <h2>user-overrides.conf Override
+            <span class="site-status-pill ${userActive ? "site-ok" : "site-unknown"}" style="margin-left:8px;font-size:0.75rem;">${userActive ? "ACTIVE" : "NOT SET"}</span>
+          </h2>
+          <p>Override per-user simulation flags from <code>user-overrides.conf</code> without pushing to GitHub.
+            Uses the same INI format. Only the keys you define will be overridden on connected spokes.</p>
+        </div>
+        <div class="setup-form">
+          <div class="form-group">
+            <textarea id="hub-user-override-textarea" class="form-input code-textarea" rows="12" spellcheck="false"
+              placeholder="[simulation]&#10;some_flag = value&#10;&#10;[alice]&#10;some_flag = alice-value"${readonly}>${escHtml(userContent || "")}</textarea>
+          </div>
+          <div class="form-actions">
+            <button id="hub-user-override-save-btn" class="btn btn-primary" type="button"${disabled}>Save Override</button>
+            <button id="hub-user-override-clear-btn" class="btn btn-secondary" type="button"${disabled}>Clear Override</button>
+            <span id="hub-user-override-msg" class="form-msg"></span>
+          </div>
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+async function loadHubConfOverrides(force = false) {
+  const tenantId = getActiveTenantId();
+  if (!tenantId || !currentUser) return;
+  if (!force && hubConfOverrideState.tenantId === tenantId &&
+      (hubConfOverrideState.simContent !== null || hubConfOverrideState.userContent !== null)) {
+    renderHubConfOverridesPanel();
+    return;
+  }
+  hubConfOverrideState = { tenantId, simContent: null, userContent: null, loading: true, error: "" };
+  renderHubConfOverridesPanel();
+  const [simRes, userRes] = await Promise.all([
+    apiFetch(`/api/${encodeURIComponent(tenantId)}/config/sim-conf-override`),
+    apiFetch(`/api/${encodeURIComponent(tenantId)}/config/user-conf-override`),
+  ]);
+  if (!simRes?.ok || !userRes?.ok) {
+    hubConfOverrideState.loading = false;
+    hubConfOverrideState.error = "Unable to load conf overrides.";
+    renderHubConfOverridesPanel();
+    return;
+  }
+  const [simData, userData] = await Promise.all([readJson(simRes), readJson(userRes)]);
+  hubConfOverrideState = {
+    tenantId,
+    simContent: simData?.content ?? "",
+    userContent: userData?.content ?? "",
+    loading: false,
+    error: "",
+  };
+  renderHubConfOverridesPanel();
+}
+
+async function saveHubConfOverride(type) {
+  if (!canManageTenant()) return;
+  const tenantId = getActiveTenantId();
+  if (!tenantId) return;
+  const isSimType = type === "sim";
+  const textareaId = isSimType ? "hub-sim-override-textarea" : "hub-user-override-textarea";
+  const msgId = isSimType ? "hub-sim-override-msg" : "hub-user-override-msg";
+  const endpoint = `/api/${encodeURIComponent(tenantId)}/config/${isSimType ? "sim" : "user"}-conf-override`;
+  const content = $("#" + textareaId)?.value ?? "";
+  setFormMessage(msgId, "Saving…", true);
+  const res = await apiFetch(endpoint, { method: "PUT", body: { content } });
+  const data = await readJson(res);
+  if (!res?.ok) {
+    setFormMessage(msgId, data?.detail || "Unable to save override.", false);
+    return;
+  }
+  if (isSimType) hubConfOverrideState.simContent = content;
+  else hubConfOverrideState.userContent = content;
+  setFormMessage(msgId, `Saved. Pushed to ${data?.pushed_to_spokes ?? 0} spoke(s).`, true);
+  renderHubConfOverridesPanel();
+}
+
+async function clearHubConfOverride(type) {
+  if (!canManageTenant()) return;
+  const tenantId = getActiveTenantId();
+  if (!tenantId) return;
+  const isSimType = type === "sim";
+  const msgId = isSimType ? "hub-sim-override-msg" : "hub-user-override-msg";
+  const endpoint = `/api/${encodeURIComponent(tenantId)}/config/${isSimType ? "sim" : "user"}-conf-override`;
+  setFormMessage(msgId, "Clearing…", true);
+  const res = await apiFetch(endpoint, { method: "DELETE" });
+  const data = await readJson(res);
+  if (!res?.ok) {
+    setFormMessage(msgId, data?.detail || "Unable to clear override.", false);
+    return;
+  }
+  if (isSimType) hubConfOverrideState.simContent = "";
+  else hubConfOverrideState.userContent = "";
+  setFormMessage(msgId, "Override cleared.", true);
+  renderHubConfOverridesPanel();
+}
+
+
   const candidates = [
     {
       repoUrl: $("#hub-github-sim-repo-url"),
@@ -6159,6 +6301,7 @@ function renderHubConfigPage(data) {
     <nav class="setup-subnav setup-section-gap" role="tablist">
       <button class="setup-subtab hub-config-subtab ${hubConfigActiveSubtab === "api" ? "active" : ""}" data-hub-config-subtab="api" type="button">API</button>
       <button class="setup-subtab hub-config-subtab ${hubConfigActiveSubtab === "simulation" ? "active" : ""}" data-hub-config-subtab="simulation" type="button">Simulation Config</button>
+      <button class="setup-subtab hub-config-subtab ${hubConfigActiveSubtab === "overrides" ? "active" : ""}" data-hub-config-subtab="overrides" type="button">Conf Overrides</button>
     </nav>
     <div id="hub-config-api-panel" class="${hubConfigActiveSubtab === "api" ? "" : "hidden"}">
       <section class="setup-card setup-section-gap">
@@ -6199,6 +6342,7 @@ function renderHubConfigPage(data) {
       </div>
     </div>
     <div id="hub-sim-config-panel" class="${hubConfigActiveSubtab === "simulation" ? "" : "hidden"}"></div>
+    <div id="hub-conf-overrides-panel" class="${hubConfigActiveSubtab === "overrides" ? "" : "hidden"}"></div>
   `;
 }
 
@@ -8415,7 +8559,9 @@ async function loadConfig(force = false) {
   container.innerHTML = data ? renderHubConfigPage(data) : '<div class="empty-state">Unable to load tenant config.</div>';
   if (data) hydrateTenantSetupPanel(data);
   renderHubSimulationConfigPanel();
+  renderHubConfOverridesPanel();
   if (hubConfigActiveSubtab === "simulation") await loadHubSimulationConf(force);
+  if (hubConfigActiveSubtab === "overrides") await loadHubConfOverrides(force);
 }
 
 async function saveCentralSettings() {
@@ -10781,6 +10927,7 @@ function bindEvents() {
         loadConfig(false).catch(() => {});
       }
       if (hubConfigActiveSubtab === "simulation") loadHubSimulationConf().catch(() => {});
+      if (hubConfigActiveSubtab === "overrides") loadHubConfOverrides().catch(() => {});
       return;
     }
 
@@ -10919,7 +11066,22 @@ function bindEvents() {
     if (event.target.closest("#hub-sim-config-save-btn")) {
       saveHubSimulationConf();
     }
-  });
+    if (event.target.closest("#hub-sim-override-save-btn")) {
+      saveHubConfOverride("sim");
+      return;
+    }
+    if (event.target.closest("#hub-sim-override-clear-btn")) {
+      clearHubConfOverride("sim");
+      return;
+    }
+    if (event.target.closest("#hub-user-override-save-btn")) {
+      saveHubConfOverride("user");
+      return;
+    }
+    if (event.target.closest("#hub-user-override-clear-btn")) {
+      clearHubConfOverride("user");
+      return;
+    }
 
   document.addEventListener("change", event => {
     const spokeSelect = event.target.closest("#sa-spoke-select");

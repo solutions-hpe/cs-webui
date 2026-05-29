@@ -954,10 +954,10 @@ function getMonitoredItemStatusMeta(item) {
   }
 
   // Override to stale if last_seen is old
-  if (ageHours !== null && ageHours > 24) {
+  if (ageHours !== null && ageHours > 0.75) {
     return { status: "stale", missingMins: 0, tone: "red", label: "Failed" };
   }
-  if (ageHours !== null && ageHours > 4) {
+  if (ageHours !== null && ageHours > 0.25) {
     return { status: "stale", missingMins: 0, tone: "yellow", label: "Warning" };
   }
 

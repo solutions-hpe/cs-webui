@@ -1041,7 +1041,7 @@ function renderHubStatusTab() {
       </div>`;
   };
 
-  // — Sites — status driven by Central API client count (25% drop = red)
+  // — Sites — status driven by sim client count per wsite (25% drop = red); Central wireless count used when available
   const summary = hubCentralMonitorSummary(hubCentralData);
   const siteRows = (summary?.sites || []).map((site) => {
     const cs = site.client_status || {};

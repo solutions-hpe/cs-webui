@@ -7864,9 +7864,20 @@ function renderHubCaInsightsTab(container, insights, search) {
   attachHubCaMonitorButtons(container);
 }
 
+function _caClientIsWireless(c) {
+  // A client is wireless if it has AP/SSID fields, or connection_type says WIRELESS
+  if (c.connection_type && typeof c.connection_type === "string") {
+    const ct = c.connection_type.toUpperCase();
+    if (ct === "WIRELESS" || ct === "WIFI") return true;
+    if (ct === "WIRED" || ct === "ETHERNET") return false;
+  }
+  return !!(c.ap || c.ssid);
+}
+
 function renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search) {
   const tdP = "padding:6px 10px;";
   const monitoredSites = _caMonitoredSiteNames();
+  const activeTab = container._caClientTab || "wireless";
 
   // Prefer individual client records; fall back to count-only mode if no individual data
   const allClients = (clientsLegacy || []).filter((client) => hubCaIsIndividualClientRecord(client));
@@ -7874,90 +7885,126 @@ function renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search) 
     ? (monitoredSites ? allClients.filter((c) => monitoredSites.has((c.site || "").toLowerCase().trim())) : allClients)
     : null;
 
+  const tabPills = `<div style="margin-bottom:8px;">
+    <button class="btn btn-small ${activeTab === "wireless" ? "btn-primary" : "btn-secondary"} ca-client-tab-btn" data-tab="wireless" style="margin:0 2px 4px;">Wireless</button>
+    <button class="btn btn-small ${activeTab === "wired" ? "btn-primary" : "btn-secondary"} ca-client-tab-btn" data-tab="wired" style="margin:0 2px 4px;">Wired</button>
+  </div>`;
+
   if (clientSource) {
-    const filtered = clientSource.filter((c) => !search || JSON.stringify(c).toLowerCase().includes(search));
+    const tabFiltered = clientSource.filter((c) => activeTab === "wireless" ? _caClientIsWireless(c) : !_caClientIsWireless(c));
+    const filtered = tabFiltered.filter((c) => !search || JSON.stringify(c).toLowerCase().includes(search));
+    const emptyMsg = search ? "No clients match your search." : `No ${activeTab} clients returned from Central.`;
     if (!filtered.length) {
-      container.innerHTML = `<div class="empty-state">${search ? "No clients match your search." : "No clients returned from Central."}</div>`;
-      return;
+      container.innerHTML = tabPills + `<div class="empty-state">${emptyMsg}</div>`;
+    } else {
+      const isWireless = activeTab === "wireless";
+      const rows = filtered.map((c) => {
+        const statusColor = (c.status || "").toLowerCase() === "connected" ? "#27ae60"
+          : (c.status || "").toLowerCase() === "disconnected" ? "#e74c3c" : "#aaa";
+        const statusDot = `<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:8px;height:8px;border-radius:50%;background:${statusColor};display:inline-block;flex-shrink:0;"></span>${escHtml(c.status || "—")}</span>`;
+        const wirelessCells = isWireless
+          ? `<td style="white-space:nowrap;${tdP}">${escHtml(c.ap || "—")}</td>
+             <td style="white-space:nowrap;${tdP}">${escHtml(c.ssid || "—")}</td>`
+          : `<td style="white-space:nowrap;${tdP}">${escHtml(c.vlan || "—")}</td>`;
+        return `<tr>
+          <td style="width:30%;${tdP}"><strong>${escHtml(c.hostname || "—")}</strong><div style="font-size:11px;color:var(--muted);">${escHtml(c.mac || "")}</div></td>
+          <td style="white-space:nowrap;${tdP}">${escHtml(c.site || "—")}</td>
+          <td style="white-space:nowrap;${tdP}">${escHtml(c.ip || "—")}</td>
+          ${wirelessCells}
+          <td style="white-space:nowrap;${tdP}">${statusDot}</td>
+          <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("client", {
+            name: c.hostname || c.mac || "Client",
+            hostname: c.hostname || "",
+            mac: c.mac || "",
+            site: c.site || "",
+          })}</td>
+        </tr>`;
+      }).join("");
+      const wirelessHeaders = isWireless
+        ? `<th style="padding:5px 10px;white-space:nowrap;">AP</th>
+           <th style="padding:5px 10px;white-space:nowrap;">SSID</th>`
+        : `<th style="padding:5px 10px;white-space:nowrap;">VLAN</th>`;
+      container.innerHTML = tabPills + `
+        <div class="setup-card" style="overflow-x:auto;padding:0;">
+          <table class="data-table" style="font-size:0.82rem;margin:0;min-width:${isWireless ? 700 : 600}px;width:100%;">
+            <thead><tr>
+              <th style="width:30%;padding:5px 10px;">Client</th>
+              <th style="padding:5px 10px;white-space:nowrap;">Site</th>
+              <th style="padding:5px 10px;white-space:nowrap;">IP</th>
+              ${wirelessHeaders}
+              <th style="padding:5px 10px;white-space:nowrap;">Status</th>
+              <th style="padding:5px 10px;"></th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
     }
-    const rows = filtered.map((c) => {
-      const statusColor = (c.status || "").toLowerCase() === "connected" ? "#27ae60"
-        : (c.status || "").toLowerCase() === "disconnected" ? "#e74c3c" : "#aaa";
-      const statusDot = `<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:8px;height:8px;border-radius:50%;background:${statusColor};display:inline-block;flex-shrink:0;"></span>${escHtml(c.status || "—")}</span>`;
-      return `<tr>
-        <td style="width:30%;${tdP}"><strong>${escHtml(c.hostname || "—")}</strong><div style="font-size:11px;color:var(--muted);">${escHtml(c.mac || "")}</div></td>
-        <td style="white-space:nowrap;${tdP}">${escHtml(c.site || "—")}</td>
-        <td style="white-space:nowrap;${tdP}">${escHtml(c.ip || "—")}</td>
-        <td style="white-space:nowrap;${tdP}">${escHtml(c.ap || "—")}</td>
-        <td style="white-space:nowrap;${tdP}">${escHtml(c.ssid || "—")}</td>
-        <td style="white-space:nowrap;${tdP}">${statusDot}</td>
-        <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("client", {
-          name: c.hostname || c.mac || "Client",
-          hostname: c.hostname || "",
-          mac: c.mac || "",
-          site: c.site || "",
-        })}</td>
-      </tr>`;
-    }).join("");
-    container.innerHTML = `
-      <div class="setup-card" style="overflow-x:auto;padding:0;">
-        <table class="data-table" style="font-size:0.82rem;margin:0;min-width:700px;width:100%;">
-          <thead><tr>
-            <th style="width:30%;padding:5px 10px;">Client</th>
-            <th style="padding:5px 10px;white-space:nowrap;">Site</th>
-            <th style="padding:5px 10px;white-space:nowrap;">IP</th>
-            <th style="padding:5px 10px;white-space:nowrap;">AP</th>
-            <th style="padding:5px 10px;white-space:nowrap;">SSID</th>
-            <th style="padding:5px 10px;white-space:nowrap;">Status</th>
-            <th style="padding:5px 10px;"></th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>`;
   } else {
     // Fallback: show per-site counts when no individual client records are available
     let entries = Object.entries(clientsBySite || {});
     if (monitoredSites) entries = entries.filter(([site]) => monitoredSites.has(site.toLowerCase().trim()));
     const filtered = entries.filter(([site]) => !search || site.toLowerCase().includes(search));
+    const countKey = activeTab === "wireless" ? "wireless" : "wired";
+    const emptyMsg = search ? "No clients match your search." : `No ${activeTab} clients returned from Central.`;
     if (!filtered.length) {
-      container.innerHTML = `<div class="empty-state">${search ? "No clients match your search." : "No clients returned from Central."}</div>`;
-      return;
+      container.innerHTML = tabPills + `<div class="empty-state">${emptyMsg}</div>`;
+    } else {
+      const rows = filtered.sort((a, b) => (b[1][countKey] || 0) - (a[1][countKey] || 0)).map(([site, counts]) => `
+        <tr>
+          <td style="width:50%;${tdP}"><strong>${escHtml(site)}</strong></td>
+          <td style="white-space:nowrap;${tdP}">${counts[countKey] ?? "—"}</td>
+          <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("client", { name: `Client Count: ${site}`, site })}</td>
+        </tr>`).join("");
+      container.innerHTML = tabPills + `
+        <div class="setup-card" style="overflow-x:auto;padding:0;">
+          <table class="data-table" style="font-size:0.82rem;margin:0;min-width:400px;width:100%;">
+            <thead><tr>
+              <th style="width:50%;padding:5px 10px;">Site</th>
+              <th style="padding:5px 10px;white-space:nowrap;">${activeTab === "wireless" ? "Wireless" : "Wired"} Clients</th>
+              <th style="padding:5px 10px;"></th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
     }
-    const rows = filtered.sort((a, b) => (b[1].total || 0) - (a[1].total || 0)).map(([site, counts]) => `
-      <tr>
-        <td style="width:40%;${tdP}"><strong>${escHtml(site)}</strong></td>
-        <td style="white-space:nowrap;${tdP}">${counts.total ?? "—"}</td>
-        <td style="white-space:nowrap;${tdP}">${counts.wireless ?? "—"}</td>
-        <td style="white-space:nowrap;${tdP}">${counts.wired ?? "—"}</td>
-        <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("client", { name: `Client Count: ${site}`, site })}</td>
-      </tr>`).join("");
-    container.innerHTML = `
-      <div class="setup-card" style="overflow-x:auto;padding:0;">
-        <table class="data-table" style="font-size:0.82rem;margin:0;min-width:500px;width:100%;">
-          <thead><tr>
-            <th style="width:40%;padding:5px 10px;">Site</th>
-            <th style="padding:5px 10px;white-space:nowrap;">Total</th>
-            <th style="padding:5px 10px;white-space:nowrap;">Wireless</th>
-            <th style="padding:5px 10px;white-space:nowrap;">Wired</th>
-            <th style="padding:5px 10px;"></th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>`;
   }
+
+  container.querySelectorAll(".ca-client-tab-btn").forEach((btn) => {
+    btn.onclick = () => { container._caClientTab = btn.dataset.tab; renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search); };
+  });
   attachHubCaMonitorButtons(container);
+}
+
+function _caDeviceTabType(d) {
+  const t = (d.type || "").toUpperCase();
+  if (t === "AP" || t === "IAP" || t === "CAP" || t.startsWith("AP-") || t.includes("IAP")) return "ap";
+  if (t === "GATEWAY" || t === "GW" || t === "VGW" || t === "BRANCH_GATEWAY" || t.includes("GATEWAY")) return "gateway";
+  if (t === "SWITCH" || t === "SW" || t === "CX" || t.includes("SWITCH")) return "switch";
+  return "other";
 }
 
 function renderHubCaDevicesTab(container, devicesBySite, search) {
   const monitoredSites = _caMonitoredSiteNames();
+  const activeTab = container._caDeviceTab || "ap";
   const allDevices = Object.entries(devicesBySite || [])
     .filter(([site]) => !monitoredSites || monitoredSites.has(site.toLowerCase().trim()))
     .flatMap(([site, devs]) => devs.map((d) => ({ ...d, site })));
-  const filtered = allDevices.filter((d) =>
+
+  const tabPills = `<div style="margin-bottom:8px;">
+    <button class="btn btn-small ${activeTab === "ap" ? "btn-primary" : "btn-secondary"} ca-device-tab-btn" data-tab="ap" style="margin:0 2px 4px;">Access Points</button>
+    <button class="btn btn-small ${activeTab === "gateway" ? "btn-primary" : "btn-secondary"} ca-device-tab-btn" data-tab="gateway" style="margin:0 2px 4px;">Gateway</button>
+    <button class="btn btn-small ${activeTab === "switch" ? "btn-primary" : "btn-secondary"} ca-device-tab-btn" data-tab="switch" style="margin:0 2px 4px;">Switch</button>
+  </div>`;
+
+  const tabDevices = allDevices.filter((d) => _caDeviceTabType(d) === activeTab);
+  const filtered = tabDevices.filter((d) =>
     !search || JSON.stringify(d).toLowerCase().includes(search)
   );
   if (!filtered.length) {
-    container.innerHTML = `<div class="empty-state">${search ? "No devices match your search." : "No devices returned from Central."}</div>`;
+    container.innerHTML = tabPills + `<div class="empty-state">${search ? "No devices match your search." : `No ${activeTab === "ap" ? "access points" : activeTab === "gateway" ? "gateways" : "switches"} returned from Central.`}</div>`;
+    container.querySelectorAll(".ca-device-tab-btn").forEach((btn) => {
+      btn.onclick = () => { container._caDeviceTab = btn.dataset.tab; renderHubCaDevicesTab(container, devicesBySite, search); };
+    });
     return;
   }
   const tdP = "padding:6px 10px;";
@@ -7979,7 +8026,7 @@ function renderHubCaDevicesTab(container, devicesBySite, search) {
       <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("gateway", { name: deviceName, identifier: deviceIdentifier, site: d.site || "" })}</td>
     </tr>`;
   }).join("");
-  container.innerHTML = `
+  container.innerHTML = tabPills + `
     <div class="setup-card" style="overflow-x:auto;padding:0;">
       <table class="data-table" style="font-size:0.82rem;margin:0;min-width:650px;width:100%;">
         <thead><tr>
@@ -7993,6 +8040,9 @@ function renderHubCaDevicesTab(container, devicesBySite, search) {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+  container.querySelectorAll(".ca-device-tab-btn").forEach((btn) => {
+    btn.onclick = () => { container._caDeviceTab = btn.dataset.tab; renderHubCaDevicesTab(container, devicesBySite, search); };
+  });
   attachHubCaMonitorButtons(container);
 }
 

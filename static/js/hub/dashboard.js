@@ -937,14 +937,31 @@ function getMonitoredItemStatusMeta(item) {
   const status = item.status || "ok";
   const missingSince = item.missing_since ? (Date.now() / 1000 - Number(item.missing_since)) : 0;
   const missingMins = Math.round(missingSince / 60);
-  return {
-    status,
-    missingMins,
-    tone: status === "missing" ? "red" : status === "warning" ? "yellow" : "green",
-    label: status === "ok" ? "OK"
-      : status === "warning" ? `⚠ ${missingMins}m absent`
-      : `✗ ${missingMins}m absent`,
-  };
+
+  // Determine staleness from the most recent timestamp available
+  let lastSeenMs = null;
+  if (item.central_last_seen) lastSeenMs = new Date(item.central_last_seen).getTime();
+  else if (item.last_seen) lastSeenMs = Number(item.last_seen) * 1000;
+
+  const ageHours = lastSeenMs ? (Date.now() - lastSeenMs) / 3600000 : null;
+
+  // If backend says missing, honour that
+  if (status === "missing") {
+    return { status, missingMins, tone: "red", label: `✗ ${missingMins}m absent` };
+  }
+  if (status === "warning") {
+    return { status, missingMins, tone: "yellow", label: `⚠ ${missingMins}m absent` };
+  }
+
+  // Override to stale if last_seen is old
+  if (ageHours !== null && ageHours > 24) {
+    return { status: "stale", missingMins: 0, tone: "red", label: "Failed" };
+  }
+  if (ageHours !== null && ageHours > 4) {
+    return { status: "stale", missingMins: 0, tone: "yellow", label: "Warning" };
+  }
+
+  return { status, missingMins, tone: "green", label: "Ok" };
 }
 
 function renderHubStatusTab() {

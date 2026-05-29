@@ -11845,16 +11845,19 @@ function _qaModuleChecks(tenantId) {
           if (!d) return { status: "FAIL", detail: "No response" };
           if (!d.ok) return { status: "FAIL", detail: JSON.stringify(d) };
           if (d.total_vms_queued === 0) return { status: "SKIP", detail: "No sim VMs found (vmid > 9000) — nothing to tear down" };
-          return { status: "PASS", detail: `Queued delete_vm for ${d.total_vms_queued} VM(s) across ${(d.spokes||[]).length} spoke(s)` };
+          const spokeDetail = (d.spokes || []).map(s => `${s.spoke_name || s.spoke_id}: ${s.vms_queued} VM(s)`).join(", ");
+          return { status: "PASS", detail: `Queued delete_vm for ${d.total_vms_queued} VM(s) → ${spokeDetail}` };
         }},
       { name: "All sim VMs deleted", url: `/api/${T}/qa/teardown-status`,
         poll: { intervalMs: 10000, timeoutMs: 300000 },
         jsonTest: d => {
           if (!d) return { status: "FAIL", detail: "No response" };
-          if (d.total_remaining === 0 && d.complete) return { status: "PASS", detail: "total_remaining=0 — all sim VMs gone" };
-          return null; // null = keep polling
+          if (d.total_remaining === 0 && d.complete) {
+            const spokeNames = (d.spokes || []).map(s => s.spoke_name || s.spoke_id).join(", ");
+            return { status: "PASS", detail: `All VMs deleted — verified clean on: ${spokeNames || "all spokes"}` };
+          }
+          return null; // keep polling
         },
-        skipIf: d => d && d.total_remaining === 0 && !d.complete,
       },
     ],
 
@@ -11863,20 +11866,26 @@ function _qaModuleChecks(tenantId) {
         jsonTest: d => {
           if (!d) return { status: "FAIL", detail: "No response" };
           if ((d.total_dongles || 0) === 0) return { status: "SKIP", detail: "No USB dongles detected — cannot run E2E test" };
-          return { status: "PASS", detail: `total_dongles=${d.total_dongles}` };
+          const spokeDetail = (d.spokes || []).filter(s => (s.dongle_count || 0) > 0)
+            .map(s => `${s.spoke_name || s.spoke_id}: ${s.dongle_count} dongle(s)`).join(", ");
+          return { status: "PASS", detail: `${d.total_dongles} dongle(s) detected → ${spokeDetail}` };
         }},
       { name: "Enable Auto-Provisioning fleet-wide", method: "POST", url: `/api/${T}/qa/enable-autoprov`,
         jsonTest: d => {
           if (!d?.ok) return { status: "FAIL", detail: JSON.stringify(d) };
-          return { status: "PASS", detail: `expected_clients=${d.expected_clients}, updated_spokes=${d.updated_spokes}` };
+          const spokeDetail = (d.spokes || []).map(s => `${s.spoke_name || s.spoke_id}: ${s.dongle_count} dongle(s)`).join(", ");
+          return { status: "PASS", detail: `usb_auto_provision=ON on ${d.updated_spokes} spoke(s) — expecting ${d.expected_clients} client(s): ${spokeDetail}` };
         }},
       { name: "All clients online", url: `/api/${T}/qa/provisioning-check`,
         poll: { intervalMs: 15000, timeoutMs: 600000 },
         jsonTest: d => {
           if (!d) return { status: "FAIL", detail: "No response" };
           if (d.expected_clients === 0) return { status: "SKIP", detail: "expected_clients=0 — no dongles to provision" };
-          if (d.overall_pass && d.actual_clients >= d.expected_clients)
-            return { status: "PASS", detail: `${d.actual_clients}/${d.expected_clients} clients online` };
+          if (d.overall_pass && d.actual_clients >= d.expected_clients) {
+            const spokeDetail = (d.spokes || []).map(s =>
+              `${s.spoke_name || s.spoke_id}: ${s.reporting_clients}/${s.dongle_count}`).join(", ");
+            return { status: "PASS", detail: `${d.actual_clients}/${d.expected_clients} clients reporting — ${spokeDetail}` };
+          }
           return null; // keep polling
         }},
     ],
@@ -11926,11 +11935,29 @@ async function _runQaChecks(tenantId, module) {
             break;
           }
           // Update placeholder with live progress
-          const remaining = lastData?.total_remaining ?? lastData?.actual_clients ?? "?";
-          const expected = lastData?.expected_clients;
-          const progressNote = expected != null
-            ? `${remaining}/${expected} — waiting…`
-            : `remaining=${remaining} — waiting…`;
+          let progressNote;
+          if (lastData?.spokes) {
+            // Teardown: show per-spoke remaining counts
+            if (lastData.total_remaining !== undefined) {
+              const spokeDetail = (lastData.spokes || [])
+                .filter(s => (s.sim_vms_remaining || 0) > 0)
+                .map(s => `${s.spoke_name || s.spoke_id}: ${s.sim_vms_remaining} VM(s) left`)
+                .join(" | ") || "verifying…";
+              progressNote = `Deleting… ${lastData.total_remaining} VM(s) remaining — ${spokeDetail}`;
+            // Autoprov: show per-spoke client counts
+            } else if (lastData.actual_clients !== undefined) {
+              const spokeDetail = (lastData.spokes || [])
+                .map(s => `${s.spoke_name || s.spoke_id}: ${s.reporting_clients}/${s.dongle_count}`)
+                .join(" | ") || "waiting…";
+              progressNote = `Provisioning… ${lastData.actual_clients}/${lastData.expected_clients} clients online — ${spokeDetail}`;
+            } else {
+              progressNote = "Checking…";
+            }
+          } else {
+            const remaining = lastData?.total_remaining ?? lastData?.actual_clients ?? "?";
+            const expected = lastData?.expected_clients;
+            progressNote = expected != null ? `${remaining}/${expected} — waiting…` : `remaining=${remaining} — waiting…`;
+          }
           tempRow.innerHTML = `<td>${_qaBadge("RUN")}</td><td style="font-size:0.8rem;">${modLabel}</td><td>${check.name}</td><td style="font-size:0.8rem;color:var(--text-muted);">${progressNote}</td>`;
           await new Promise(r => setTimeout(r, intervalMs));
         }
@@ -11940,11 +11967,21 @@ async function _runQaChecks(tenantId, module) {
           const res = await apiFetch(check.url, { method: check.method || "GET" });
           lastData = res ? await readJson(res) : null;
           const timeoutSec = Math.round(timeoutMs / 1000);
-          const remaining = lastData?.total_remaining ?? lastData?.actual_clients ?? "?";
-          const expected = lastData?.expected_clients;
-          detail = expected != null
-            ? `Timed out after ${timeoutSec}s — ${remaining}/${expected}`
-            : `Timed out after ${timeoutSec}s — ${remaining} remaining`;
+          if (lastData?.total_remaining !== undefined) {
+            const spokeDetail = (lastData.spokes || [])
+              .filter(s => (s.sim_vms_remaining || 0) > 0)
+              .map(s => `${s.spoke_name || s.spoke_id}: ${s.sim_vms_remaining} VM(s) left`)
+              .join(", ");
+            detail = `Timed out after ${timeoutSec}s — ${lastData.total_remaining} VM(s) still present: ${spokeDetail}`;
+          } else if (lastData?.actual_clients !== undefined) {
+            const spokeDetail = (lastData.spokes || [])
+              .filter(s => !s.pass)
+              .map(s => `${s.spoke_name || s.spoke_id}: ${s.reporting_clients}/${s.dongle_count} clients`)
+              .join(", ");
+            detail = `Timed out after ${timeoutSec}s — ${lastData.actual_clients}/${lastData.expected_clients} clients online. Incomplete: ${spokeDetail}`;
+          } else {
+            detail = `Timed out after ${timeoutSec}s`;
+          }
           status = "FAIL";
         }
       } else {

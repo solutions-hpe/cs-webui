@@ -1001,15 +1001,15 @@ function renderHubStatusTab() {
     const lastSeenHeader = showLastSeen ? `<th style="padding:5px 10px;white-space:nowrap;">Last Seen</th>` : "";
     const rowsHtml = rows.map((r) => {
       const extraCell = extraColHeader
-        ? `<td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;${tdP}">${r._detail ? escHtml(r._detail) : "—"}</td>`
+        ? `<td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;vertical-align:top;${tdP}">${r._detail ? escHtml(r._detail) : "—"}</td>`
         : "";
-      const lastSeenCell = showLastSeen ? `<td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;${tdP}">${r._lastSeen ? escHtml(r._lastSeen) : "—"}</td>` : "";
+      const lastSeenCell = showLastSeen ? `<td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;vertical-align:top;${tdP}">${r._lastSeen ? escHtml(r._lastSeen) : "—"}</td>` : "";
       const removeCell = showRemove && r._itemId
-        ? `<td style="white-space:nowrap;${tdP}"><button class="btn btn-small btn-secondary hub-monitored-remove-btn" data-item-id="${escHtml(r._itemId)}" type="button">Remove</button></td>`
+        ? `<td style="white-space:nowrap;vertical-align:top;${tdP}"><button class="btn btn-small btn-secondary hub-monitored-remove-btn" data-item-id="${escHtml(r._itemId)}" type="button">Remove</button></td>`
         : (showRemove ? `<td></td>` : "");
       return `<tr>
-        <td style="font-weight:600;word-break:break-word;min-width:140px;${tdP}">${r._name}</td>
-        <td style="white-space:nowrap;${tdP}">${statusBadge(r._tone, r._label)}</td>
+        <td style="font-weight:600;word-break:break-word;min-width:140px;vertical-align:top;${tdP}">${r._name}</td>
+        <td style="white-space:nowrap;vertical-align:top;${tdP}">${statusBadge(r._tone, r._label)}</td>
         ${extraCell}${lastSeenCell}${removeCell}
       </tr>`;
     }).join("");

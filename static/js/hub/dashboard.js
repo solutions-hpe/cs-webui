@@ -8196,7 +8196,7 @@ function renderHubCaSitesTab(container, sites, search) {
     const scoreStr = score != null ? `<div style="font-size:11px;color:var(--muted);">${score}</div>` : "";
     return `<tr>
       <td style="width:40%;${tdP}"><strong>${escHtml(site.name || "—")}</strong></td>
-      <td style="${tdP}">${healthDot}${scoreStr}</td>
+      <td style="${tdP}">${healthDot}</td>
       <td style="white-space:nowrap;${tdP}">${site.wireless_clients != null ? escHtml(String(site.wireless_clients)) : "—"}</td>
       <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("site", { name: site.name || "", central_site: site.central_site || site.name || "" })}</td>
     </tr>`;

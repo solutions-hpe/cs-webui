@@ -242,7 +242,7 @@ table {
 th, td {
   padding: 10px 12px;
   border-bottom: 1px solid #EBEBEB;
-  vertical-align: middle;
+  vertical-align: top;
   text-align: left;
   font-size: 0.88rem;
 }

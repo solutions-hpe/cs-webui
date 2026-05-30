@@ -33,7 +33,7 @@ Choose **Central / HPE GreenLake** for all new deployments on HPE GreenLake Cent
 
 ## github-repo
 **GitHub Repository**
-Configures the GitHub repository where simulation configs (`simulation.conf`, `user.conf`) are stored. The hub fetches these files and distributes them to all spokes in this tenant.
+Configures the GitHub repository where simulation configs (`simulation.conf`, `user-overrides.conf`) are stored. The hub fetches these files and distributes them to all spokes in this tenant.
 
 - **Simulation Repo URL**: HTTPS URL to the Git repo (e.g. `https://github.com/org/client-sim-configs.git`)
 - **Simulation Repo Branch**: branch to read from — defaults to `main`
@@ -153,20 +153,57 @@ The primary configuration file for the client-simulator. Controls SSID targeting
 
 - Fetched from GitHub if a repository is configured; falls back to a hub-managed override if not
 - Displayed here read-only when sourced from GitHub — edit the file in the repo to update it
-- Use the **Conf Overrides** tab to apply tenant-specific changes without modifying the shared repo
+- All section types use the same unified card layout with collapsible `<details>` sections
+- Text and select fields render in a responsive grid; boolean flags render as inline checkboxes
+- Slot sections (`s0`–`s9`) always show the full standard key set, even when some values are blank in the file
+- `user-overrides.conf` applies per-user exceptions on top of the bucket-level slot settings
 
 [Full documentation](https://github.com/solutions-hpe/webui-hub#simulation-conf)
 
+## user-overrides-conf
+**User Overrides Configuration**
+Per-user simulation profile overrides stored in `configs/user-overrides.conf` in the GitHub repository. Each user section (`[username]`) specifies which simulation settings apply when that user's hostname runs simulations.
+
+- **Add User**: creates a new override section for a username
+- **↗ Override**: pre-fills the override form from a client's current simulation bucket (s0–s9)
+- **Search**: filter users by name (appears when more than 5 users are configured)
+- **Delete (✕ Remove)**: removes the user's override section from the file
+- Saved changes are written to GitHub and distributed to all spokes
+
+User overrides take precedence over the bucket-level (s0–s9) settings in `simulation.conf`.
+
 ## conf-overrides
 **Config Overrides**
-Per-tenant overrides for `simulation.conf` and `user.conf` fields. Values entered here take precedence over the shared repo config at the spoke level.
+Per-tenant overrides for `simulation.conf` and `user-overrides.conf`. Both files use GitHub-first mode when a repo token is configured, but any hub override saved here takes precedence until it is cleared.
 
 - Use this to customize a specific tenant without modifying the shared GitHub repository
-- Override keys are deep-merged on top of the base config on each spoke
-- Leave fields blank to inherit unchanged values from the repo
-- Changes apply to all spokes in this tenant on the next config push
+- `simulation.conf` overrides are merged on top of the repo file on each spoke
+- `user-overrides.conf` overrides replace the GitHub copy when a hub-managed override is set
+- Changes are written locally on spokes as `hub-sim-overrides.conf` and `hub-user-overrides.conf`
+- Clearing the hub override returns the tenant to the GitHub-sourced file
 
 [Full documentation](https://github.com/solutions-hpe/webui-hub#config-overrides)
+
+## client-count-alarm
+**Client Count Alarm — Sites**
+Monitors the number of wireless clients per site and raises an alarm when the count drops significantly below the 7-day baseline.
+
+- **7-day baseline**: rolling average of hourly client counts over the past 7 days — provides a stable reference that a brief drop cannot suppress
+- **Alarm threshold**: raises DEGRADED when the current hourly average is more than 25% below the 7-day baseline
+- **Sticky alarms**: the alarm stays active as long as the site count remains below baseline, regardless of how long the drop has lasted — a multi-day outage does not self-resolve
+- **Fallback**: uses the 1-hour rolling average as baseline for the first day of operation (before 7-day history accumulates)
+
+The baseline is recalculated every hour and persisted to disk (`client_count_7day.json`) so it survives restarts.
+
+## spoke-config
+**Spoke Standalone Configuration**
+When operating without a hub, the spoke manages `simulation.conf` and `user-overrides.conf` directly.
+
+- **Config tab** (⚙ Config): edit all simulation.conf sections — [simulation], [server], [address], and s0–s9 bucket slots. Each section is a collapsible card; changes are saved per-section and pushed to GitHub.
+- **Setup → Simulation**: same editor, accessible from the Setup tab
+- **Config → User Overrides**: per-user override editor — add, edit, delete user sections with the same card layout as the hub
+
+In hub-connected mode, config changes pushed from the hub take precedence and are written to `hub-sim-overrides.conf` and `hub-user-overrides.conf` locally.
 
 ## fleet-reclone
 **Fleet Reclone**

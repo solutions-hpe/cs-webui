@@ -21,6 +21,7 @@ The UI is the operator-facing surface for:
 - approving and managing spokes
 - sending commands
 - managing Proxmox VM/USB operations
+- editing GitHub-backed `simulation.conf` and `user-overrides.conf` flows in hub or standalone spoke mode
 - configuring Aruba Central, notifications, relay, and TLS
 - checking service health and troubleshooting state
 
@@ -56,25 +57,25 @@ Hub requires login. Spoke mode does not implement the same tenant-auth flow.
 
 | Tab | What it is for |
 |---|---|
-| **Simulations** | Current simulation buckets, counts, Central correlation, hardware alert status, client-count monitoring |
+| **Simulations** | Current simulation buckets, counts, Central correlation, hardware alert status, and 7-day client-count baseline monitoring |
 | **Clients** | Live client inventory, status, SSID, active simulations, errors, and per-client control panel. Client type tabs: **All**, **T1** (no USB dongle), **T2** (has USB dongle), **IoT/T3** (placeholder) |
 | **Central** | Aruba Central overview plus site alerts, wireless client counts, and 24-hour history |
 | **VM Server** | Proxmox VM and USB management; appears when Proxmox integration is active. Sub-tabs: **VMs**, **USB (T2)**, **IoT (T3)**, **VirtualHere**, **Command Queue**, **Details** |
 | **API Server** | Spoke service status, health, and service log views |
-| **Config** | Read/edit `simulation.conf` and view bucket profiles |
-| **Setup** | Repository, VM/USB, Hub relay, Central API, notifications, TLS, and troubleshooting configuration |
+| **Config** | Unified `simulation.conf` editor plus standalone `user-overrides.conf` management |
+| **Setup** | Repository, Simulation, VM/USB, Hub relay, Central API, notifications, TLS, and troubleshooting configuration |
 
 #### Hub mode tabs
 
 | Tab | What it is for |
 |---|---|
 | **Tenants** | Superadmin landing view and tenant selection |
-| **Simulations** | Cross-spoke simulation summary inside a tenant context |
+| **Simulations** | Cross-spoke simulation summary inside a tenant context, including 7-day client-count baseline alarms |
 | **Clients** | Aggregate client list across the selected tenant |
 | **Spokes** | Approved spokes, detail modal, processing mode, spoke health, and access to VM Server workflows for backup/reseed operations |
 | **Commands** | Queue commands to a spoke |
 | **Setup** | Tenant settings, notifications, API info, TLS, and pending spoke approval |
-| **Config** | Tenant processing-mode summary/config |
+| **Config** | Tenant processing-mode summary plus `simulation.conf` / `user-overrides.conf` editors |
 | **Superadmin** | Tenant creation, user management, global kill switch state, and pending spoke approvals |
 
 Hub mode does not expose VM backup as a standalone top-level tab. In v1.0, those controls appear in the hub-side VM Server context for eligible spokes, including backup, reseed, and related recovery actions.
@@ -88,7 +89,7 @@ Use **Simulations** first to answer:
 - which simulation buckets exist right now
 - how many clients are attached to each bucket
 - whether the expected Aruba Central check is passing or failing
-- whether client-count or hardware-alert monitoring is reporting issues
+- whether 7-day client-count or hardware-alert monitoring is reporting issues
 
 #### 2. Clients
 
@@ -180,6 +181,14 @@ for:
 - install/service log history
 - Proxmox agent setup instructions
 - relay diagnostics
+
+#### 9. Config
+
+Use **Config** for the current config editors:
+
+- `simulation.conf` now uses the same unified collapsible-card layout in hub and spoke mode
+- Hub mode adds a per-user `user-overrides.conf` editor with user cards, **Add User** modal, delete actions, hostname search, and a **↗ Override** shortcut from the Simulation Clients list
+- Spoke mode exposes the same `simulation.conf` editor in **Config** and **Setup → Simulation**, plus standalone **Config → User Overrides** management
 
 ### Hub vs Spoke differences
 

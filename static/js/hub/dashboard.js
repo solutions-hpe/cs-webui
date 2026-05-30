@@ -12634,19 +12634,19 @@ function _qaModuleChecks(tenantId) {
       { name: "Hub config readable",           url: `/api/tenant/${T}/hub-config` },
       { name: "Onboarding PSK present",        url: `/api/tenant/${T}/onboarding-psk` },
       { name: "ACME status",                   url: "/api/acme/status" },
-      { name: "Aggregate dashboard responds",  url: "/api/aggregate/dashboard" },
+      { name: "Aggregate dashboard responds",  url: `/api/aggregate/dashboard?tenant_id=${T}` },
     ],
     spokes: [
       { name: "Approved spokes list",          url: `/api/${T}/spokes` },
       { name: "Pending spokes list",           url: `/api/tenant/${T}/pending-spokes` },
-      { name: "Aggregate dashboard has spokes", url: "/api/aggregate/dashboard",
+      { name: "Aggregate dashboard has spokes", url: `/api/aggregate/dashboard?tenant_id=${T}`,
         jsonTest: d => {
           const n = d?.spokes_total ?? d?.spoke_count ?? 0;
           return n > 0 ? null : { status: "WARN", detail: `spokes_total=${n} (no spokes?)` };
         }},
     ],
     proxmox: [
-      { name: "Aggregate proxmox data",        url: "/api/aggregate/proxmox" },
+      { name: "Aggregate proxmox data",        url: `/api/aggregate/proxmox?tenant_id=${T}` },
     ],
     usb: [
       { name: "Tenant USB VID/PIDs",           url: `/api/${T}/usb-vidpids` },
@@ -12666,9 +12666,9 @@ function _qaModuleChecks(tenantId) {
       { name: "Fleet reclone status",          url: `/api/${T}/aggregate/fleet-reclone-status` },
     ],
     clients: [
-      { name: "Aggregate clients list",        url: "/api/aggregate/clients" },
-      { name: "Aggregate simulations",         url: "/api/aggregate/simulations" },
-      { name: "Aggregate dashboard client count", url: "/api/aggregate/dashboard",
+      { name: "Aggregate clients list",        url: `/api/aggregate/clients?tenant_id=${T}` },
+      { name: "Aggregate simulations",         url: `/api/aggregate/simulations?tenant_id=${T}` },
+      { name: "Aggregate dashboard client count", url: `/api/aggregate/dashboard?tenant_id=${T}`,
         jsonTest: d => {
           const n = d?.client_count ?? d?.total_clients ?? 0;
           return n > 0 ? null : { status: "WARN", detail: `client_count=${n}` };
@@ -12676,7 +12676,7 @@ function _qaModuleChecks(tenantId) {
     ],
     commands: [
       { name: "Commands list",                 url: `/api/${T}/commands` },
-      { name: "API server aggregate",          url: "/api/aggregate/api-server" },
+      { name: "API server aggregate",          url: `/api/aggregate/api-server?tenant_id=${T}` },
     ],
     settings: [
       { name: "Tenant settings",               url: `/api/${T}/settings` },
@@ -12699,7 +12699,7 @@ function _qaModuleChecks(tenantId) {
     ],
     health: [
       { name: "Hub system health",             url: "/api/system/health" },
-      { name: "QA system health (NEW)",        url: "/api/aggregate/qa/system-health",
+      { name: "QA system health (NEW)",        url: `/api/aggregate/qa/system-health?tenant_id=${T}`,
         jsonTest: d => {
           if (!d) return { status: "FAIL", detail: "No data returned" };
           if (!d.all_ok) return { status: "FAIL", detail: (d.issues || []).join(", ") || "Degraded" };
@@ -12708,7 +12708,7 @@ function _qaModuleChecks(tenantId) {
       { name: "Kill switch state",             url: "/api/superadmin/gkill-state" },
     ],
     background: [
-      { name: "Aggregate dashboard (baseline)", url: "/api/aggregate/dashboard",
+      { name: "Aggregate dashboard (baseline)", url: `/api/aggregate/dashboard?tenant_id=${T}`,
         jsonTest: d => d ? null : { status: "FAIL", detail: "No dashboard data" } },
       { name: "Repo status (spoke proxy)",      url: `/api/${T}/spokes`,
         jsonTest: d => {

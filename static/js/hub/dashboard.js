@@ -941,6 +941,8 @@ function hubAggregateClientCount(spokes) {
         spoke_online: spoke.spoke_online,
         current: info.current,
         hourly_avg: info.hourly_avg,
+        baseline_7day: info.baseline_7day ?? null,
+        baseline_source: info.baseline_source ?? "hourly",
         drop_pct: info.drop_pct,
         status: info.status || "unknown",
         ts: info.ts || null,
@@ -1731,9 +1733,10 @@ function openHubCcDetail(wsite) {
     })
     .forEach((spoke) => {
       const dropValue = Number(spoke.drop_pct);
-      const avgValue = Number(spoke.hourly_avg);
+      const baselineValue = spoke.baseline_source === "7day" ? Number(spoke.baseline_7day) : Number(spoke.hourly_avg);
       const drop = Number.isFinite(dropValue) ? formatClientCountDelta(dropValue) : "—";
-      const avg = Number.isFinite(avgValue) ? avgValue.toFixed(1) : "—";
+      const baselineLabel = spoke.baseline_source === "7day" ? "7d avg" : "1h avg";
+      const baseline = Number.isFinite(baselineValue) ? baselineValue.toFixed(1) : "—";
       const row = document.createElement("div");
       row.className = "sim-site-row";
       row.style.display = "flex";
@@ -1745,7 +1748,7 @@ function openHubCcDetail(wsite) {
       row.innerHTML = `
         <span>
           <span class="sim-site-name">${escHtml(spoke.spoke_name)}</span>
-          <span style="display:block;font-size:0.82rem;color:var(--muted);margin-top:4px;">Current: ${spoke.current ?? "—"} / Avg: ${avg} / Δ: ${drop}${spoke.baseline_stale ? " · baseline stale" : ""}</span>
+          <span style="display:block;font-size:0.82rem;color:var(--muted);margin-top:4px;">Current: ${spoke.current ?? "—"} / ${baselineLabel}: ${baseline} / Δ: ${drop}${spoke.baseline_stale ? " · baseline stale" : ""}</span>
         </span>
         <span class="sim-status-badge ${hubCheckStatusClass(spoke.status)}">${escHtml(hubStatusLabel(spoke.status))}</span>
       `;
@@ -7696,6 +7699,8 @@ function renderHubCentralClients() {
   const summary = hubCentralMonitorSummary(hubCentralData);
   const rows = summary.sites.map((site) => {
     const info = site.client_count || {};
+    const baselineVal = info.baseline_source === "7day" ? (info.baseline_7day ?? info.hourly_avg) : info.hourly_avg;
+    const baselineLabel = info.baseline_source === "7day" ? "7d Baseline" : "1h Avg";
     const statusBadge = site.alerts_suppressed
       ? hubCentralBadge(site.client_status.label, 'gray', 'Suppressed while assigned spoke is offline')
       : hubCentralBadge(site.client_status.label, site.client_status.tone);
@@ -7703,7 +7708,7 @@ function renderHubCentralClients() {
       <tr>
         <td>${escHtml(site.wsite)}</td>
         <td>${info.current ?? site.wireless_clients ?? '—'}</td>
-        <td>${info.hourly_avg ?? '—'}</td>
+        <td>${baselineVal ?? '—'} <span style="font-size:0.75rem;opacity:0.6;">(${baselineLabel})</span></td>
         <td>${Number.isFinite(Number(info.drop_pct)) ? `${Number(info.drop_pct).toFixed(1)}%` : '—'}</td>
         <td>${statusBadge}</td>
       </tr>`;
@@ -7713,7 +7718,7 @@ function renderHubCentralClients() {
       ${hubCentralBannerHtml(summary)}
       <div class="setup-card">
         <table class="data-table">
-          <thead><tr><th>Site</th><th>Current Count</th><th>Hourly Avg</th><th>Drop %</th><th>Status</th></tr></thead>
+          <thead><tr><th>Site</th><th>Current Count</th><th>Baseline</th><th>Drop %</th><th>Status</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>`

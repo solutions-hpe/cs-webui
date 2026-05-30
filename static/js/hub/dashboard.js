@@ -3326,7 +3326,7 @@ function renderConfigSummaryRow(label, summary) {
 const HUB_SIM_BOOL_VALUES = new Set(["on", "off", "yes", "no", "true", "false"]);
 const HUB_SIM_PASSWORD_KEY_RE = /pw$|password|secret/i;
 const HUB_SIM_FIXED_SECTION_ORDER = ["simulation", "server", "address", ...Array.from({ length: 10 }, (_, idx) => `s${idx}`)];
-const HUB_SIM_SLOT_KEYS = ["central_check", "wsite", "ssid", "ssidpw", "dhcp_fail", "dns_fail", "assoc_fail", "port_flap", "ping_test", "download", "www_traffic", "iperf", "sim_phy", "l1"];
+const HUB_SIM_SLOT_KEYS = ["wsite", "ssid", "ssidpw", "dhcp_fail", "dns_fail", "assoc_fail", "port_flap", "ping_test", "download", "www_traffic", "iperf", "sim_phy", "l1"];
 const HUB_SIM_SELECT_FIELDS = { sim_phy: ["wireless", "ethernet"] };
 
 function resetHubSimulationConfState(tenantId = currentTenantId) {
@@ -3462,7 +3462,7 @@ function renderHubSimulationField(section, key, rawValue = "") {
   return `
     <label class="form-group">
       <span class="form-label">${escHtml(label)}</span>
-      <input class="form-input" type="${HUB_SIM_PASSWORD_KEY_RE.test(key) ? "password" : "text"}" value="${escHtml(value)}" data-section="${escHtml(section)}" data-key="${escHtml(key)}">
+      <input class="form-input" type="text" value="${escHtml(value)}" data-section="${escHtml(section)}" data-key="${escHtml(key)}">
     </label>
   `;
 }

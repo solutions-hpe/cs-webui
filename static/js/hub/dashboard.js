@@ -8956,9 +8956,8 @@ function renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search) 
                <td style="white-space:nowrap;${tdP}">${escHtml(c.ssid || "—")}</td>`
             : `<td style="white-space:nowrap;${tdP}">${escHtml(c.vlan || "—")}</td>`;
         return `<tr>
-          <td style="width:30%;${tdP}"><strong>${escHtml(c.hostname || "—")}</strong><div style="font-size:11px;color:var(--muted);">${escHtml(c.mac || "")}</div></td>
-          <td style="white-space:nowrap;${tdP}">${escHtml(c.site || "—")}</td>
-          <td style="white-space:nowrap;${tdP}">${escHtml(c.ip || "—")}</td>
+          <td style="width:28%;${tdP}"><strong>${escHtml(c.hostname || "—")}</strong><div style="font-size:11px;color:var(--muted);margin-top:2px;">${escHtml(c.mac || "")}</div></td>
+          <td style="${tdP}"><span style="white-space:nowrap;">${escHtml(c.ip || "—")}</span>${c.site ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;">${escHtml(c.site)}</div>` : ""}</td>
           ${wirelessCells}
           <td style="white-space:nowrap;${tdP}">${statusDot}</td>
           <td style="white-space:nowrap;${tdP}">${hubCaMonitorBtn("client", {
@@ -8979,11 +8978,10 @@ function renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search) 
           : `<th style="padding:5px 10px;white-space:nowrap;">VLAN</th>`;
       container.innerHTML = tabPills + `
         <div class="setup-card" style="overflow-x:auto;padding:0;">
-          <table class="data-table" style="font-size:0.82rem;margin:0;min-width:${isAll ? 800 : isWireless ? 700 : 600}px;width:100%;">
+          <table class="data-table" style="font-size:0.82rem;margin:0;min-width:${isAll ? 700 : isWireless ? 600 : 500}px;width:100%;">
             <thead><tr>
-              <th style="width:30%;padding:5px 10px;">Client</th>
-              <th style="padding:5px 10px;white-space:nowrap;">Site</th>
-              <th style="padding:5px 10px;white-space:nowrap;">IP</th>
+              <th style="width:28%;padding:5px 10px;">Client</th>
+              <th style="padding:5px 10px;white-space:nowrap;">IP / Site</th>
               ${extraHeaders}
               <th style="padding:5px 10px;white-space:nowrap;">Status</th>
               <th style="padding:5px 10px;"></th>

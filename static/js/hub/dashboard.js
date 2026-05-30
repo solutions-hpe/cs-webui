@@ -5476,6 +5476,11 @@ function _hubVmStatusDot(vm) {
   return "⚫";
 }
 
+function _hubVmStatusLabel(vm) {
+  if (vm.prov_status === "provisioning") return "provisioning";
+  return vm.status || "unknown";
+}
+
 // ── VMs tab ──────────────────────────────────────────────────────────────────
 
 function renderHubVmServerVmsPanel(tenantId, spokeId, { simVms, otherVms, containerVms, templateVms, reclone, px, host }) {
@@ -5592,7 +5597,7 @@ function _hubVmFullTable(spokeId, vms, catId) {
   const rows = sorted.map(vm => {
     const isDeleting = vm.status === "deleting";
     const dot = _hubVmStatusDot(vm);
-    const statusLabel = isDeleting ? `🟡 deleting…` : `${dot} ${escHtml(vm.status || "unknown")}`;
+    const statusLabel = isDeleting ? `🟡 deleting…` : `${dot} ${escHtml(_hubVmStatusLabel(vm))}`;
     const cpu = (!isDeleting && vm.status === "running" && vm.cpu != null && !Number.isNaN(Number(vm.cpu)))
       ? Number(vm.cpu).toFixed(1) + "%" : "—";
     const ram = (vm.mem && vm.maxmem)
@@ -5648,7 +5653,7 @@ function _hubVmTemplateTable(vms) {
       <td>${escHtml(vm.name || "—")}</td>
       <td>${cpu}</td>
       <td>${ram}</td>
-      <td>${dot} ${escHtml(vm.status || "unknown")}</td>
+      <td>${dot} ${escHtml(_hubVmStatusLabel(vm))}</td>
     </tr>`;
   }).join("");
   return `<table class="data-table">
@@ -6426,7 +6431,7 @@ function renderHubVmServerIoTPanel(spokeId, iotVms) {
                   <td>${escHtml(String(vm.vmid ?? "—"))}</td>
                   <td>${escHtml(vm.name || "—")}</td>
                   <td>${escHtml(vm.type || "qemu")}</td>
-                  <td>${_hubVmStatusDot(vm)} ${escHtml(vm.status || "—")}</td>
+                  <td>${_hubVmStatusDot(vm)} ${escHtml(_hubVmStatusLabel(vm))}</td>
                   <td style="font-size:.8rem;color:var(--muted);">${escHtml((vm.pci_passthrough_addrs || []).join(", ") || "—")}</td>
                   <td style="white-space:nowrap;">
                     <button class="btn-icon hub-vm-action" data-action="start_vm"   data-vmid="${escHtml(String(vm.vmid))}" title="Start">▶</button>
@@ -6459,7 +6464,7 @@ function renderHubVmServerOtherPanel(spokeId, otherVms) {
                   <td>${escHtml(String(vm.vmid ?? "—"))}</td>
                   <td>${escHtml(vm.name || "—")}</td>
                   <td>${escHtml(vm.type || "qemu")}</td>
-                  <td>${_hubVmStatusDot(vm)} ${escHtml(vm.status || "—")}</td>
+                  <td>${_hubVmStatusDot(vm)} ${escHtml(_hubVmStatusLabel(vm))}</td>
                   <td style="white-space:nowrap;">
                     <button class="btn-icon hub-vm-action" data-action="start_vm"   data-vmid="${escHtml(String(vm.vmid))}" title="Start">▶</button>
                     <button class="btn-icon hub-vm-action" data-action="stop_vm"    data-vmid="${escHtml(String(vm.vmid))}" title="Stop">■</button>

@@ -5351,6 +5351,7 @@ function _hubVmFullTable(spokeId, vms, catId) {
           ? `${fmtSize(Number(vm.maxmem) * 1024 * 1024)} (alloc)`
           : `${fmtSize(Number(vm.mem) * 1024 * 1024)} / ${fmtSize(Number(vm.maxmem) * 1024 * 1024)}`)
       : "—";
+    const vmidStr = escHtml(String(vm.vmid ?? "—"));
     const actions = isDeleting
       ? `<span style="font-size:0.82rem;color:var(--muted);font-style:italic;">deleting…</span>`
       : [

@@ -988,6 +988,18 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   border: 1px solid rgba(1,169,130,0.3);
 }
 
+.settings-message.warn {
+  background: var(--hpe-orange-bg);
+  color: #b85c00;
+  border: 1px solid rgba(255,141,109,0.4);
+}
+
+.settings-message.info {
+  background: var(--hpe-blue-bg);
+  color: #006B8F;
+  border: 1px solid rgba(0,200,255,0.3);
+}
+
 .settings-message.error {
   background: var(--hpe-red-bg);
   color: #C0392B;

@@ -216,7 +216,7 @@ function showToast(message, level = "ok") {
   const container = $("#toast-container");
   if (!container) return;
   const toast = document.createElement("div");
-  const cls = level === "ok" ? "success" : level === "warn" ? "error" : "error";
+  const cls = (level === "error") ? "error" : (level === "warn") ? "warn" : (level === "info") ? "info" : "success";
   toast.className = `settings-message ${cls}`;
   toast.textContent = message;
   toast.style.cssText = "min-width:240px;max-width:420px;box-shadow:0 4px 16px rgba(0,0,0,0.15);cursor:pointer;";

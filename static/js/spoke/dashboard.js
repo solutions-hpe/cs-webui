@@ -1213,7 +1213,7 @@ function showNotification(message, level = 'info') {
   }
   clearTimeout(notice._timer);
   notice.textContent = message;
-  notice.className = `app-notification settings-message ${level === 'error' ? 'error' : 'success'}`;
+  notice.className = `app-notification settings-message ${level === 'error' ? 'error' : level === 'warn' ? 'warn' : level === 'info' ? 'info' : 'success'}`;
   notice._timer = setTimeout(() => {
     notice.className = 'app-notification settings-message hidden';
   }, 4000);

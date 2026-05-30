@@ -3469,7 +3469,7 @@ function renderHubSimulationField(section, key, rawValue = "") {
 
 function renderHubSimulationSection(section, values = {}, { open = false } = {}) {
   const keys = hubSimulationSectionKeys(section, values);
-  const title = String(section).match(/^s\d+$/) ? `Slot [${section}]` : `[${section}]`;
+  const title = String(section).match(/^s(\d+)$/) ? `Simulation S${section.slice(1)}` : `[${section}]`;
   const fields = keys.length
     ? keys.map((key) => renderHubSimulationField(section, key, values[key] ?? "")).join("")
     : '<div class="muted">No fields found in this section.</div>';

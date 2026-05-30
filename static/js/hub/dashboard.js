@@ -5096,6 +5096,24 @@ function renderHubVmServerDetail(container, host) {
     { id: "details",  label: "Details" },
   ];
 
+  // Proxmox agent approval state
+  const pendingAgents = Array.isArray(px.pending_proxmox) ? px.pending_proxmox : [];
+  const approvedAgents = Array.isArray(px.approved_proxmox) ? px.approved_proxmox : [];
+  const agentPending = pendingAgents[0] || null;
+  const agentApproved = approvedAgents[0] || null;
+  let agentBtnLabel = "";
+  let agentBtnHostname = "";
+  let agentBtnAction = "";
+  if (agentPending) {
+    agentBtnLabel = `✓ Approve Agent`;
+    agentBtnHostname = agentPending.hostname || "";
+    agentBtnAction = "approve";
+  } else if (agentApproved) {
+    agentBtnLabel = `✕ Revoke Agent`;
+    agentBtnHostname = agentApproved.hostname || "";
+    agentBtnAction = "revoke";
+  }
+
   container.innerHTML = `
     <div class="hub-vmserver-detail">
       <div class="hub-vmserver-detail-header" style="display:flex;align-items:center;gap:12px;padding:10px 0 12px;flex-wrap:wrap;">
@@ -5104,6 +5122,7 @@ function renderHubVmServerDetail(container, host) {
         <span class="stat-pill ${host.spoke_online ? "online" : "offline"}">${host.spoke_online ? "Online" : "Offline"}</span>
         <span class="stat-pill">${escHtml(String(host.vm_count || 0))} VMs</span>
         <span class="stat-pill">${escHtml(String(host.usb_count || 0))} USB</span>
+        ${agentBtnLabel ? `<button id="hub-vmserver-agent-approve-btn" class="btn btn-secondary btn-small" type="button" data-hostname="${escHtml(agentBtnHostname)}" data-action="${agentBtnAction}">${escHtml(agentBtnLabel)}</button>` : ""}
       </div>
       ${templateLock ? `
         <div class="setup-card setup-section-gap" style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid #f59e0b;background:rgba(245,158,11,.12);">
@@ -5133,6 +5152,29 @@ function renderHubVmServerDetail(container, host) {
     } finally {
       btn.disabled = false;
       btn.textContent = "Unlock";
+    }
+  });
+  document.getElementById("hub-vmserver-agent-approve-btn")?.addEventListener("click", async (event) => {
+    const btn = event.currentTarget;
+    const action = btn.dataset.action;
+    const hostname = btn.dataset.hostname;
+    if (!hostname) return;
+    if (action === "revoke" && !confirm(`Revoke Proxmox agent key for ${hostname}?`)) return;
+    btn.disabled = true;
+    btn.textContent = action === "approve" ? "Approving…" : "Revoking…";
+    try {
+      const endpoint = action === "approve" ? "proxmox-approve-agent" : "proxmox-revoke-agent";
+      const resp = await apiFetch(`/api/${encodeURIComponent(tenantId)}/aggregate/${endpoint}`, {
+        method: "POST",
+        body: { spoke_id: spokeId, hostname },
+      });
+      if (!resp?.ok) throw new Error(`HTTP ${resp?.status ?? "?"}`);
+      showToast(action === "approve" ? `Queued agent approval for ${hostname}.` : `Queued agent revoke for ${hostname}.`, "ok");
+      setTimeout(() => loadVmServer(true), 3000);
+    } catch (err) {
+      showToast(err?.message || "Action failed.", "error");
+      btn.disabled = false;
+      btn.textContent = agentBtnLabel;
     }
   });
 

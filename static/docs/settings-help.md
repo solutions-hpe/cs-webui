@@ -149,14 +149,72 @@ When enabled, the hub maintains a canonical spoke configuration and automaticall
 
 ## simulation-conf
 **simulation.conf**
-The primary configuration file for the client-simulator. Controls SSID targeting, L1/L2 simulation parameters, reclone schedule, USB VID:PID filters, and more.
+The primary configuration file for the client-simulator. Defines how every client VM connects, what traffic it generates, and which fault scenarios it runs. Organized into four section types:
 
-- Fetched from GitHub if a repository is configured; falls back to a hub-managed override if not
-- Displayed here read-only when sourced from GitHub — edit the file in the repo to update it
-- All section types use the same unified card layout with collapsible `<details>` sections
-- Text and select fields render in a responsive grid; boolean flags render as inline checkboxes
-- Slot sections (`s0`–`s9`) always show the full standard key set, even when some values are blank in the file
-- `user-overrides.conf` applies per-user exceptions on top of the bucket-level slot settings
+- **[simulation]** — global flags and defaults applied to every client
+- **[server]** — spoke dashboard URL that clients report status to
+- **[address]** — server IP addresses for specific simulation tests
+- **[s0]–[s9]** — per-bucket slot configurations; each client is assigned to one bucket
+
+Fetched from GitHub if a repository is configured; falls back to a hub-managed override if not. `user-overrides.conf` can override any field per username on top of the slot settings.
+
+---
+
+**[simulation] fields**
+
+- **Kill Switch** (`kill_switch`) — when `on`, immediately stops all simulations on every client in this tenant. Clients stay connected to Wi-Fi but stop generating traffic. Use to pause activity without rebooting or destroying VMs.
+- **Rapid Update** (`rapid_update`) — when `on`, clients skip the GitHub pull at startup and launch immediately from the scripts already on disk. Boots faster. When `off`, clients pull the latest scripts from the configured repo before running.
+- **Sim Load** (`sim_load`) — percentage of slot buckets to activate: `100` = all run, `75` = 3 out of 4, `50` = half, `25` = 1 in 4, `0` = clients stay associated but run no traffic simulations.
+- **Github Repo** (`github_repo`) — when `on`, update scripts are pulled from the GitHub repository on every startup cycle. Set `off` for air-gapped environments that use a local copy or SMB share instead.
+- **Repo Location** (`repo_location`) — HTTPS URL of the GitHub repository containing client simulation scripts (e.g. `https://github.com/org/client-sim`).
+- **Repo Branch** (`repo_branch`) — Git branch to pull scripts from. Defaults to `main`. Change to a staging or feature branch to test new scripts without affecting production clients.
+- **SMB Repo** (`smb_repo`) — when `on`, scripts are pulled from an SMB/CIFS network share instead of GitHub. Configure the share path in `[address] → smb_address`. Useful in environments without public internet access.
+- **Site Based SSID** (`site_based_ssid`) — when `on`, each client joins the SSID associated with its assigned site (wsite) rather than the SSID written in its s0–s9 slot. Useful when multiple sites share one simulation config but have different Wi-Fi networks.
+- **Reboot Schedule** (`reboot_schedule`) — minutes until the client schedules an automatic reboot. Up to 600 seconds of random jitter is added so the fleet doesn't reboot simultaneously. Set to `0` to disable scheduled reboots entirely.
+- **Allow Offline** (`allow_offline`) — when `on`, clients continue running simulations even when they cannot reach the spoke/hub dashboard. When `off`, clients that lose dashboard connectivity pause their simulations.
+- **SSIDpw Fail** (`ssidpw_fail`) — global flag: when `on`, clients deliberately use wrong Wi-Fi passphrases across all slots to simulate authentication failures visible in Aruba Central.
+- **Auth Fail** (`auth_fail`) — global flag: when `on`, clients simulate 802.1X authentication failures (wrong credentials / bad EAP exchange) on all enterprise SSID slots.
+- **Dot1x Password** (`dot1x_password`) — password used for WPA-Enterprise / 802.1X authentication. Paired with `dot1x_eap`. This field is masked in the UI.
+- **Dot1x EAP** (`dot1x_eap`) — EAP method for 802.1X: `peap` (most common), `tls`, `ttls`, etc.
+- **Iperf BW** (`iperf_bw`) — target bandwidth for iPerf3 throughput tests (e.g. `1k`, `10m`, `100m`). Applies to all slots with `iperf = on`.
+- **Syslog** (`syslog`) — when `on`, clients forward simulation status and error messages to the syslog server in `[address] → syslog_server`.
+- **Web Server** (`web_server`) — when `on`, each client VM runs a lightweight HTTP server for health checks and connectivity probing by other components.
+
+---
+
+**[server] fields**
+
+- **Server URL** (`server_url`) — URL of the spoke web UI that clients post their status to. Must be reachable from the client VM's network (e.g. `http://192.168.1.10:8000`). Controls where live client data appears in the Simulations tab.
+
+---
+
+**[address] fields**
+
+- **SMB Address** (`smb_address`) — UNC path to the SMB/CIFS share used when `smb_repo = on` (e.g. `//nas/scripts`).
+- **Ping Address** (`ping_address`) — IP address clients send ICMP pings to for connectivity tests (`ping_test = on`).
+- **DNS Latency 1/2/3** (`dns_latency_1`, `_2`, `_3`) — DNS resolver IPs used for latency measurement simulations.
+- **DNS Bad IP 1/2/3** (`dns_bad_ip_1`, `_2`, `_3`) — intentionally unreachable IPs injected into DNS responses to simulate resolution failures.
+- **DNS Bad Record 1/2/3** (`dns_bad_record_1`, `_2`, `_3`) — DNS records that return unexpected results, used to trigger DNS-failure detection in Aruba Central.
+- **iPerf Server** (`iperf_server`) — IP or hostname of the iPerf3 server clients connect to for throughput tests.
+- **Syslog Server** (`syslog_server`) — IP or hostname of the syslog collector receiving client log messages.
+
+---
+
+**[s0]–[s9] slot fields** (applied per client bucket)
+
+- **WSite** (`wsite`) — Aruba Central site name. Must match the site name exactly. Clients in this slot appear under this site in Central and in the Sites health tab.
+- **SSID** (`ssid`) — Wi-Fi network the client connects to. Overridden per-site when `site_based_ssid = on`.
+- **SSID Password** (`ssidpw`) — Wi-Fi passphrase (PSK). Not used for 802.1X SSIDs.
+- **DHCP Fail** (`dhcp_fail`) — when `on`, the client releases its DHCP lease and deliberately fails to renew, simulating address exhaustion or a rogue DHCP scenario at the site.
+- **DNS Fail** (`dns_fail`) — when `on`, the client uses the `dns_bad_ip` and `dns_bad_record` addresses to generate DNS failures that should appear as alerts in Aruba Central.
+- **Assoc Fail** (`assoc_fail`) — when `on`, the client repeatedly de-authenticates and re-associates to simulate association instability and generate Max-Associations events.
+- **Port Flap** (`port_flap`) — when `on`, the wired or wireless interface is toggled up and down at intervals to simulate physical port instability (switch port, USB dongle, etc.).
+- **Ping Test** (`ping_test`) — when `on`, the client runs periodic ICMP pings to `ping_address` and reports success/failure to the spoke dashboard.
+- **Download** (`download`) — when `on`, the client downloads files from the configured download list to generate realistic bulk download traffic.
+- **WWW Traffic** (`www_traffic`) — when `on`, the client browses a list of websites to generate HTTP/HTTPS traffic and measure web reachability from the site.
+- **iPerf** (`iperf`) — when `on`, the client runs iPerf3 throughput tests against `iperf_server` at the `iperf_bw` rate.
+- **Sim PHY** (`sim_phy`) — physical medium: `wireless` = Wi-Fi adapter, `ethernet` = wired adapter. Determines which interface is used for simulation traffic.
+- **L1** (`l1`) — when `on`, the client runs Layer-1 diagnostics (signal strength, RSSI, SNR checks) and includes physical-layer health in its status report.
 
 [Full documentation](https://github.com/solutions-hpe/webui-hub#simulation-conf)
 

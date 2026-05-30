@@ -5349,9 +5349,10 @@ function _hubVmFullTable(spokeId, vms, catId) {
     const cpu = (!isDeleting && vm.status === "running" && vm.cpu != null && !Number.isNaN(Number(vm.cpu)))
       ? Number(vm.cpu).toFixed(1) + "%" : "—";
     const ram = (vm.mem && vm.maxmem)
-      ? `${fmtSize(Number(vm.mem) * 1024 * 1024)} / ${fmtSize(Number(vm.maxmem) * 1024 * 1024)}`
+      ? (Number(vm.mem) >= Number(vm.maxmem) * 0.99
+          ? `${fmtSize(Number(vm.maxmem) * 1024 * 1024)} (alloc)`
+          : `${fmtSize(Number(vm.mem) * 1024 * 1024)} / ${fmtSize(Number(vm.maxmem) * 1024 * 1024)}`)
       : "—";
-    const vmidStr = escHtml(String(vm.vmid ?? "—"));
     const actions = isDeleting
       ? `<span style="font-size:0.82rem;color:var(--muted);font-style:italic;">deleting…</span>`
       : [
@@ -5390,7 +5391,9 @@ function _hubVmTemplateTable(vms) {
     const dot = _hubVmStatusDot(vm);
     const cpu = vm.cpu != null ? Number(vm.cpu).toFixed(1) + "%" : "—";
     const ram = (vm.mem && vm.maxmem)
-      ? `${fmtSize(Number(vm.mem) * 1024 * 1024)} / ${fmtSize(Number(vm.maxmem) * 1024 * 1024)}`
+      ? (Number(vm.mem) >= Number(vm.maxmem) * 0.99
+          ? `${fmtSize(Number(vm.maxmem) * 1024 * 1024)} (alloc)`
+          : `${fmtSize(Number(vm.mem) * 1024 * 1024)} / ${fmtSize(Number(vm.maxmem) * 1024 * 1024)}`)
       : "—";
     return `<tr>
       <td>${escHtml(String(vm.vmid ?? "—"))}</td>

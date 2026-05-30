@@ -1538,7 +1538,7 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   background: var(--card-bg, #fff);
   color: var(--text);
   cursor: pointer;
-  min-width: 140px;
+  min-width: 110px;
 }
 .demo-scenario-select--active {
   border-color: #e74c3c;
@@ -1616,6 +1616,7 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 }
 .hub-client-site-table {
   table-layout: auto;
+  width: 100%; /* override .table-scroll max-content so table fits without horizontal scroll */
 }
 .hub-client-site-table th,
 .hub-client-site-table td {

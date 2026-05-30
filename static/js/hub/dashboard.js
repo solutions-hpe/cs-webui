@@ -3687,7 +3687,7 @@ async function clearHubConfOverride(type) {
 // ─── Hub Demo Scenario Functions ─────────────────────────────────────────────
 
 const HUB_DEMO_SCENARIOS = [
-  { key: 'normal',      label: '— Normal (no failure) —' },
+  { key: 'normal',      label: '— Normal —' },
   { key: 'dns_fail',    label: 'DNS Fail'   },
   { key: 'dhcp_fail',   label: 'DHCP Fail'  },
   { key: 'assoc_fail',  label: 'Assoc Fail' },

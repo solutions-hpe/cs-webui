@@ -496,11 +496,11 @@
         <!-- Settings panel (Central API config + GitHub) -->
         <div id="ts-ca-settings-panel" style="padding:16px;overflow-y:auto;">
           <div class="setup-card" style="margin-bottom:16px;">
-            <div class="setup-card-header"><h2>Central API</h2><p>Configure HPE Aruba Central API credentials for this tenant.</p></div>
+            <div class="setup-card-header"><h2>Central API <button class="help-icon" data-help-topic="aruba-central" type="button" aria-label="Help">?</button></h2><p>Configure HPE Aruba Central API credentials for this tenant.</p></div>
             <div class="setup-form">
               <div class="form-row">
                 <div class="form-group">
-                  <label class="form-label" for="ts-ca-central-api-version">API Version</label>
+                  <label class="form-label" for="ts-ca-central-api-version">API Version <button class="help-icon" data-help-topic="aruba-central-mode" type="button" aria-label="Help">?</button></label>
                   <select id="ts-ca-central-api-version" class="form-input">
                     <option value="classic">Classic</option>
                     <option value="new_central">Central / HPE GreenLake</option>
@@ -553,7 +553,7 @@
             </div>
           </div>
           <div class="setup-card">
-            <div class="setup-card-header"><h2>GitHub</h2><p>Configure GitHub repository and personal access token for simulation configs.</p></div>
+            <div class="setup-card-header"><h2>GitHub <button class="help-icon" data-help-topic="github-repo" type="button" aria-label="Help">?</button></h2><p>Configure GitHub repository and personal access token for simulation configs.</p></div>
             <div class="setup-form">
               <div class="form-group">
                 <label class="form-label" for="ts-ca-github-repo-url">Simulation Repo URL</label>
@@ -608,7 +608,7 @@
         </div>
         <div id="ts-proxmox-content">
           <div class="setup-card" style="margin:16px;">
-            <div class="setup-card-header"><h2>VM Auto-Provisioning</h2></div>
+            <div class="setup-card-header"><h2>VM Auto-Provisioning <button class="help-icon" data-help-topic="auto-provisioning" type="button" aria-label="Help">?</button></h2></div>
             <div class="setup-form">
               <div class="settings-section">
                 <div class="settings-section-title">Provisioning Behavior</div>
@@ -620,17 +620,17 @@
                 </div>
                 <div class="form-row" style="margin-top:12px;">
                   <div class="form-group">
-                    <label class="form-label" for="ts-usb-missing-timeout">Destroy after missing (minutes)</label>
+                    <label class="form-label" for="ts-usb-missing-timeout">Destroy after missing (minutes) <button class="help-icon" data-help-topic="usb-missing-timeout" type="button" aria-label="Help">?</button></label>
                     <input id="ts-usb-missing-timeout" class="form-input" type="number" value="60" min="1" placeholder="60">
                   </div>
                   <div class="form-group">
-                    <label class="form-label" for="ts-usb-max-slots">Max VMs per host</label>
+                    <label class="form-label" for="ts-usb-max-slots">Max VMs per host <button class="help-icon" data-help-topic="usb-max-slots" type="button" aria-label="Help">?</button></label>
                     <input id="ts-usb-max-slots" class="form-input" type="number" value="24" min="1" max="256" placeholder="24">
                   </div>
                 </div>
               </div>
               <div class="settings-section">
-                <div class="settings-section-title">VM Templates</div>
+                <div class="settings-section-title">VM Templates <button class="help-icon" data-help-topic="vm-templates" type="button" aria-label="Help">?</button></div>
                 <div class="form-row">
                   <div class="form-group">
                     <label class="form-label" for="ts-vm-image-1-template-id">VM Image 1 Template VMID</label>
@@ -647,7 +647,7 @@
                 </div>
               </div>
               <div class="settings-section">
-                <div class="settings-section-title">Parallel Provisioning</div>
+                <div class="settings-section-title">Parallel Provisioning <button class="help-icon" data-help-topic="reclone-concurrency" type="button" aria-label="Help">?</button></div>
                 <div class="form-row">
                   <div class="form-group">
                     <label class="form-label" for="ts-reclone-concurrency">Max parallel operations</label>
@@ -656,7 +656,7 @@
                 </div>
                 <div class="form-row">
                   <div class="form-group">
-                    <label class="form-label" for="ts-protected-vmids">Protected VMIDs</label>
+                    <label class="form-label" for="ts-protected-vmids">Protected VMIDs <button class="help-icon" data-help-topic="protected-vmids" type="button" aria-label="Help">?</button></label>
                     <input id="ts-protected-vmids" class="form-input" type="text" placeholder="e.g. 101, 102, 200">
                     <span class="form-hint">Comma-separated VMIDs that cannot be started, stopped, recloned, or deleted. VM 1001 is always protected.</span>
                   </div>
@@ -922,7 +922,7 @@
 
         <div id="settings-notifications" class="setup-subpanel hidden" style="margin-top:16px;">
           <div class="setup-card" style="max-width:600px;">
-            <div class="setup-card-header"><h2>Notifications</h2></div>
+            <div class="setup-card-header"><h2>Notifications <button class="help-icon" data-help-topic="notifications" type="button" aria-label="Help">?</button></h2></div>
             <div class="setup-form">
               <div class="form-group">
                 <label class="form-label"><input id="notif-enabled" type="checkbox"> Enable notifications</label>
@@ -945,7 +945,7 @@
         <div id="settings-tls" class="setup-subpanel hidden" style="margin-top:16px;">
           <div class="setup-card" id="settings-tls-card" style="max-width:700px;">
             <div class="setup-card-header">
-              <h2>TLS Certificate</h2>
+              <h2>TLS Certificate <button class="help-icon" data-help-topic="tls-acme" type="button" aria-label="Help">?</button></h2>
               <p>Configure automatic certificate management via ACME (Let's Encrypt / ZeroSSL).</p>
             </div>
             <div id="acme-cert-status" class="setup-status-grid"></div>
@@ -1156,7 +1156,7 @@
         <div id="settings-spoke-config" class="setup-subpanel hidden" style="margin-top:16px;">
           <div class="setup-card" style="max-width:760px;">
             <div class="setup-card-header">
-              <h2>Spoke Config (Hub as Source of Truth)</h2>
+              <h2>Spoke Config (Hub as Source of Truth) <button class="help-icon" data-help-topic="hub-config-source-of-truth" type="button" aria-label="Help">?</button></h2>
               <p>When enabled, the hub pushes this config to all spokes on approval and whenever it changes. The first approved spoke seeds this config automatically.</p>
             </div>
             <div class="form-row" style="margin-bottom:18px;">
@@ -3182,7 +3182,7 @@
           <!-- Proxmox Agent Setup -->
           <div class="setup-card setup-section-gap">
             <div class="setup-card-header">
-              <h2>Proxmox Agent Setup</h2>
+              <h2>Proxmox Agent Setup <button class="help-icon" data-help-topic="proxmox-agent" type="button" aria-label="Help">?</button></h2>
               <p>Run this command on each Proxmox host to install the agent. The host will appear in the Server tab pending approval.</p>
             </div>
             <div style="display:flex;gap:8px;align-items:stretch;margin-bottom:4px;">
@@ -3230,5 +3230,15 @@
   </footer>
 
   <div id="toast-container" style="position:fixed;top:72px;right:24px;z-index:400;display:flex;flex-direction:column;gap:8px;"></div>
+
+  <!-- Help Panel -->
+  <div id="help-panel-overlay" class="help-panel-overlay hidden"></div>
+  <aside id="help-panel" class="help-panel hidden" role="dialog" aria-modal="true" aria-label="Help">
+    <div class="help-panel-header">
+      <span id="help-panel-title">Help</span>
+      <button id="help-panel-close" class="btn btn-ghost btn-small" type="button" aria-label="Close" onclick="closeHelpPanel()">✕</button>
+    </div>
+    <div id="help-panel-content" class="help-panel-content"></div>
+  </aside>
 </body>
 </html>

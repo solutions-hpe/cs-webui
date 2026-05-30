@@ -1781,7 +1781,7 @@ function renderClientRowsForHub() {
               ${hubClientTypeFilter === 't3' ? renderHubT3PciSection(site) : ""}
               <div class="table-scroll">
                 <table class="data-table hub-client-site-table">
-                  <thead><tr><th>Status</th><th>Hostname</th><th>Platform</th><th>SSID</th><th style="white-space:nowrap">Last Seen</th><th>Errors</th>${showDemoButtons ? '<th>Demo Scenario</th>' : ''}</tr></thead>
+                  <thead><tr><th>Status</th><th>Hostname</th><th>Platform</th><th style="min-width:120px;white-space:nowrap">SSID</th><th style="white-space:nowrap">Last Seen</th><th>Errors</th>${showDemoButtons ? '<th>Demo Scenario</th>' : ''}</tr></thead>
                   <tbody>
                     ${site.clients.map(client => {
                       const sims = normalizeHubClientActiveSimulations(client.active_simulations);
@@ -1794,7 +1794,7 @@ function renderClientRowsForHub() {
                           <td class="status-cell">${statusDot(Boolean(client.online))}</td>
                           <td class="hostname-cell">${escHtml(client.hostname || "—")}</td>
                           <td>${escHtml(client.platform || client.hw_type || "—")}</td>
-                          <td>${escHtml(client.connected_ssid || "—")}</td>
+                          <td style="white-space:nowrap">${escHtml(client.connected_ssid || "—")}</td>
                           <td class="nowrap-cell"><span title="${escHtml(fmtDate(client.last_seen))}">${escHtml(relativeTime(client.last_seen))}</span></td>
                           <td>${Number(client.error_count || 0)}</td>
                           ${showDemoButtons ? `<td class="hub-demo-btn-cell" data-hostname="${escHtml(client.hostname || '')}" data-spoke-id="${escHtml(client.spoke_id || '')}"></td>` : ''}

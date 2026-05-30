@@ -1104,9 +1104,10 @@ function renderHubStatusTab() {
       // Use Central API timestamps (when the alert actually fired), not polling time.
       const centralLast = item.central_last_seen ? new Date(item.central_last_seen).toLocaleString() : null;
       const centralFirst = item.central_first_seen ? new Date(item.central_first_seen).toLocaleString() : null;
-      const lastSeen = centralLast || (item.last_seen ? new Date(item.last_seen * 1000).toLocaleString() : null);
-      const detail = centralFirst && centralLast && centralFirst !== centralLast
-        ? `First: ${centralFirst}` : null;
+      const pollLast = item.last_seen ? new Date(item.last_seen * 1000).toLocaleString() : null;
+      const lastSeen = centralLast || pollLast || (tone === "green" ? "Online" : null);
+      // Show first_seen whenever available — even when equal to last_seen (single occurrence).
+      const detail = centralFirst || null;
       return {
         _tone: tone,
         _label: label,
@@ -1518,7 +1519,8 @@ function renderHubHwPanel() {
       const badge = `<span style="display:inline-flex;align-items:center;gap:5px;color:${dotColor};font-weight:600;font-size:0.82rem;"><span style="width:8px;height:8px;border-radius:50%;background:${dotColor};flex-shrink:0;"></span>${escHtml(label)}</span>`;
       const lastSeen = item.central_last_seen
         ? new Date(item.central_last_seen).toLocaleString()
-        : (item.last_seen ? new Date(item.last_seen * 1000).toLocaleString() : "—");
+        : item.last_seen ? new Date(item.last_seen * 1000).toLocaleString()
+        : tone === "green" ? "Online" : "—";
       const removeBtn = item.id
         ? `<button class="btn btn-small btn-secondary hub-monitored-remove-btn" data-item-id="${escHtml(item.id)}" type="button">Remove</button>`
         : "";

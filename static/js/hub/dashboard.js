@@ -43,6 +43,7 @@ let hubConfigDraft = "";
 let hubConfigActiveSubtab = "api";
 let hubSimulationConfState = { tenantId: null, loaded: false, loading: false, rawContent: "", sha: "", fetchedAt: "", sections: {}, sectionOrder: [], keyOrder: {}, error: "", mode: "github" };
 let hubUserOverridesConfState = { tenantId: null, loaded: false, loading: false, rawContent: "", fetchedAt: "", sections: {}, sectionOrder: [], keyOrder: {}, error: "" };
+let hubUserOverrideModalState = { open: false, hostname: "", simId: "", autoSave: false };
 let hubConfOverrideState = { tenantId: null, simContent: null, userContent: null, loading: false, error: "" };
 // Hub demo scenario state: tenantId → { hostname → {scenario, minutes_remaining} }
 let hubDemoActiveMap = {};
@@ -1851,7 +1852,16 @@ function renderClientRowsForHub() {
                       const demoScenario = hubDemoActiveMap[client.hostname]?.scenario || null;
                       const isAdminRole = myRole === 'admin' || myRole === 'superadmin';
                       const colSpan = showDemoButtons ? 6 : 5;
-                      const simsRow = `<tr class="hub-client-sims-row"><td colspan="${colSpan + 1}" class="hub-client-sims-cell">${renderHubSimulationBadges(sims, "", demoScenario, { hostname: client.hostname || '', spokeId: client.spoke_id || '', isAdmin: isAdminRole })}</td></tr>`;
+                      const overrideBtn = isAdminRole && client.hostname
+                        ? `<button type="button" class="btn btn-secondary btn-small"
+                             style="margin-left:8px;vertical-align:middle;"
+                             data-user-override-hostname="${escHtml(client.hostname)}"
+                             data-user-override-simid="${escHtml(client.simulation_id || "")}"
+                             title="Pin ${escHtml(client.hostname)} to custom sim settings">↗ Override</button>`
+                        : "";
+                      const simsRow = `<tr class="hub-client-sims-row"><td colspan="${colSpan + 1}" class="hub-client-sims-cell">
+                        ${renderHubSimulationBadges(sims, "", demoScenario, { hostname: client.hostname || '', spokeId: client.spoke_id || '', isAdmin: isAdminRole })}${overrideBtn}
+                      </td></tr>`;
                       return `
                         <tr class="hub-client-main-row">
                           <td class="status-cell">${statusDot(Boolean(client.online))}</td>
@@ -3573,7 +3583,7 @@ function renderHubSimulationConfigPanel() {
     <section class="setup-card">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
         <div>
-          <div style="font-weight:600;">configs/simulation.conf</div>
+          <div style="font-weight:600;">configs/simulation.conf ${helpIcon('simulation-conf')}</div>
           <div class="muted" style="font-size:0.85rem;">Last fetched from GitHub: ${escHtml(fetched)}</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -3711,7 +3721,7 @@ function renderHubConfOverridesPanel() {
     <div class="setup-section-gap">
       <section class="setup-card">
         <div class="setup-card-header">
-          <h2>simulation.conf Override
+          <h2>simulation.conf Override ${helpIcon('conf-overrides')}
             <span class="site-status-pill ${simActive ? "site-ok" : "site-unknown"}" style="margin-left:8px;font-size:0.75rem;">${simActive ? "ACTIVE" : "NOT SET"}</span>
           </h2>
           <p>Override specific values from <code>simulation.conf</code> without pushing to GitHub.
@@ -3733,7 +3743,7 @@ function renderHubConfOverridesPanel() {
 
       <section class="setup-card">
         <div class="setup-card-header">
-          <h2>user-overrides.conf Override
+          <h2>user-overrides.conf Override ${helpIcon('conf-overrides')}
             <span class="site-status-pill ${userActive ? "site-ok" : "site-unknown"}" style="margin-left:8px;font-size:0.75rem;">${userActive ? "ACTIVE" : "NOT SET"}</span>
           </h2>
           <p>Override per-user simulation flags from <code>user-overrides.conf</code> without pushing to GitHub.
@@ -4247,7 +4257,7 @@ function renderTenantSpokesPanel(data) {
       </section>
       <section class="setup-card">
         <div class="setup-card-header">
-          <h2>Spoke Onboarding</h2>
+          <h2>Spoke Onboarding ${helpIcon('spoke-onboarding')}</h2>
           <p>Generate a Pre-Shared Key to allow spokes to self-register without manual approval.</p>
         </div>
         <div id="ts-onboarding-psk-list"></div>
@@ -4354,7 +4364,7 @@ function renderSetupSimulationConfigEditor() {
     container.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
         <div>
-          <div style="font-weight:600;">configs/simulation.conf</div>
+          <div style="font-weight:600;">configs/simulation.conf ${helpIcon('simulation-conf')}</div>
           <div class="muted" style="font-size:0.85rem;">${sourceLabel}</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -4372,7 +4382,7 @@ function renderSetupSimulationConfigEditor() {
     container.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
         <div>
-          <div style="font-weight:600;">configs/simulation.conf</div>
+          <div style="font-weight:600;">configs/simulation.conf ${helpIcon('simulation-conf')}</div>
           <div class="muted" style="font-size:0.85rem;">${sourceLabel}</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -4394,7 +4404,7 @@ function renderSetupSimulationConfigEditor() {
   container.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
       <div>
-        <div style="font-weight:600;">configs/simulation.conf</div>
+        <div style="font-weight:600;">configs/simulation.conf ${helpIcon('simulation-conf')}</div>
         <div class="muted" style="font-size:0.85rem;">${sourceLabel}</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -4414,10 +4424,181 @@ function renderSetupSimulationConfigEditor() {
   renderSetupUserOverridesEditor();
 }
 
+function hubUserOverrideIsBoolField(key, value = "") {
+  return hubSimIsBoolValue(String(value ?? "")) || FAILURE_SIMS.has(key) || TRAFFIC_SIMS.has(key) || key === "github_repo" || key === "site_based_ssid" || key === "kill_switch";
+}
+
+function renderUserOverrideFieldGroups(section, values = {}, orderedKeys = []) {
+  const keys = orderedKeys.length ? orderedKeys : Object.keys(values || {});
+  const textKeys = keys.filter((key) => !hubUserOverrideIsBoolField(key, values[key]) && !HUB_SIM_SELECT_FIELDS[key]);
+  const selectKeys = keys.filter((key) => HUB_SIM_SELECT_FIELDS[key]);
+  const boolKeys = keys.filter((key) => hubUserOverrideIsBoolField(key, values[key]));
+  const inputKeys = [...textKeys, ...selectKeys];
+  const inputFields = inputKeys.map((key) => renderHubSimulationField(section, key, values[key] ?? "")).join("");
+  const boolFields = boolKeys.map((key) => {
+    const rawValue = String(values[key] ?? "");
+    const value = hubSimIsBoolValue(rawValue) ? rawValue : "off";
+    const [onValue, offValue] = hubSimBoolPair(value);
+    const checked = value.toLowerCase() === onValue ? " checked" : "";
+    return `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;font-size:0.875rem;">
+      <input type="checkbox" data-section="${escHtml(section)}" data-key="${escHtml(key)}" data-on="${escHtml(onValue)}" data-off="${escHtml(offValue)}"${checked}>
+      <span>${escHtml(hubSimFieldLabel(key))}</span>
+    </label>`;
+  }).join("");
+  return { keys, inputKeys, boolKeys, inputFields, boolFields };
+}
+
+function renderUserOverrideCard(username, values = {}) {
+  const canEdit = canManageTenant(currentTenantId || getActiveTenantId());
+  const preferredKeys = hubUserOverridesConfState.keyOrder?.[username] || [];
+  const orderedKeys = [...preferredKeys, ...Object.keys(values || {})].filter((key, index, arr) => key && arr.indexOf(key) === index);
+  const { inputKeys, boolKeys, inputFields, boolFields } = renderUserOverrideFieldGroups(username, values || {}, orderedKeys);
+  return `
+    <div class="setup-card setup-section-gap">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+        <div style="font-weight:600;">👤 ${escHtml(username)}</div>
+        <button type="button" class="btn btn-secondary btn-small user-override-delete-btn" data-username="${escHtml(username)}"${canEdit ? "" : " disabled"}>✕ Remove</button>
+      </div>
+      <div class="setup-form setup-section-gap">
+        ${inputKeys.length ? `<div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;">${inputFields}</div>` : ""}
+        ${boolKeys.length ? `<div style="display:flex;flex-wrap:wrap;gap:8px 20px;padding:6px 0;">${boolFields}</div>` : ""}
+        ${!inputKeys.length && !boolKeys.length ? '<div class="muted">No fields found in this override.</div>' : ""}
+      </div>
+    </div>
+  `;
+}
+
+function renderUserOverrideModalBody(username, values = {}, orderedKeys = [], readOnly = false) {
+  const { inputKeys, boolKeys, inputFields, boolFields } = renderUserOverrideFieldGroups("__uom__", values || {}, orderedKeys);
+  return `
+    <div class="setup-form setup-section-gap">
+      <label class="form-group" style="display:block;">
+        <span class="form-label">Hostname</span>
+        <input id="hub-uom-username" class="form-input" type="text" value="${escHtml(username || "")}"${readOnly ? " readonly" : ""}>
+      </label>
+      ${inputKeys.length ? `<div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;">${inputFields}</div>` : ""}
+      ${boolKeys.length ? `<div style="display:flex;flex-wrap:wrap;gap:8px 20px;padding:6px 0;">${boolFields}</div>` : ""}
+    </div>
+  `;
+}
+
+function ensureUserOverrideModal() {
+  let modal = document.getElementById("hub-user-override-modal");
+  if (modal) return modal;
+  modal = document.createElement("div");
+  modal.id = "hub-user-override-modal";
+  modal.className = "modal-overlay hidden";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.setAttribute("aria-labelledby", "hub-uom-title");
+  modal.innerHTML = `
+    <div class="modal-box modal-box-large">
+      <div class="modal-header">
+        <h2 id="hub-uom-title">Add User Override</h2>
+        <button id="hub-uom-x" class="btn btn-secondary btn-small" type="button">✕ Close</button>
+      </div>
+      <div id="hub-uom-body" style="max-height:65vh;overflow-y:auto;"></div>
+      <div id="hub-uom-slot-row" class="setup-section-gap" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;">
+        <label class="form-group" style="margin:0;min-width:220px;">
+          <span class="form-label">Copy from Simulation Client slot</span>
+          <select id="hub-uom-slot-select" class="form-input">
+            <option value="">Do not copy a slot</option>
+            ${HUB_SIM_FIXED_SECTION_ORDER.filter((section) => /^s\d+$/.test(section)).map((section) => `<option value="${escHtml(section)}">${escHtml(section.toUpperCase())}</option>`).join("")}
+          </select>
+        </label>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;">
+        <span id="hub-uom-msg" class="form-msg"></span>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button id="hub-uom-cancel" class="btn btn-secondary btn-small" type="button">Cancel</button>
+          <button id="hub-uom-save" class="btn btn-primary btn-small" type="button">Save</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  return modal;
+}
+
+function openUserOverrideModal(hostname, simId, opts = {}) {
+  const modal = ensureUserOverrideModal();
+  const body = $("#hub-uom-body", modal);
+  const title = $("#hub-uom-title", modal);
+  const slotRow = $("#hub-uom-slot-row", modal);
+  const slotSelect = $("#hub-uom-slot-select", modal);
+  const existing = Boolean(hostname && Object.prototype.hasOwnProperty.call(hubUserOverridesConfState.sections || {}, hostname));
+  const renderBody = (selectedSimId) => {
+    const currentUsername = hostname || $("#hub-uom-username", modal)?.value || "";
+    const mergedValues = {
+      ...((selectedSimId && hubSimulationConfState.sections?.[selectedSimId]) || {}),
+      ...((hostname && hubUserOverridesConfState.sections?.[hostname]) || {}),
+    };
+    const orderedKeys = [...new Set([...HUB_SIM_SLOT_KEYS, ...Object.keys(mergedValues || {})])];
+    body.innerHTML = renderUserOverrideModalBody(currentUsername, mergedValues, orderedKeys, Boolean(hostname));
+  };
+
+  hubUserOverrideModalState = { open: true, hostname: hostname || "", simId: simId || "", autoSave: Boolean(opts.autoSave) };
+  title.textContent = existing ? `Edit Override: ${hostname}` : "Add User Override";
+  slotRow.classList.toggle("hidden", Boolean(hostname));
+  slotRow.style.display = hostname ? "none" : "flex";
+  slotSelect.value = hostname ? "" : (simId || "");
+  setFormMessage("hub-uom-msg", "", true);
+  renderBody(hostname ? simId || "" : slotSelect.value || "");
+  slotSelect.onchange = hostname ? null : () => {
+    hubUserOverrideModalState.simId = slotSelect.value || "";
+    renderBody(hubUserOverrideModalState.simId);
+  };
+  modal.classList.remove("hidden");
+}
+
+function closeUserOverrideModal() {
+  document.getElementById("hub-user-override-modal")?.classList.add("hidden");
+  hubUserOverrideModalState.open = false;
+}
+
+async function saveUserOverrideFromModal(tenantId) {
+  const modal = ensureUserOverrideModal();
+  const username = String($("#hub-uom-username", modal)?.value || "").trim();
+  if (!username) {
+    setFormMessage("hub-uom-msg", "Hostname is required.", false);
+    return;
+  }
+
+  const values = {};
+  const orderedKeys = [];
+  modal.querySelectorAll('[data-section="__uom__"][data-key]').forEach((input) => {
+    const key = input.dataset.key;
+    if (!key) return;
+    orderedKeys.push(key);
+    values[key] = input.type === "checkbox"
+      ? (input.checked ? (input.dataset.on || "on") : (input.dataset.off || "off"))
+      : input.value.trim();
+  });
+
+  if (!hubUserOverridesConfState.sections || typeof hubUserOverridesConfState.sections !== "object") hubUserOverridesConfState.sections = {};
+  if (!Array.isArray(hubUserOverridesConfState.sectionOrder)) hubUserOverridesConfState.sectionOrder = [];
+  if (!hubUserOverridesConfState.keyOrder || typeof hubUserOverridesConfState.keyOrder !== "object") hubUserOverridesConfState.keyOrder = {};
+
+  hubUserOverridesConfState.sections[username] = values;
+  if (!hubUserOverridesConfState.sectionOrder.includes(username)) hubUserOverridesConfState.sectionOrder.push(username);
+  hubUserOverridesConfState.keyOrder[username] = orderedKeys;
+  hubUserOverridesConfState.loaded = true;
+  hubUserOverridesConfState.error = "";
+
+  if (hubUserOverrideModalState.autoSave) {
+    await saveSetupUserOverridesConf(tenantId);
+    closeUserOverrideModal();
+    renderSetupUserOverridesEditor();
+    return;
+  }
+
+  closeUserOverrideModal();
+  renderSetupUserOverridesEditor();
+}
+
 function renderSetupUserOverridesEditor() {
   let container = $("#setup-user-overrides-editor");
   if (!container) {
-    // Create and append the user-overrides section after the sim-config editor
     const simEditor = $("#setup-sim-config-editor");
     if (!simEditor) return;
     container = document.createElement("div");
@@ -4427,24 +4608,31 @@ function renderSetupUserOverridesEditor() {
   }
   const tenantId = currentTenantId || getActiveTenantId();
   if (!tenantId) { container.innerHTML = ""; return; }
-  const disabled = canManageTenant(tenantId) ? "" : " disabled";
+  const canEdit = canManageTenant(tenantId);
+  const disabled = canEdit ? "" : " disabled";
   const fetched = hubUserOverridesConfState.fetchedAt ? fmtDate(hubUserOverridesConfState.fetchedAt) : "—";
+  const headerButtons = `
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      ${canEdit ? '<button id="setup-user-overrides-add-btn" class="btn btn-secondary btn-small" type="button">＋ Add User</button>' : ""}
+      <button id="setup-user-overrides-refresh-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+      <button id="setup-user-overrides-save-btn" class="btn btn-primary btn-small" type="button"${disabled}>Save</button>
+    </div>
+  `;
 
   if (hubUserOverridesConfState.loading) {
     container.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
         <div>
           <div style="font-weight:600;">configs/user-overrides.conf</div>
-          <div class="muted" style="font-size:0.85rem;">Hub-managed override · Last saved: ${escHtml(fetched)}</div>
+          <div class="muted" style="font-size:0.85rem;">Per-user simulation overrides — pin a hostname to specific sim settings · Last saved: ${escHtml(fetched)}</div>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <button id="setup-user-overrides-refresh-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
-          <button id="setup-user-overrides-save-btn" class="btn btn-primary btn-small" type="button"${disabled}>Save</button>
-        </div>
+        ${headerButtons}
       </div>
       <div id="setup-user-overrides-msg" class="form-msg" style="margin-bottom:10px;"></div>
       <div class="empty-state">Loading user-overrides.conf…</div>
     `;
+    wireSetupUserOverridesButtons(tenantId);
+    $("#setup-user-overrides-add-btn")?.addEventListener("click", () => openUserOverrideModal("", null, { autoSave: false }));
     return;
   }
 
@@ -4453,43 +4641,51 @@ function renderSetupUserOverridesEditor() {
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
         <div>
           <div style="font-weight:600;">configs/user-overrides.conf</div>
-          <div class="muted" style="font-size:0.85rem;">Hub-managed override · Last saved: ${escHtml(fetched)}</div>
+          <div class="muted" style="font-size:0.85rem;">Per-user simulation overrides — pin a hostname to specific sim settings · Last saved: ${escHtml(fetched)}</div>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <button id="setup-user-overrides-refresh-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
-          <button id="setup-user-overrides-save-btn" class="btn btn-primary btn-small" type="button"${disabled}>Save</button>
-        </div>
+        ${headerButtons}
       </div>
       <div id="setup-user-overrides-msg" class="form-msg" style="margin-bottom:10px;"></div>
       <div class="empty-state">${escHtml(hubUserOverridesConfState.error)}</div>
     `;
     wireSetupUserOverridesButtons(tenantId);
+    $("#setup-user-overrides-add-btn")?.addEventListener("click", () => openUserOverrideModal("", null, { autoSave: false }));
     return;
   }
 
   const sections = hubUserOverridesConfState.sections || {};
-  const orderedSections = Object.keys(sections);
-  const slotSections = orderedSections.length ? [] : HUB_SIM_FIXED_SECTION_ORDER.filter((s) => /^s\d+$/.test(s));
+  const orderedSections = (hubUserOverridesConfState.sectionOrder || []).filter((section) => Object.prototype.hasOwnProperty.call(sections, section));
+  Object.keys(sections).forEach((section) => {
+    if (!orderedSections.includes(section)) orderedSections.push(section);
+  });
 
   container.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
       <div>
         <div style="font-weight:600;">configs/user-overrides.conf</div>
-        <div class="muted" style="font-size:0.85rem;">Hub-managed override — overrides simulation.conf per-user flags · Last saved: ${escHtml(fetched)}</div>
+        <div class="muted" style="font-size:0.85rem;">Per-user simulation overrides — pin a hostname to specific sim settings · Last saved: ${escHtml(fetched)}</div>
       </div>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <button id="setup-user-overrides-refresh-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
-        <button id="setup-user-overrides-save-btn" class="btn btn-primary btn-small" type="button"${disabled}>Save</button>
-      </div>
+      ${headerButtons}
     </div>
     <div id="setup-user-overrides-msg" class="form-msg" style="margin-bottom:10px;"></div>
     <div id="setup-user-overrides-form">
-      ${orderedSections.map((section, index) => renderHubSimulationSection(section, sections[section] || {}, { open: index === 0 })).join("")}
-      ${slotSections.map((section, index) => renderHubSimulationSection(section, sections[section] || {}, { open: index === 0 && orderedSections.length === 0 })).join("")}
-      ${!orderedSections.length && !slotSections.length ? '<div class="muted" style="padding:12px 0">No overrides configured. Fields left blank will use simulation.conf defaults.</div>' : ""}
+      ${orderedSections.map((username) => renderUserOverrideCard(username, sections[username] || {})).join("")}
+      ${!orderedSections.length ? '<div class="muted" style="padding:12px 0">No overrides configured. Click <strong>＋ Add User</strong> or use the ↗ Override button in Simulation Clients.</div>' : ""}
     </div>
   `;
 
+  container.querySelectorAll(".user-override-delete-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (!canManageTenant(tenantId)) return;
+      const username = btn.dataset.username || "";
+      if (!username) return;
+      delete hubUserOverridesConfState.sections[username];
+      delete hubUserOverridesConfState.keyOrder[username];
+      hubUserOverridesConfState.sectionOrder = (hubUserOverridesConfState.sectionOrder || []).filter((section) => section !== username);
+      renderSetupUserOverridesEditor();
+    });
+  });
+  $("#setup-user-overrides-add-btn")?.addEventListener("click", () => openUserOverrideModal("", null, { autoSave: false }));
   wireSetupUserOverridesButtons(tenantId);
 }
 
@@ -4616,18 +4812,19 @@ function collectSetupSimulationConfContent() {
 
 function collectSetupUserOverridesContent() {
   const form = $("#setup-user-overrides-form");
-  if (!form) return hubUserOverridesConfState.rawContent || "";
   const sections = JSON.parse(JSON.stringify(hubUserOverridesConfState.sections || {}));
-  form.querySelectorAll("[data-section][data-key]").forEach((input) => {
-    const section = input.dataset.section;
-    const key = input.dataset.key;
-    if (!sections[section]) sections[section] = {};
-    if (input.type === "checkbox") {
-      sections[section][key] = input.checked ? (input.dataset.on || "on") : (input.dataset.off || "off");
-      return;
-    }
-    sections[section][key] = input.value.trim();
-  });
+  if (form) {
+    form.querySelectorAll("[data-section][data-key]").forEach((input) => {
+      const section = input.dataset.section;
+      const key = input.dataset.key;
+      if (!sections[section]) sections[section] = {};
+      if (input.type === "checkbox") {
+        sections[section][key] = input.checked ? (input.dataset.on || "on") : (input.dataset.off || "off");
+        return;
+      }
+      sections[section][key] = input.value.trim();
+    });
+  }
   return serializeHubSimulationIni(sections, hubUserOverridesConfState.sectionOrder, hubUserOverridesConfState.keyOrder);
 }
 
@@ -4985,7 +5182,7 @@ function renderHubVmServer() {
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:16px;">
       <section class="setup-card">
         <div class="setup-card-header" style="display:flex;align-items:center;gap:12px;justify-content:space-between;">
-          <div><h2>Fleet Reclone</h2><p>Queue a rolling reclone on every approved spoke.</p></div>
+          <div><h2>Fleet Reclone ${helpIcon('fleet-reclone')}</h2><p>Queue a rolling reclone on every approved spoke.</p></div>
           <span class="badge ${fleetMeta.className}">${escHtml(fleetMeta.label)}</span>
         </div>
         <div style="font-weight:600;margin-bottom:6px;">${escHtml(String(fleet.completed || 0))} / ${escHtml(String(fleet.total_vms || 0))} VMs recloned</div>
@@ -7889,7 +8086,7 @@ async function initTsProcessingTab(tenantId) {
 
   container.innerHTML = `
     <div class="setup-card" style="margin-bottom:16px;">
-      <div class="setup-card-header"><h2>Processing Modes</h2><p>Choose which credentials stay centralized on the hub versus distributed to spokes.</p></div>
+      <div class="setup-card-header"><h2>Processing Modes ${helpIcon('central-mode')}</h2><p>Choose which credentials stay centralized on the hub versus distributed to spokes.</p></div>
       <div class="setup-form processing-modes-section mt-3">
         <div class="row g-2">
           <div class="col-md-4">
@@ -11403,6 +11600,33 @@ function bindEvents() {
       return;
     }
 
+    // User override modal trigger (from Simulation Clients Override button)
+    const userOverrideBtn = event.target.closest("[data-user-override-hostname]");
+    if (userOverrideBtn) {
+      const hostname = userOverrideBtn.dataset.userOverrideHostname;
+      const simId = userOverrideBtn.dataset.userOverrideSimid || null;
+      openUserOverrideModal(hostname, simId || null, { autoSave: true });
+      return;
+    }
+
+    // User override modal save button
+    if (event.target.closest("#hub-uom-save")) {
+      saveUserOverrideFromModal(currentTenantId).catch(console.error);
+      return;
+    }
+
+    // User override modal close/cancel
+    if (event.target.closest("#hub-uom-x") || event.target.closest("#hub-uom-cancel")) {
+      closeUserOverrideModal();
+      return;
+    }
+
+    // User override modal backdrop click
+    if (event.target.id === "hub-user-override-modal") {
+      closeUserOverrideModal();
+      return;
+    }
+
     if (event.target.closest("#tenant-context-change-btn")) {
       showTab("hub-dashboard", { source: "admin" });
       return;
@@ -12319,6 +12543,184 @@ async function _runQaChecks(tenantId, module) {
   _qaUpdateSummary(startMs);
 }
 
+// ── Help Panel ─────────────────────────────────────────────────────────────
+// Single source of truth: cs-webui/static/docs/settings-help.md
+// Panel fetches the markdown once, caches it, and renders the matching section.
+
+let _helpContentCache = null; // raw markdown string once fetched
+let _helpSectionMap = null;   // { topicId: markdownString }
+let _helpPanelPreviousFocus = null;
+
+async function _fetchHelpContent() {
+  if (_helpContentCache !== null) return _helpContentCache;
+  try {
+    const r = await fetch('/static/docs/settings-help.md');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    _helpContentCache = await r.text();
+  } catch (e) {
+    _helpContentCache = '';
+    console.warn('[help] Could not load settings-help.md', e);
+  }
+  return _helpContentCache;
+}
+
+function _buildHelpSectionMap(markdown) {
+  if (_helpSectionMap) return _helpSectionMap;
+  _helpSectionMap = {};
+  // Normalize CRLF
+  const text = markdown.replace(/\r\n/g, '\n');
+  // Split on ## headings at the start of a line
+  const parts = text.split(/\n(?=## )/);
+  for (const part of parts) {
+    const m = part.match(/^## ([^\n]+)\n([\s\S]*)/);
+    if (!m) continue;
+    const id = m[1].trim();
+    _helpSectionMap[id] = m[2].trim();
+  }
+  return _helpSectionMap;
+}
+
+function _renderHelpMarkdown(md) {
+  const lines = md.split('\n');
+  let html = '';
+  let inList = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+
+    // Bullet list item
+    if (/^- /.test(line)) {
+      if (!inList) { html += '<ul>'; inList = true; }
+      html += '<li>' + _inlineHelpMd(line.slice(2)) + '</li>';
+      continue;
+    }
+    if (inList) { html += '</ul>'; inList = false; }
+
+    // First line: treat as title if it starts with **...**
+    if (i === 0 && /^\*\*/.test(line)) {
+      const title = line.replace(/^\*\*(.+?)\*\*/, '$1');
+      html += `<p class="help-title">${escHtml(title)}</p>`;
+      continue;
+    }
+
+    // Link line: [text](url)
+    const linkMatch = line.match(/^\[(.+?)\]\((.+?)\)$/);
+    if (linkMatch) {
+      const href = _sanitizeHelpHref(linkMatch[2]);
+      if (href) {
+        html += `<a class="help-docs-link" href="${escHtml(href)}" target="_blank" rel="noopener noreferrer">📖 ${escHtml(linkMatch[1])}</a>`;
+      }
+      continue;
+    }
+
+    // Blank line
+    if (line.trim() === '') {
+      continue;
+    }
+
+    // Regular paragraph
+    html += '<p>' + _inlineHelpMd(line) + '</p>';
+  }
+  if (inList) html += '</ul>';
+  return html;
+}
+
+function _inlineHelpMd(text) {
+  // Bold: **text**
+  text = text.replace(/\*\*(.+?)\*\*/g, (_, t) => `<strong>${escHtml(t)}</strong>`);
+  // Italic: *text* or _text_
+  text = text.replace(/\*(.+?)\*/g, (_, t) => `<em>${escHtml(t)}</em>`);
+  // Code: `text`
+  text = text.replace(/`([^`]+)`/g, (_, t) => `<code>${escHtml(t)}</code>`);
+  // Inline link: [text](url)
+  text = text.replace(/\[(.+?)\]\((.+?)\)/g, (_, t, u) => {
+    const href = _sanitizeHelpHref(u);
+    return href ? `<a href="${escHtml(href)}" target="_blank" rel="noopener noreferrer">${escHtml(t)}</a>` : escHtml(t);
+  });
+  // If text wasn't already escaped by a replacement, escape the remaining literals
+  // (replacements already produce safe HTML; we only need to protect unprocessed text)
+  return text;
+}
+
+function _sanitizeHelpHref(href) {
+  href = (href || '').trim();
+  if (/^https?:\/\//i.test(href)) return href;
+  if (/^[/#]/.test(href)) return href;
+  return null;
+}
+
+async function openHelpPanel(topicId) {
+  const panel = document.getElementById('help-panel');
+  const overlay = document.getElementById('help-panel-overlay');
+  const titleEl = document.getElementById('help-panel-title');
+  const contentEl = document.getElementById('help-panel-content');
+  if (!panel || !overlay) return;
+
+  _helpPanelPreviousFocus = document.activeElement;
+
+  titleEl.textContent = 'Help';
+  contentEl.innerHTML = '<p style="color:var(--muted)">Loading…</p>';
+  panel.classList.remove('hidden');
+  overlay.classList.remove('hidden');
+
+  const markdown = await _fetchHelpContent();
+  const map = _buildHelpSectionMap(markdown);
+  const section = map[topicId];
+
+  if (section) {
+    contentEl.innerHTML = _renderHelpMarkdown(section);
+  } else {
+    contentEl.innerHTML = `<p style="color:var(--muted)">No help content found for <code>${escHtml(topicId)}</code>.</p>`;
+  }
+
+  // Focus close button for accessibility
+  const closeBtn = document.getElementById('help-panel-close');
+  if (closeBtn) closeBtn.focus();
+}
+
+function closeHelpPanel() {
+  const panel = document.getElementById('help-panel');
+  const overlay = document.getElementById('help-panel-overlay');
+  if (!panel || !overlay) return;
+  panel.classList.add('hidden');
+  overlay.classList.add('hidden');
+  if (_helpPanelPreviousFocus && typeof _helpPanelPreviousFocus.focus === 'function') {
+    _helpPanelPreviousFocus.focus();
+    _helpPanelPreviousFocus = null;
+  }
+}
+
+/** Returns an inline help icon button HTML string for a given topic ID. */
+function helpIcon(topicId) {
+  return `<button class="help-icon" data-help-topic="${escHtml(topicId)}" type="button" aria-label="Help for ${escHtml(topicId)}">?</button>`;
+}
+
+// Delegated click handler for all help icons
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-help-topic]');
+  if (btn) {
+    e.preventDefault();
+    openHelpPanel(btn.dataset.helpTopic);
+  }
+});
+
+// Overlay click closes panel
+document.getElementById('help-panel-overlay')?.addEventListener('click', closeHelpPanel);
+
+// Escape key closes panel
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const panel = document.getElementById('help-panel');
+    if (panel && !panel.classList.contains('hidden')) {
+      closeHelpPanel();
+    }
+  }
+});
+
+// Expose on window for inline onclick handlers in template HTML
+window.openHelpPanel = openHelpPanel;
+window.closeHelpPanel = closeHelpPanel;
+
 export {
   showTab as switchTab,
   showTab,
@@ -12336,4 +12738,7 @@ export {
   loadConfig,
   loadQaKeys,
   initQaPanel,
+  openHelpPanel,
+  closeHelpPanel,
+  helpIcon,
 };

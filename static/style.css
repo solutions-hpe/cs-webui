@@ -2836,3 +2836,109 @@ body.mode-spoke .hub-only  { display: none !important; }
   padding: 3px 10px;
 }
 
+
+/* ── Help Panel (Tooltip feature) ─────────────────────────────────────── */
+.help-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent, #00a3e0);
+  background: transparent;
+  color: var(--accent, #00a3e0);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 6px;
+  vertical-align: middle;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.help-icon:hover {
+  background: var(--accent, #00a3e0);
+  color: #fff;
+}
+
+.help-panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: 900;
+  transition: opacity 0.2s;
+}
+.help-panel-overlay.hidden { display: none; }
+
+.help-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 360px;
+  max-width: 100vw;
+  height: 100vh;
+  background: var(--panel, #fff);
+  border-left: 1px solid var(--border, rgba(148,163,184,0.35));
+  z-index: 901;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.18);
+  transform: translateX(0);
+  transition: transform 0.22s ease;
+}
+.help-panel.hidden {
+  transform: translateX(100%);
+  pointer-events: none;
+}
+
+.help-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border, rgba(148,163,184,0.35));
+  flex-shrink: 0;
+}
+#help-panel-title {
+  font-weight: 600;
+  font-size: 1rem;
+}
+.help-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  font-size: 0.88rem;
+  line-height: 1.65;
+  color: var(--text, #1e293b);
+}
+.help-panel-content .help-title {
+  font-weight: 700;
+  font-size: 1rem;
+  margin: 0 0 12px;
+  color: var(--text, #1e293b);
+}
+.help-panel-content p { margin: 0 0 10px; }
+.help-panel-content ul {
+  margin: 0 0 10px;
+  padding-left: 18px;
+}
+.help-panel-content ul li { margin-bottom: 4px; }
+.help-panel-content code {
+  font-family: monospace;
+  background: var(--hpe-navy-light, rgba(148,163,184,0.15));
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 0.85em;
+}
+.help-panel-content strong { font-weight: 600; }
+.help-panel-content em { font-style: italic; }
+.help-docs-link {
+  display: inline-block;
+  margin-top: 16px;
+  color: var(--accent, #00a3e0);
+  text-decoration: none;
+  font-weight: 500;
+}
+.help-docs-link:hover { text-decoration: underline; }

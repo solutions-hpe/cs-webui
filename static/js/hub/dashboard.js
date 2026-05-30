@@ -10086,7 +10086,7 @@ function closeSpokeModal() {
 
 function activateSpokeSubtab(subtabId) {
   $$(".spoke-subtab").forEach(button => button.classList.toggle("active", button.dataset.subtab === subtabId));
-  ["spoke-clients", "spoke-commands", "spoke-mode", "spoke-audit", "spoke-server", "spoke-central", "spoke-status"].forEach(panelId => {
+  ["spoke-clients", "spoke-commands", "spoke-mode", "spoke-audit", "spoke-server", "spoke-central", "spoke-status", "spoke-config-diag"].forEach(panelId => {
     document.getElementById(panelId)?.classList.toggle("hidden", panelId !== subtabId);
   });
   if (subtabId === "spoke-commands") loadSpokeCommands();
@@ -10095,6 +10095,7 @@ function activateSpokeSubtab(subtabId) {
   if (subtabId === "spoke-server") renderSpokeServerTab();
   if (subtabId === "spoke-central") renderSpokeCentralTab();
   if (subtabId === "spoke-status") renderSpokeStatusTab();
+  if (subtabId === "spoke-config-diag") loadSpokeConfigDiag();
 }
 
 async function sendSpokeCommand(type) {
@@ -10106,6 +10107,116 @@ async function sendSpokeCommand(type) {
   }
 }
 window.sendSpokeCommand = sendSpokeCommand;
+
+async function loadSpokeConfigDiag() {
+  if (!activeSpokeModal) return;
+  const { spoke, tenant_id: tenantId } = activeSpokeModal;
+  const content = $("#spoke-config-diag-content");
+  const msgEl = $("#diag-msg");
+  if (content) content.innerHTML = '<p class="muted">Loading…</p>';
+  if (msgEl) msgEl.textContent = "";
+
+  // Wire up buttons (idempotent — removing old listeners via cloneNode)
+  const refreshBtn = $("#diag-refresh-btn");
+  const resyncBtn = $("#diag-force-resync-btn");
+  if (refreshBtn) {
+    const newRefresh = refreshBtn.cloneNode(true);
+    refreshBtn.replaceWith(newRefresh);
+    newRefresh.addEventListener("click", () => loadSpokeConfigDiag());
+  }
+  if (resyncBtn) {
+    const newResync = resyncBtn.cloneNode(true);
+    resyncBtn.replaceWith(newResync);
+    newResync.addEventListener("click", async () => {
+      newResync.disabled = true;
+      newResync.textContent = "Resyncing…";
+      try {
+        const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/usb-vidpids/resync`, { method: "POST" });
+        const data = await res.json().catch(() => ({}));
+        if (msgEl) { msgEl.textContent = `Resync queued for ${data.pushed_to_spokes ?? 0} spoke(s).`; msgEl.className = "form-msg success"; }
+        setTimeout(() => loadSpokeConfigDiag(), 1500);
+      } catch (err) {
+        if (msgEl) { msgEl.textContent = err.message || "Resync failed."; msgEl.className = "form-msg error"; }
+      } finally {
+        newResync.disabled = false;
+        newResync.textContent = "⬆ Force Resync";
+      }
+    });
+  }
+
+  let diag;
+  try {
+    const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spoke.id)}/config-diag`);
+    diag = await res.json();
+  } catch (err) {
+    if (content) content.innerHTML = `<p class="error">Failed to load diagnostics: ${escHtml(err.message || String(err))}</p>`;
+    return;
+  }
+
+  const syncOk = diag.config_in_sync;
+  const pushPending = diag.push_pending;
+  const usbOk = diag.effective_usb_cert_count > 0;
+
+  // Status badge helper
+  const badge = (ok, text) => `<span class="badge ${ok ? 'badge-success' : 'badge-error'}">${escHtml(text)}</span>`;
+  const neutral = text => `<span class="badge badge-neutral">${escHtml(text)}</span>`;
+
+  const rows = [
+    ["Config version (hub)", String(diag.config_version ?? "—")],
+    ["Config version (spoke acked)", String(diag.applied_config_version ?? "—")],
+    ["Push pending", pushPending ? badge(false, "Yes — push in flight or queued") : badge(true, "No")],
+    ["Config hash (last pushed)", `<code>${escHtml(diag.last_pushed_config_hash ?? "none")}</code>`],
+    ["Config hash (current)", `<code>${escHtml(diag.current_authoritative_hash ?? "—")}</code>`],
+    ["Hashes match (in sync)", syncOk ? badge(true, "✓ In sync") : badge(false, "✗ Drift detected — push pending")],
+    ["Global USB cert count", String(diag.global_usb_cert_count ?? 0)],
+    ["Effective USB cert count (global + tenant)", String(diag.effective_usb_cert_count ?? 0)],
+    ["USB certs included in next payload", diag.usb_vidpids_in_next_payload ? badge(true, "Yes") : badge(false, "No — global list may be empty")],
+  ];
+
+  const tableRows = rows.map(([k, v]) => `<tr><td style="font-weight:500;white-space:nowrap;">${escHtml(k)}</td><td>${v}</td></tr>`).join("");
+
+  // USB cert list
+  const certRows = (diag.effective_usb_certs || []).map(d =>
+    `<tr><td><code>${escHtml(d.vidpid || "")}</code></td><td>${escHtml(d.type || "")}</td><td>${escHtml(d.label || "")}</td><td>${neutral(d.source || "")}</td></tr>`
+  ).join("") || `<tr><td colspan="4" class="muted">None — hub global approved list is empty. Add devices in Setup → USB Management.</td></tr>`;
+
+  // Pending config commands
+  const cmdRows = (diag.pending_config_commands || []).map(c =>
+    `<tr><td><code>${escHtml(c.type)}</code></td><td>${neutral(c.status)}</td><td>v${escHtml(String(c.config_version))}</td><td>${c.usb_vidpids_in_payload ? badge(true, "Yes") : badge(false, "No")}</td></tr>`
+  ).join("") || `<tr><td colspan="4" class="muted">No pending config commands.</td></tr>`;
+
+  // Overall status banner
+  let banner = "";
+  if (!usbOk) {
+    banner = `<div style="margin-bottom:12px;padding:10px 14px;background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;color:#92400e;">⚠️ <strong>Global USB cert list is empty.</strong> Add the Realtek (or other) devices to Setup → USB Management → Global Approved Devices, then click <em>⬆ Force Resync</em>.</div>`;
+  } else if (!syncOk || pushPending) {
+    banner = `<div style="margin-bottom:12px;padding:10px 14px;background:#dbeafe;border:1px solid #3b82f6;border-radius:6px;color:#1e40af;">ℹ️ Config push in flight or pending. The spoke will apply on its next relay cycle (~30s). If this persists, click <em>⬆ Force Resync</em>.</div>`;
+  } else {
+    banner = `<div style="margin-bottom:12px;padding:10px 14px;background:#d1fae5;border:1px solid #10b981;border-radius:6px;color:#065f46;">✅ Config is in sync. USB certs (${diag.effective_usb_cert_count}) are included in the last push.</div>`;
+  }
+
+  if (content) content.innerHTML = `
+    ${banner}
+    <div class="setup-card" style="margin-bottom:10px;">
+      <div class="setup-card-header"><h4>Config Version & Sync State</h4></div>
+      <table class="data-table"><tbody>${tableRows}</tbody></table>
+    </div>
+    <div class="setup-card" style="margin-bottom:10px;">
+      <div class="setup-card-header"><h4>Effective USB Certs (would be sent to spoke)</h4></div>
+      <table class="data-table">
+        <thead><tr><th>VID:PID</th><th>Type</th><th>Label</th><th>Source</th></tr></thead>
+        <tbody>${certRows}</tbody>
+      </table>
+    </div>
+    <div class="setup-card">
+      <div class="setup-card-header"><h4>Pending Config Commands in Queue</h4></div>
+      <table class="data-table">
+        <thead><tr><th>Type</th><th>Status</th><th>Version</th><th>USB Certs Included</th></tr></thead>
+        <tbody>${cmdRows}</tbody>
+      </table>
+    </div>
+  `;
+}
 
 async function loadHubSettings() {
   if (!currentTenantId) return;

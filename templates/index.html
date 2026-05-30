@@ -1529,6 +1529,7 @@
             <button class="setup-subtab spoke-subtab" data-subtab="spoke-commands" type="button">Commands</button>
             <button class="setup-subtab spoke-subtab" data-subtab="spoke-mode" type="button">Processing Mode</button>
             <button class="setup-subtab spoke-subtab" data-subtab="spoke-audit" type="button">Audit Log</button>
+            <button class="setup-subtab spoke-subtab" data-subtab="spoke-config-diag" type="button">🔍 Config Diag</button>
           </nav>
 
           <div id="spoke-clients" class="setup-subpanel" style="margin-top:12px;">
@@ -1639,6 +1640,21 @@
                 <thead><tr><th>Service</th><th>Status</th><th>Errors</th><th>Last Run</th></tr></thead>
                 <tbody id="spoke-status-services-tbody"></tbody>
               </table>
+            </div>
+          </div>
+
+          <div id="spoke-config-diag" class="setup-subpanel hidden" style="margin-top:12px;">
+            <div class="setup-card" style="margin-bottom:10px;">
+              <div class="setup-card-header">
+                <h3>Config Sync Diagnostics</h3>
+                <p>Hub-side view of what this spoke would receive on the next config push. Use this to diagnose why USB certs or other hub-managed settings may not be reaching the spoke.</p>
+              </div>
+              <div style="display:flex;gap:8px;margin-bottom:12px;">
+                <button id="diag-refresh-btn" class="btn btn-secondary btn-small" type="button">↺ Refresh</button>
+                <button id="diag-force-resync-btn" class="btn btn-primary btn-small" type="button">⬆ Force Resync</button>
+                <span id="diag-msg" class="form-msg"></span>
+              </div>
+              <div id="spoke-config-diag-content"><p class="muted">Loading…</p></div>
             </div>
           </div>
 

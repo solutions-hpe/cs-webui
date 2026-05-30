@@ -1575,9 +1575,8 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 .hub-client-site-header {
   width: 100%;
   display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 8px;
   padding: 10px 16px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -1592,14 +1591,19 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   border-color: #b7c3d0;
   box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
+.hub-client-site-top-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  width: 100%;
+}
 .hub-client-site-name {
   font-weight: 700;
   color: var(--hpe-navy);
 }
 .hub-client-site-simulations {
-  display: flex;
-  flex: 1 1 260px;
-  min-width: 0;
+  width: 100%;
 }
 .hub-client-site-simulations .badge-list {
   min-height: 0;

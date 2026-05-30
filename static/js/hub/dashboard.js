@@ -1845,13 +1845,15 @@ function renderClientRowsForHub() {
       return `
         <section class="hub-client-site-group">
           <button class="hub-client-site-header" type="button" data-site-key="${escHtml(siteKey)}" aria-expanded="${isExpanded ? "true" : "false"}">
-            <span class="hub-client-site-name">${escHtml(site.name)}</span>
-            <span class="badge badge-grey">${site.clients.length} clients</span>
-            <span class="badge badge-green">${site.onlineCount} online</span>
-            ${site.errorCount > 0 ? `<span class="badge badge-red">${site.errorCount} errors</span>` : ""}
-            ${site.t3PciCount > 0 ? `<span class="badge badge-purple" title="T3 IoT PCI devices on this node">📡 ${site.t3PciCount} T3</span>` : ""}
-            <span class="hub-client-site-simulations">${renderHubSimulationBadges(site.activeSimulations, "")}</span>
-            <span class="hub-client-site-chevron" aria-hidden="true">${isExpanded ? "▼" : "▶"}</span>
+            <div class="hub-client-site-top-row">
+              <span class="hub-client-site-name">${escHtml(site.name)}</span>
+              <span class="badge badge-grey">${site.clients.length} clients</span>
+              <span class="badge badge-green">${site.onlineCount} online</span>
+              ${site.errorCount > 0 ? `<span class="badge badge-red">${site.errorCount} errors</span>` : ""}
+              ${site.t3PciCount > 0 ? `<span class="badge badge-purple" title="T3 IoT PCI devices on this node">📡 ${site.t3PciCount} T3</span>` : ""}
+              <span class="hub-client-site-chevron" aria-hidden="true">${isExpanded ? "▼" : "▶"}</span>
+            </div>
+            <div class="hub-client-site-simulations">${renderHubSimulationBadges(site.activeSimulations, "")}</div>
           </button>
           ${isExpanded ? `
             <div class="hub-client-site-rows">

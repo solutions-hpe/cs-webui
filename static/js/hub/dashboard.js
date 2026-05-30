@@ -5689,19 +5689,19 @@ function _hubVmFullTable(spokeId, vms, catId) {
       ? `<button class="btn-icon hub-vm-console-btn" data-vmid="${vmidStr}" data-vmtype="${escHtml(vm.type || 'qemu')}" title="Open Console" style="color:#4fc3f7;">⎕</button>`
       : `<button class="btn-icon" disabled title="${isDeleting ? 'VM is being deleted' : 'VM must be running to open console'}" style="opacity:0.3;">⎕</button>`;
     return `<tr data-vmid="${vmidStr}">
-      <td><input type="checkbox" class="hub-vm-check" data-vmid="${vmidStr}"></td>
-      <td class="vm-status-cell">${statusLabel}</td>
-      <td>${vmidStr}</td>
-      <td>${escHtml(vm.name || "—")}</td>
-      <td>${cpu}</td>
-      <td>${ram}</td>
+      <td style="white-space:nowrap;"><input type="checkbox" class="hub-vm-check" data-vmid="${vmidStr}"></td>
+      <td style="white-space:nowrap;" class="vm-status-cell">${statusLabel}</td>
+      <td style="white-space:nowrap;">${vmidStr}</td>
+      <td style="white-space:nowrap;">${escHtml(vm.name || "—")}</td>
+      <td style="white-space:nowrap;">${cpu}</td>
+      <td style="white-space:nowrap;">${ram}</td>
       <td style="white-space:nowrap;">${actions} ${consoleBtn}</td>
     </tr>`;
   }).join("");
   return `<table class="data-table">
     <thead><tr>
       <th style="width:36px;"><input type="checkbox" class="hub-vm-th-check" data-cat="${escHtml(catId)}"></th>
-      <th>Status</th><th>${colId}</th><th>Name</th><th>CPU %</th><th>RAM</th><th>Actions</th>
+      <th style="white-space:nowrap;">Status</th><th style="white-space:nowrap;">${colId}</th><th style="white-space:nowrap;">Name</th><th style="white-space:nowrap;">CPU %</th><th style="white-space:nowrap;">RAM</th><th style="white-space:nowrap;">Actions</th>
     </tr></thead>
     <tbody id="hub-vm-tbody-${catId}">${rows}</tbody>
   </table>`;

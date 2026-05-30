@@ -44,6 +44,7 @@ let hubConfigActiveSubtab = "api";
 let hubSimulationConfState = { tenantId: null, loaded: false, loading: false, rawContent: "", sha: "", fetchedAt: "", sections: {}, sectionOrder: [], keyOrder: {}, error: "", mode: "github" };
 let hubUserOverridesConfState = { tenantId: null, loaded: false, loading: false, rawContent: "", fetchedAt: "", sections: {}, sectionOrder: [], keyOrder: {}, error: "" };
 let hubUserOverrideModalState = { open: false, hostname: "", simId: "", autoSave: false };
+let hubUserOverridesSearch = ""; // preserved across re-renders
 let hubConfOverrideState = { tenantId: null, simContent: null, userContent: null, loading: false, error: "" };
 // Hub demo scenario state: tenantId → { hostname → {scenario, minutes_remaining} }
 let hubDemoActiveMap = {};
@@ -4454,7 +4455,7 @@ function renderUserOverrideCard(username, values = {}) {
   const orderedKeys = [...preferredKeys, ...Object.keys(values || {})].filter((key, index, arr) => key && arr.indexOf(key) === index);
   const { inputKeys, boolKeys, inputFields, boolFields } = renderUserOverrideFieldGroups(username, values || {}, orderedKeys);
   return `
-    <div class="setup-card setup-section-gap">
+    <div class="setup-card setup-section-gap" data-override-username="${escHtml(username)}">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
         <div style="font-weight:600;">👤 ${escHtml(username)}</div>
         <button type="button" class="btn btn-secondary btn-small user-override-delete-btn" data-username="${escHtml(username)}"${canEdit ? "" : " disabled"}>✕ Remove</button>
@@ -4668,6 +4669,13 @@ function renderSetupUserOverridesEditor() {
       ${headerButtons}
     </div>
     <div id="setup-user-overrides-msg" class="form-msg" style="margin-bottom:10px;"></div>
+    ${orderedSections.length > 5 ? `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <input id="setup-user-overrides-search" class="form-input" type="search"
+          placeholder="Filter by hostname…" value="${escHtml(hubUserOverridesSearch)}"
+          style="max-width:320px;">
+        <span id="setup-user-overrides-count" class="muted" style="font-size:0.85rem;white-space:nowrap;"></span>
+      </div>` : ""}
     <div id="setup-user-overrides-form">
       ${orderedSections.map((username) => renderUserOverrideCard(username, sections[username] || {})).join("")}
       ${!orderedSections.length ? '<div class="muted" style="padding:12px 0">No overrides configured. Click <strong>＋ Add User</strong> or use the ↗ Override button in Simulation Clients.</div>' : ""}
@@ -4685,6 +4693,29 @@ function renderSetupUserOverridesEditor() {
       renderSetupUserOverridesEditor();
     });
   });
+
+  // Live hostname search filter
+  function applyUserOverrideSearch(term) {
+    hubUserOverridesSearch = term;
+    const q = term.trim().toLowerCase();
+    const cards = container.querySelectorAll("[data-override-username]");
+    let visible = 0;
+    cards.forEach(card => {
+      const match = !q || card.dataset.overrideUsername.toLowerCase().includes(q);
+      card.style.display = match ? "" : "none";
+      if (match) visible++;
+    });
+    const countEl = document.getElementById("setup-user-overrides-count");
+    if (countEl) countEl.textContent = q ? `${visible} of ${cards.length} shown` : `${cards.length} user${cards.length !== 1 ? "s" : ""}`;
+  }
+
+  const searchInput = document.getElementById("setup-user-overrides-search");
+  if (searchInput) {
+    applyUserOverrideSearch(hubUserOverridesSearch); // apply preserved filter on render
+    searchInput.addEventListener("input", () => applyUserOverrideSearch(searchInput.value));
+  } else {
+    hubUserOverridesSearch = ""; // reset if search box not shown (≤5 users)
+  }
   $("#setup-user-overrides-add-btn")?.addEventListener("click", () => openUserOverrideModal("", null, { autoSave: false }));
   wireSetupUserOverridesButtons(tenantId);
 }

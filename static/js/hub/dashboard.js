@@ -1076,7 +1076,7 @@ function renderHubStatusTab() {
     return {
       _tone: displayTone,
       _label: displayLabel,
-      _name: `${escHtml(site.wsite)}<div style="font-size:0.75rem;color:var(--muted);font-weight:400;margin-top:2px;">${escHtml(spokeNames)}</div>`,
+      _name: `${escHtml(site.wsite)}<div style="font-size:0.75rem;color:var(--muted);font-weight:400;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;" title="${escHtml(spokeNames)}">${escHtml(spokeNames)}</div>`,
       _detail: detail,
       _lastSeen: lastSeen,
     };

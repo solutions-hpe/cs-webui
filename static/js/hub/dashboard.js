@@ -8946,13 +8946,13 @@ function renderHubCaInsightsTab(container, insights, search) {
 }
 
 function _caClientIsWireless(c) {
-  // A client is wireless if it has AP/SSID fields, or connection_type says WIRELESS
+  // A client is wireless if connection_type says WIRELESS, or it has AP/SSID fields
   if (c.connection_type && typeof c.connection_type === "string") {
     const ct = c.connection_type.toUpperCase();
     if (ct === "WIRELESS" || ct === "WIFI") return true;
     if (ct === "WIRED" || ct === "ETHERNET") return false;
   }
-  return !!(c.ap || c.ssid);
+  return !!(c.ap && c.ap !== "—") || !!(c.ssid && c.ssid !== "—");
 }
 
 function renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search) {
@@ -8995,7 +8995,7 @@ function renderHubCaClientsTab(container, clientsBySite, clientsLegacy, search) 
                <td style="white-space:nowrap;${tdP}">${escHtml(c.ssid || "—")}</td>`
             : `<td style="white-space:nowrap;${tdP}">${escHtml(c.vlan || "—")}</td>`;
         return `<tr>
-          <td style="width:28%;${tdP}"><strong>${escHtml(c.hostname || "—")}</strong><div style="font-size:11px;color:var(--muted);margin-top:2px;">${escHtml(c.mac || "")}</div></td>
+          <td style="width:28%;${tdP}"><strong>${escHtml(c.hostname !== "—" ? c.hostname : (c.username || "—"))}</strong>${c.username && c.hostname !== "—" ? `<div style="font-size:11px;color:var(--muted);margin-top:1px;">${escHtml(c.username)}</div>` : ""}<div style="font-size:11px;color:var(--muted);margin-top:2px;">${escHtml(c.mac || "")}</div></td>
           <td style="${tdP}"><span style="white-space:nowrap;">${escHtml(c.ip || "—")}</span>${c.site ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;">${escHtml(c.site)}</div>` : ""}</td>
           ${wirelessCells}
           <td style="white-space:nowrap;${tdP}">${statusDot}</td>

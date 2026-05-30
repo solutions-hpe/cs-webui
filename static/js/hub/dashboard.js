@@ -12055,7 +12055,7 @@ function bindEvents() {
       const subtab = saButton.dataset.subtab;
       superadminActiveSubtab = subtab;
       $$(".sa-subtab").forEach(button => button.classList.toggle("active", button.dataset.subtab === subtab));
-      ["sa-pending", "sa-tenants", "sa-users", "sa-security", "sa-gkill", "sa-global-usb", "sa-qa"].forEach(panelId => {
+      ["sa-pending", "sa-tenants", "sa-users", "sa-security", "sa-gkill", "sa-global-usb", "sa-qa", "sa-hub-update"].forEach(panelId => {
         document.getElementById(panelId)?.classList.toggle("hidden", panelId !== subtab);
       });
       const wasPaused = refreshPaused;
@@ -12065,6 +12065,7 @@ function bindEvents() {
       if (subtab === "sa-gkill") loadGkillState(false).catch(() => {});
       if (subtab === "sa-global-usb") loadGlobalUsbVidpids().catch(() => {});
       if (subtab === "sa-qa") initQaPanel().catch(() => {});
+      if (subtab === "sa-hub-update") initHubUpdatePanel().catch(() => {});
       if (wasPaused && !refreshPaused && subtab !== "sa-gkill") {
         refreshCurrentView(true).catch(() => {});
       }
@@ -12311,6 +12312,118 @@ function _qaPopulateTenantSelect(selId) {
   sel.innerHTML = tenants.length
     ? tenants.map(t => `<option value="${t.id}">${t.name || t.id}</option>`).join("")
     : '<option value="">No tenants</option>';
+}
+
+/** Called once when the sa-hub-update subtab is first opened (and on each revisit). */
+async function initHubUpdatePanel() {
+  const statusPanel = $("#hub-update-status-panel");
+  const msgEl = $("#hub-update-msg");
+
+  // Wire buttons (idempotent via cloneNode)
+  const checkBtn = $("#hub-update-check-btn");
+  const applyBtn = $("#hub-update-apply-btn");
+  [checkBtn, applyBtn].forEach(btn => {
+    if (!btn) return;
+    const newBtn = btn.cloneNode(true);
+    btn.replaceWith(newBtn);
+  });
+
+  const newCheckBtn = $("#hub-update-check-btn");
+  const newApplyBtn = $("#hub-update-apply-btn");
+
+  async function loadStatus() {
+    if (newCheckBtn) { newCheckBtn.disabled = true; newCheckBtn.textContent = "Checking…"; }
+    if (msgEl) { msgEl.textContent = ""; msgEl.className = "form-msg"; }
+    let data;
+    try {
+      const res = await apiFetch("/api/superadmin/hub-update-status");
+      data = await readJson(res);
+    } catch (err) {
+      if (statusPanel) statusPanel.innerHTML = `<p class="error">Failed to load status: ${escHtml(err.message || String(err))}</p>`;
+      return;
+    } finally {
+      if (newCheckBtn) { newCheckBtn.disabled = false; newCheckBtn.textContent = "↺ Check for Updates"; }
+    }
+    renderHubUpdateStatus(data);
+  }
+
+  function renderHubUpdateStatus(data) {
+    if (!statusPanel) return;
+    const updateAvailable = data.update_available;
+    const inProgress = data.update_in_progress;
+    const error = data.update_error;
+    const commits = (data.pending_commits || []).map(c => `<li style="font-family:monospace;font-size:0.85rem;">${escHtml(c)}</li>`).join("");
+
+    let banner = "";
+    if (inProgress) {
+      banner = `<div style="padding:10px 14px;background:#dbeafe;border:1px solid #3b82f6;border-radius:6px;color:#1e40af;margin-bottom:12px;">⏳ Update in progress… Refresh to see latest log. The hub will restart when complete.</div>`;
+    } else if (error) {
+      banner = `<div style="padding:10px 14px;background:#fee2e2;border:1px solid #ef4444;border-radius:6px;color:#991b1b;margin-bottom:12px;">❌ Last update error: ${escHtml(error)}</div>`;
+    } else if (updateAvailable) {
+      banner = `<div style="padding:10px 14px;background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;color:#92400e;margin-bottom:12px;">🆕 Update available — ${data.commits_behind ?? 0} new commit(s) on remote.</div>`;
+    } else if (data.commits_behind === 0) {
+      banner = `<div style="padding:10px 14px;background:#d1fae5;border:1px solid #10b981;border-radius:6px;color:#065f46;margin-bottom:12px;">✅ Hub is up to date.</div>`;
+    }
+
+    const rows = [
+      ["Current version", escHtml(data.current_version ?? "—")],
+      ["Commits behind remote", String(data.commits_behind ?? "—")],
+      ["Local HEAD", `<code style="font-size:0.8rem;">${escHtml(data.local_commit ? data.local_commit.slice(0,12) : "—")}</code> ${escHtml(data.local_subject ?? "")}`],
+      ["Update in progress", inProgress ? '<span class="badge badge-yellow">Yes</span>' : '<span class="badge badge-grey">No</span>'],
+      ["Started at", escHtml(data.started_at ? fmtDate(data.started_at) : "—")],
+      ["Finished at", escHtml(data.finished_at ? fmtDate(data.finished_at) : "—")],
+    ];
+    const tableRows = rows.map(([k, v]) => `<tr><td style="font-weight:500;white-space:nowrap;">${escHtml(k)}</td><td>${v}</td></tr>`).join("");
+
+    const logBlock = data.update_log?.length
+      ? `<div class="setup-card" style="margin-top:10px;"><div class="setup-card-header"><h4>Update Log</h4></div><pre style="font-size:0.78rem;max-height:260px;overflow-y:auto;background:#f3f4f6;padding:10px;border-radius:4px;white-space:pre-wrap;">${escHtml((data.update_log || []).join("\n"))}</pre></div>`
+      : "";
+
+    const commitList = commits ? `<div class="setup-card" style="margin-top:10px;"><div class="setup-card-header"><h4>Pending Commits (newest first)</h4></div><ul style="margin:0;padding:0 0 0 18px;">${commits}</ul></div>` : "";
+
+    statusPanel.innerHTML = `
+      ${banner}
+      <table class="data-table"><tbody>${tableRows}</tbody></table>
+      ${commitList}
+      ${logBlock}
+    `;
+  }
+
+  newCheckBtn?.addEventListener("click", loadStatus);
+  newApplyBtn?.addEventListener("click", async () => {
+    if (!confirm("This will run git pull, pip install, and restart the hub service. The hub will be briefly unavailable. Continue?")) return;
+    newApplyBtn.disabled = true;
+    newApplyBtn.textContent = "Updating…";
+    if (msgEl) { msgEl.textContent = ""; msgEl.className = "form-msg"; }
+    try {
+      const res = await apiFetch("/api/superadmin/hub-self-update", { method: "POST" });
+      const data = await readJson(res);
+      if (!res?.ok) {
+        if (msgEl) { msgEl.textContent = data?.detail || "Update failed."; msgEl.className = "form-msg error"; }
+      } else {
+        if (msgEl) { msgEl.textContent = "Update started. Hub will restart shortly."; msgEl.className = "form-msg success"; }
+        // Auto-poll for status
+        let polls = 0;
+        const poll = setInterval(async () => {
+          polls++;
+          if (polls > 20) { clearInterval(poll); return; }
+          try {
+            const sr = await apiFetch("/api/superadmin/hub-update-status");
+            const sd = await readJson(sr);
+            renderHubUpdateStatus(sd);
+            if (!sd?.update_in_progress) clearInterval(poll);
+          } catch { clearInterval(poll); }
+        }, 2000);
+      }
+    } catch (err) {
+      if (msgEl) { msgEl.textContent = err.message || "Update failed."; msgEl.className = "form-msg error"; }
+    } finally {
+      newApplyBtn.disabled = false;
+      newApplyBtn.textContent = "⬆ Update Hub Now";
+    }
+  });
+
+  await loadStatus();
 }
 
 /** Called once when the sa-qa subtab is first opened (and on each revisit). */

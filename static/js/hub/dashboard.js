@@ -2001,6 +2001,21 @@ async function apiFetch(url, options = {}) {
   return response;
 }
 
+// QA-specific fetch: includes auth header but NEVER triggers logout on 401.
+// QA checks can legitimately call endpoints that return 401 (unconfigured
+// services, superadmin-only endpoints, etc.) — treating those as session
+// expiry would log the admin out mid-run and cascade-fail all later checks.
+async function _qaFetch(url, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  if (authToken) headers.Authorization = `Bearer ${authToken}`;
+  const init = { ...options, headers };
+  if (init.body && !(init.body instanceof FormData) && typeof init.body !== "string") {
+    headers["Content-Type"] = "application/json";
+    init.body = JSON.stringify(init.body);
+  }
+  return fetch(url, init).catch(() => null);
+}
+
 async function readJson(response) {
   if (!response) return null;
   return response.json().catch(() => null);
@@ -11970,7 +11985,7 @@ function _qaUpdateSummary(startMs) {
 async function _qaCheck(method, url, label, opts = {}) {
   const { expect200 = true, jsonTest } = opts;
   try {
-    const res = await apiFetch(url, { method: method || "GET" });
+    const res = await _qaFetch(url, { method: method || "GET" });
     if (!res) return { status: "FAIL", detail: "No response / network error" };
     if (expect200 && !res.ok) return { status: "FAIL", detail: `HTTP ${res.status}` };
     if (jsonTest) {
@@ -12156,7 +12171,11 @@ async function _runQaChecks(tenantId, module) {
   document.getElementById("qa-clear-btn")?.classList.remove("hidden");
 
   const allModules = _qaModuleChecks(tenantId);
-  const modulesToRun = module === "all" ? Object.keys(allModules) : [module];
+  // Destructive / long-running modules are excluded from "all" — must be selected explicitly.
+  const DESTRUCTIVE_MODULES = ["teardown", "autoprov_e2e"];
+  const modulesToRun = module === "all"
+    ? Object.keys(allModules).filter(m => !DESTRUCTIVE_MODULES.includes(m))
+    : [module];
 
   for (const mod of modulesToRun) {
     const checks = allModules[mod] || [];
@@ -12177,7 +12196,7 @@ async function _runQaChecks(tenantId, module) {
         let resolved = false;
 
         while (Date.now() < deadline) {
-          const res = await apiFetch(check.url, { method: check.method || "GET" });
+          const res = await _qaFetch(check.url, { method: check.method || "GET" });
           if (!res) { status = "FAIL"; detail = "No response / network error"; break; }
           lastData = await readJson(res);
           const result = check.jsonTest ? check.jsonTest(lastData) : null;
@@ -12216,7 +12235,7 @@ async function _runQaChecks(tenantId, module) {
 
         if (!resolved && !status) {
           // Timed out — do one final check to report state
-          const res = await apiFetch(check.url, { method: check.method || "GET" });
+          const res = await _qaFetch(check.url, { method: check.method || "GET" });
           lastData = res ? await readJson(res) : null;
           const timeoutSec = Math.round(timeoutMs / 1000);
           if (lastData?.total_remaining !== undefined) {

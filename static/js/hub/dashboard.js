@@ -4659,7 +4659,7 @@ function renderSetupUserOverridesEditor() {
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
         <div>
           <div style="font-weight:600;">configs/user-overrides.conf</div>
-          <div class="muted" style="font-size:0.85rem;">Per-user simulation overrides — pin a hostname to specific sim settings · Last saved: ${escHtml(fetched)}</div>
+          <div class="muted" style="font-size:0.85rem;">Per-user simulation overrides — pin a hostname to specific sim settings · Last fetched: ${escHtml(fetched)}</div>
         </div>
         ${headerButtons}
       </div>
@@ -4676,7 +4676,7 @@ function renderSetupUserOverridesEditor() {
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
         <div>
           <div style="font-weight:600;">configs/user-overrides.conf</div>
-          <div class="muted" style="font-size:0.85rem;">Per-user simulation overrides — pin a hostname to specific sim settings · Last saved: ${escHtml(fetched)}</div>
+          <div class="muted" style="font-size:0.85rem;">Per-user simulation overrides — pin a hostname to specific sim settings · Last fetched: ${escHtml(fetched)}</div>
         </div>
         ${headerButtons}
       </div>
@@ -4698,7 +4698,7 @@ function renderSetupUserOverridesEditor() {
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
       <div>
         <div style="font-weight:600;">configs/user-overrides.conf</div>
-        <div class="muted" style="font-size:0.85rem;">Per-user simulation overrides — pin a hostname to specific sim settings · Last saved: ${escHtml(fetched)}</div>
+        <div class="muted" style="font-size:0.85rem;">Per-user simulation overrides — pin a hostname to specific sim settings · Last fetched: ${escHtml(fetched)}</div>
       </div>
       ${headerButtons}
     </div>

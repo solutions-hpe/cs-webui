@@ -1120,8 +1120,8 @@ function renderHubStatusTab() {
   container.innerHTML =
     makeSection("Sites", siteRows, "Clients", false, false) +
     makeSection("Hardware", hwRows, "", true) +
-    makeSection("Alerts", monRows("alert"), "First Fired", true) +
-    makeSection("Insights", monRows("insight"), "First Fired", true) +
+    makeSection("Alerts", monRows("alert"), "First Seen", true) +
+    makeSection("Insights", monRows("insight"), "First Seen", true) +
     makeSection("Clients", monRows("client"), "", true);
 
   // Wire Remove buttons

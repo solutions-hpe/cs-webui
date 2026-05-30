@@ -7200,13 +7200,17 @@ function renderHubConfigPage(data) {
           </div>
         </section>
         <section class="setup-card">
-          <div class="setup-card-header"><h2>Per-Spoke Config State</h2><p>Desired hub config version vs last applied on each spoke.</p></div>
+          <div class="setup-card-header"><h2>Per-Spoke Config State</h2><p>Desired hub config version vs last applied on each spoke. Use Resync to re-push USB certs if a spoke missed a previous push.</p></div>
           <div class="table-scroll">
             <table class="data-table">
               <thead><tr><th>Spoke</th><th>Status</th><th>Desired</th><th>Applied</th><th>Last Applied</th></tr></thead>
               <tbody>${stateRows || '<tr><td colspan="5" class="empty-state">No approved spokes in this tenant.</td></tr>'}</tbody>
             </table>
           </div>
+          ${canManageTenant() ? `<div class="form-actions" style="padding:12px 0 0;">
+            <button id="resync-usb-certs-btn" class="btn btn-secondary" type="button">↺ Resync USB Certs to All Spokes</button>
+            <span id="resync-usb-certs-msg" class="form-msg"></span>
+          </div>` : ""}
         </section>
       </div>
     </div>
@@ -9555,6 +9559,26 @@ async function saveConfigPush() {
   tenantDetailState.data[currentTenantId] = null;
   await ensureSpokes(true);
   await loadConfig(true);
+}
+
+
+async function resyncUsbCerts() {
+  const btn = $("#resync-usb-certs-btn");
+  const msgEl = $("#resync-usb-certs-msg");
+  if (btn) { btn.disabled = true; btn.textContent = "Resyncing…"; }
+  try {
+    const tenantId = getActiveTenantId();
+    const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/usb-vidpids/resync`, { method: "POST" });
+    const data = await readJson(res);
+    if (!res || !res.ok) throw new Error(data?.detail || "Resync failed");
+    setFormMessage("resync-usb-certs-msg", `USB cert push queued for ${data.pushed_to_spokes ?? 0} spoke(s).`, true);
+    await ensureSpokes(true);
+    await loadConfig(true);
+  } catch (err) {
+    setFormMessage("resync-usb-certs-msg", err.message || "Resync failed.", false);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "↺ Resync USB Certs to All Spokes"; }
+  }
 }
 
 async function ensureSpokes(force = false) {
@@ -11965,6 +11989,10 @@ function bindEvents() {
     }
     if (event.target.closest("#save-config-push-btn")) {
       saveConfigPush();
+      return;
+    }
+    if (event.target.closest("#resync-usb-certs-btn")) {
+      resyncUsbCerts();
       return;
     }
     if (event.target.closest("#hub-sim-config-refresh-btn")) {

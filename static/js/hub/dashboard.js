@@ -774,11 +774,12 @@ function hubCentralMonitorSummary(data = hubCentralData) {
   for (const spoke of spokes) {
     for (const site of spoke.assigned_sites) _addToAssigned(site, spoke);
   }
-  // Fallback: infer from each spoke's active site list for unassigned sites.
+  // Also add any spoke that is actively reporting a site (live sites data),
+  // so all monitoring spokes appear — not just the explicitly-assigned one.
   for (const spoke of spokes) {
     for (const siteObj of (Array.isArray(spoke?.sites) ? spoke.sites : [])) {
       const wsite = String(siteObj?.wsite || "").trim();
-      if (!wsite || assignedBySite.has(wsite)) continue;
+      if (!wsite) continue;
       _addToAssigned(wsite, spoke);
     }
   }
@@ -917,7 +918,7 @@ function hubAggregateHardware(spokes) {
 function hubAggregateClientCount(spokes) {
   const byWsite = new Map();
   for (const spoke of (spokes || [])) {
-    const ccStatus = spoke?.central_status?.client_count_status || {};
+    const ccStatus = spoke?.central_status?.client_count_status || spoke?.client_count_status || {};
     for (const [wsite, info] of Object.entries(ccStatus)) {
       if (!info || typeof info !== "object") continue;
       if (!byWsite.has(wsite)) {

@@ -5027,7 +5027,7 @@ function renderHubVmServer() {
       });
       const data = await readJson(res);
       if (!res?.ok) { showToast(data?.detail || "Failed to update auto-provisioning.", "error"); }
-      else { showToast(`Auto-provisioning ${enable ? "enabled" : "disabled"} on ${data?.updated_spokes ?? 0} spoke(s).`, "ok"); await loadHubVmServerAggregateStatus(); renderHubVmServer(); }
+      else { showToast(`Auto-provisioning ${enable ? "enabled" : "disabled"} on ${data?.updated_spokes ?? 0} spoke(s).`, "ok"); await loadVmServer(true); }
     } catch (err) {
       showToast(err?.message || "Failed to update auto-provisioning.", "error");
     } finally {
@@ -5300,6 +5300,7 @@ function renderHubVmServerVmsPanel(tenantId, spokeId, { simVms, otherVms, contai
             <div style="font-size:0.82rem;color:var(--muted);padding:8px 0;">
               ${autoprovOn ? "Auto-provisioning is enabled." : "Auto-provisioning is disabled."}
             </div>
+            ${canManage ? `<button id="hub-spoke-autoprov-toggle-btn" class="btn btn-secondary btn-small" type="button" data-current="${autoprovOn ? "on" : "off"}">${autoprovOn ? "Disable" : "Enable"}</button>` : ""}
           </div>
         </div>
       </div>
@@ -5459,6 +5460,26 @@ function wireHubVmsPanelActions(panel, tenantId, spokeId) {
     } catch (err) {
       showToast(err?.message || "Unable to clear reclone state.", "error");
       if (btn) { btn.disabled = false; btn.textContent = "✕ Clear Errors"; }
+    }
+  });
+
+  // Per-spoke Auto-Provisioning toggle (VMs tab card)
+  panel.querySelector("#hub-spoke-autoprov-toggle-btn")?.addEventListener("click", async () => {
+    const btn = panel.querySelector("#hub-spoke-autoprov-toggle-btn");
+    const currentVal = btn?.dataset.current || "off";
+    const enabling = currentVal === "off";
+    if (btn) { btn.disabled = true; btn.textContent = enabling ? "Enabling…" : "Disabling…"; }
+    try {
+      await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/config`, {
+        method: "POST",
+        body: { usb_auto_provision: enabling ? "on" : "off" },
+      });
+      showToast(`Auto-provisioning ${enabling ? "enabled" : "disabled"} for this spoke.`, "ok");
+      await loadHubVmServerAggregateStatus();
+      await loadVmServer(true);
+    } catch (err) {
+      showToast(err?.message || "Failed to update auto-provisioning.", "error");
+      if (btn) { btn.disabled = false; btn.textContent = currentVal === "off" ? "Enable" : "Disable"; }
     }
   });
 
@@ -6107,6 +6128,8 @@ function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
         if (saveMsg) saveMsg.textContent = "✓ Saved — changes queued for spoke delivery";
         if (saveMsg?.style) saveMsg.style.color = "var(--accent-green)";
         showToast("USB settings saved and queued for spoke delivery", "ok");
+        // Refresh fleet pill and per-spoke data so both controls stay in sync.
+        setTimeout(() => { loadHubVmServerAggregateStatus(); loadVmServer(true); }, 500);
       } catch (err) {
         if (saveMsg) {
           saveMsg.textContent = `Error: ${err.message}`;

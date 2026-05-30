@@ -1483,57 +1483,119 @@ function openHubSimDetail(checkId) {
 function renderHubHwPanel() {
   const container = document.getElementById("hub-hw-checks-list");
   if (!container) return;
-  container.textContent = "";
+  const tenantId = getActiveTenantId();
   const hwChecks = hubAggregateHardware(hubCentralData?.spokes || []);
-
-  // Also include manually-monitored gateway items
   const gatewayItems = (Array.isArray(_hubMonitoredItemsData) ? _hubMonitoredItemsData : [])
     .filter((item) => item.type === "gateway");
 
   if (!hwChecks.length && !gatewayItems.length) {
-    container.innerHTML = '<div class="central-empty">No hardware alerts data from any spoke.</div>';
+    container.innerHTML = '<div class="central-empty">No hardware data available.</div>';
     return;
   }
-  for (const hw of hwChecks) {
-    const row = document.createElement("div");
-    const siteCount = hw.spoke_breakdown.reduce((sum, spoke) => sum + Object.keys(spoke.sites || {}).length, 0);
-    row.className = "check-row";
-    row.tabIndex = 0;
-    row.setAttribute("role", "button");
-    row.innerHTML = `
-      <span class="check-dot ${hw.total > 0 ? "dot-err" : "dot-ok"}"></span>
-      <span class="check-name">${escHtml(hw.name)}</span>
-      <span class="check-badge ${hw.total > 0 ? "sim-fail" : "sim-pass"}">${escHtml(hw.total > 0 ? `${hw.total} DOWN` : "CLEAR")}</span>
-      <span class="check-detail">${hw.spoke_breakdown.length} spoke${hw.spoke_breakdown.length === 1 ? "" : "s"} · ${siteCount} site${siteCount === 1 ? "" : "s"}</span>
-      <span class="check-ts"></span>
-    `;
-    row.addEventListener("click", () => openHubHwDetail(hw.id));
-    row.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        openHubHwDetail(hw.id);
-      }
-    });
-    container.appendChild(row);
+
+  const tdP = "padding:6px 10px;";
+
+  // ── Gateway devices card (manually monitored, same style as Alerts) ────────
+  let gatewayHtml = "";
+  if (gatewayItems.length) {
+    const rows = gatewayItems.map((item) => {
+      const { tone, label } = getMonitoredItemStatusMeta(item);
+      const dotColor = tone === "red" ? "var(--text-danger,#e74c3c)" : tone === "yellow" ? "var(--text-warn,#e67e22)" : "var(--accent-green,#00b388)";
+      const badge = `<span style="display:inline-flex;align-items:center;gap:5px;color:${dotColor};font-weight:600;font-size:0.82rem;"><span style="width:8px;height:8px;border-radius:50%;background:${dotColor};flex-shrink:0;"></span>${escHtml(label)}</span>`;
+      const lastSeen = item.central_last_seen
+        ? new Date(item.central_last_seen).toLocaleString()
+        : (item.last_seen ? new Date(item.last_seen * 1000).toLocaleString() : "—");
+      const removeBtn = item.id
+        ? `<button class="btn btn-small btn-secondary hub-monitored-remove-btn" data-item-id="${escHtml(item.id)}" type="button">Remove</button>`
+        : "";
+      return `<tr>
+        <td style="font-weight:600;word-break:break-word;width:260px;vertical-align:top;${tdP}">${escHtml(item.name || item.identifier || "—")}</td>
+        <td style="white-space:nowrap;width:180px;vertical-align:top;${tdP}">${badge}</td>
+        <td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;vertical-align:top;${tdP}">${escHtml(lastSeen)}</td>
+        <td style="white-space:nowrap;width:100px;text-align:right;vertical-align:top;${tdP}">${removeBtn}</td>
+      </tr>`;
+    }).join("");
+    gatewayHtml = `
+      <div class="setup-card" style="margin-bottom:1rem;padding:0;">
+        <div style="padding:10px 16px 6px;border-bottom:1px solid var(--border);">
+          <h4 style="margin:0;color:var(--muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:0.05em;">Gateway Devices</h4>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="data-table" style="margin:0;width:100%;font-size:0.85rem;table-layout:fixed;">
+            <thead><tr>
+              <th style="padding:5px 10px;width:260px;">Name</th>
+              <th style="padding:5px 10px;width:180px;">Status</th>
+              <th style="padding:5px 10px;white-space:nowrap;">Last Seen</th>
+              <th style="padding:5px 10px;width:100px;"></th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
   }
 
-  // Render manually-monitored gateway items
-  for (const item of gatewayItems) {
-    const { tone, label } = getMonitoredItemStatusMeta(item);
-    const row = document.createElement("div");
-    row.className = "check-row";
-    const lastSeen = item.central_last_seen
-      ? new Date(item.central_last_seen).toLocaleString()
-      : (item.last_seen ? new Date(item.last_seen * 1000).toLocaleString() : "—");
-    row.innerHTML = `
-      <span class="check-dot ${tone === "red" ? "dot-err" : tone === "yellow" ? "dot-warn" : "dot-ok"}"></span>
-      <span class="check-name">${escHtml(item.name || item.identifier || "—")}</span>
-      <span class="check-badge ${tone === "red" ? "sim-fail" : tone === "yellow" ? "sim-warn" : "sim-pass"}">${escHtml(label)}</span>
-      <span class="check-detail">Gateway · last seen ${escHtml(lastSeen)}</span>
-      <span class="check-ts"></span>
-    `;
-    container.appendChild(row);
+  // ── Auto-detected hardware alerts card ─────────────────────────────────────
+  let hwAlertsHtml = "";
+  if (hwChecks.length) {
+    const rows = hwChecks.map((hw) => {
+      const dotColor = hw.total > 0 ? "var(--text-danger,#e74c3c)" : "var(--accent-green,#00b388)";
+      const badgeLabel = hw.total > 0 ? `${hw.total} DOWN` : "CLEAR";
+      const badge = `<span style="display:inline-flex;align-items:center;gap:5px;color:${dotColor};font-weight:600;font-size:0.82rem;"><span style="width:8px;height:8px;border-radius:50%;background:${dotColor};flex-shrink:0;"></span>${escHtml(badgeLabel)}</span>`;
+      const siteCount = hw.spoke_breakdown.reduce((s, sp) => s + Object.keys(sp.sites || {}).length, 0);
+      const detail = `${hw.spoke_breakdown.length} spoke${hw.spoke_breakdown.length === 1 ? "" : "s"} · ${siteCount} site${siteCount === 1 ? "" : "s"}`;
+      return `<tr class="hub-hw-alert-row" data-hw-id="${escHtml(hw.id)}" style="cursor:pointer;">
+        <td style="font-weight:600;word-break:break-word;width:260px;vertical-align:top;${tdP}">${escHtml(hw.name)}</td>
+        <td style="white-space:nowrap;width:180px;vertical-align:top;${tdP}">${badge}</td>
+        <td style="color:var(--muted);font-size:0.8rem;white-space:nowrap;vertical-align:top;${tdP}">${escHtml(detail)}</td>
+      </tr>`;
+    }).join("");
+    hwAlertsHtml = `
+      <div class="setup-card" style="margin-bottom:1rem;padding:0;">
+        <div style="padding:10px 16px 6px;border-bottom:1px solid var(--border);">
+          <h4 style="margin:0;color:var(--muted);font-size:0.8rem;text-transform:uppercase;letter-spacing:0.05em;">Hardware Alerts</h4>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="data-table" style="margin:0;width:100%;font-size:0.85rem;table-layout:fixed;">
+            <thead><tr>
+              <th style="padding:5px 10px;width:260px;">Name</th>
+              <th style="padding:5px 10px;width:180px;">Status</th>
+              <th style="padding:5px 10px;white-space:nowrap;">Spokes / Sites</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
   }
+
+  container.innerHTML = gatewayHtml + hwAlertsHtml;
+
+  // Wire Remove buttons for gateway items
+  container.querySelectorAll(".hub-monitored-remove-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const itemId = btn.dataset.itemId;
+      if (!itemId || !tenantId) return;
+      btn.disabled = true;
+      btn.textContent = "Removing…";
+      try {
+        const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/central/monitored-items/${encodeURIComponent(itemId)}`, { method: "DELETE" });
+        if (res?.ok) {
+          _hubMonitoredItemsData = (_hubMonitoredItemsData || []).filter((i) => i.id !== itemId);
+          renderHubHwPanel();
+        } else {
+          btn.disabled = false;
+          btn.textContent = "Remove";
+        }
+      } catch {
+        btn.disabled = false;
+        btn.textContent = "Remove";
+      }
+    });
+  });
+
+  // Wire click-to-detail for hardware alert rows
+  container.querySelectorAll(".hub-hw-alert-row[data-hw-id]").forEach((row) => {
+    row.addEventListener("click", () => openHubHwDetail(row.dataset.hwId));
+  });
 }
 
 function openHubHwDetail(checkId) {

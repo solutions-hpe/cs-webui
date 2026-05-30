@@ -6796,6 +6796,7 @@ function renderHubVmServerDetailsPanel(px, host) {
                placeholder="user@pam!tokenid=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                style="flex:1;min-width:200px;font-family:monospace;font-size:12px;" />
         <button id="hub-proxmox-api-token-save-btn" class="btn btn-primary" style="flex-shrink:0;" type="button">Save Token</button>
+        <button id="hub-proxmox-api-token-provision-btn" class="btn btn-secondary" style="flex-shrink:0;" type="button" title="Automatically create a Proxmox API token on this spoke via pvesh (requires spoke running on Proxmox host)">⚙ Auto-provision</button>
       </div>
       <div id="hub-proxmox-token-status" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
     </div>
@@ -6852,6 +6853,27 @@ function wireHubVmServerDetailsPanel(panel, tenantId, spokeId) {
       if (input) input.value = "";
     } catch (err) {
       showToast(`Failed to save token: ${err.message}`, "error");
+    }
+  });
+
+  panel.querySelector("#hub-proxmox-api-token-provision-btn")?.addEventListener("click", async () => {
+    const btn = panel.querySelector("#hub-proxmox-api-token-provision-btn");
+    if (btn) { btn.disabled = true; btn.textContent = "⏳ Provisioning…"; }
+    if (statusEl) statusEl.textContent = "⏳ Creating Proxmox API token via pvesh on spoke…";
+    try {
+      const resp = await apiFetch(
+        `/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/provision-proxmox-token`,
+        { method: "POST" }
+      );
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.detail || `HTTP ${resp.status}`);
+      showToast("Proxmox API token auto-provisioned and saved.", "ok");
+      if (statusEl) statusEl.textContent = "✅ API token auto-provisioned (root@pam!cs-hub) and configured on this spoke.";
+    } catch (err) {
+      showToast(`Auto-provision failed: ${err.message}`, "error");
+      if (statusEl) statusEl.textContent = `❌ Auto-provision failed: ${err.message}`;
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "⚙ Auto-provision"; }
     }
   });
 

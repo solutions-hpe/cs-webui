@@ -3469,46 +3469,44 @@ function renderHubSimulationField(section, key, rawValue = "") {
 
 function renderHubSimulationSection(section, values = {}, { open = false } = {}) {
   const keys = hubSimulationSectionKeys(section, values);
-  const title = String(section).match(/^s(\d+)$/) ? `Simulation S${section.slice(1)}` : `[${section}]`;
-
   const isSlot = Boolean(String(section).match(/^s\d+$/));
+  const title = isSlot ? `Simulation S${section.slice(1)}` : `[${section}]`;
 
-  if (isSlot && keys.length) {
-    // Split keys into text/select and boolean groups
-    const textKeys = keys.filter(k => !hubSimIsBoolValue(String(values[k] ?? "")));
-    const boolKeys = keys.filter(k => hubSimIsBoolValue(String(values[k] ?? "")));
+  // All sections use the same layout: text/select fields in a responsive grid,
+  // boolean fields as compact inline checkbox+label rows beneath (Sx style).
+  const textKeys = keys.filter(k => !hubSimIsBoolValue(String(values[k] ?? "")) && !HUB_SIM_SELECT_FIELDS[k]);
+  const selectKeys = keys.filter(k => HUB_SIM_SELECT_FIELDS[k]);
+  const boolKeys = keys.filter(k => hubSimIsBoolValue(String(values[k] ?? "")));
 
-    const textFields = textKeys.map((key) => renderHubSimulationField(section, key, values[key] ?? "")).join("");
-    const boolFields = boolKeys.map((key) => {
-      const value = String(values[key] ?? "");
-      const [onValue, offValue] = hubSimBoolPair(value);
-      const checked = value.toLowerCase() === onValue ? " checked" : "";
-      const label = hubSimFieldLabel(key);
-      return `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;font-size:0.875rem;">
-        <input type="checkbox" data-section="${escHtml(section)}" data-key="${escHtml(key)}" data-on="${escHtml(onValue)}" data-off="${escHtml(offValue)}"${checked}>
-        <span>${escHtml(label)}</span>
-      </label>`;
-    }).join("");
+  const minColWidth = isSlot ? "160px" : "220px";
+  const inputKeys = [...textKeys, ...selectKeys];
+  const inputFields = inputKeys.map((key) => renderHubSimulationField(section, key, values[key] ?? "")).join("");
+  const boolFields = boolKeys.map((key) => {
+    const value = String(values[key] ?? "");
+    const [onValue, offValue] = hubSimBoolPair(value);
+    const checked = value.toLowerCase() === onValue ? " checked" : "";
+    const label = hubSimFieldLabel(key);
+    return `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;font-size:0.875rem;">
+      <input type="checkbox" data-section="${escHtml(section)}" data-key="${escHtml(key)}" data-on="${escHtml(onValue)}" data-off="${escHtml(offValue)}"${checked}>
+      <span>${escHtml(label)}</span>
+    </label>`;
+  }).join("");
 
+  if (!keys.length) {
     return `
       <details class="setup-card setup-section-gap"${open ? " open" : ""}>
         <summary style="cursor:pointer;font-weight:600;">${escHtml(title)}</summary>
-        <div class="setup-form setup-section-gap">
-          ${textKeys.length ? `<div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;">${textFields}</div>` : ""}
-          ${boolKeys.length ? `<div style="display:flex;flex-wrap:wrap;gap:8px 20px;padding:6px 0;">${boolFields}</div>` : ""}
-        </div>
+        <div class="setup-form setup-section-gap"><div class="muted">No fields found in this section.</div></div>
       </details>
     `;
   }
 
-  const fields = keys.length
-    ? keys.map((key) => renderHubSimulationField(section, key, values[key] ?? "")).join("")
-    : '<div class="muted">No fields found in this section.</div>';
   return `
     <details class="setup-card setup-section-gap"${open ? " open" : ""}>
       <summary style="cursor:pointer;font-weight:600;">${escHtml(title)}</summary>
       <div class="setup-form setup-section-gap">
-        <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">${fields}</div>
+        ${inputKeys.length ? `<div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(${minColWidth},1fr));gap:8px;">${inputFields}</div>` : ""}
+        ${boolKeys.length ? `<div style="display:flex;flex-wrap:wrap;gap:8px 20px;padding:6px 0;">${boolFields}</div>` : ""}
       </div>
     </details>
   `;

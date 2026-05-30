@@ -21,8 +21,8 @@ let autoRefreshCountdownTimer = null;
 let autoRefreshSecondsLeft = 10;
 let refreshPaused = false;
 let tenantContextActive = false;
-const autoRefreshActiveTabs = new Set(["dashboard", "simulations", "clients", "central", "spokes"]);
-const autoRefreshActiveSuperadminTabs = new Set(["sa-gkill"]);
+const autoRefreshActiveTabs = new Set(["dashboard", "simulations", "clients", "central", "spokes", "vm-server", "reseed", "commands", "setup", "tenant-setup", "config", "superadmin"]);
+const autoRefreshActiveSuperadminTabs = new Set(["sa-pending", "sa-tenants", "sa-users", "sa-security", "sa-gkill", "sa-global-usb"]);
 let superadminActiveSubtab = "sa-pending";
 let tenantDetailState = { open: false, tenantId: null, activeTab: "dashboard", data: {} };
 const hubAdminTabIds = new Set(["dashboard", "setup", "superadmin"]);
@@ -1947,10 +1947,38 @@ function scheduleReload(key, callback, delay = 250) {
   }, delay);
 }
 
-// Returns true if the user has checkboxes checked (e.g. VM selection) — skip
-// re-rendering the active tab when true so selections aren't lost on WS events.
+// Tracks whether the user is actively interacting with a form element.
+// Auto-refresh is suppressed while true so in-progress edits are never lost.
+let _formInteractionActive = false;
+let _formInteractionBlurTimer = null;
+
+document.addEventListener('focusin', e => {
+  if (e.target.matches('input, textarea, select')) {
+    _formInteractionActive = true;
+    if (_formInteractionBlurTimer) { clearTimeout(_formInteractionBlurTimer); _formInteractionBlurTimer = null; }
+  }
+});
+document.addEventListener('focusout', e => {
+  if (e.target.matches('input, textarea, select')) {
+    // Short delay so tabbing between fields doesn't briefly clear the flag
+    _formInteractionBlurTimer = setTimeout(() => {
+      _formInteractionActive = false;
+      _formInteractionBlurTimer = null;
+    }, 500);
+  }
+});
+
+// Returns true when the user is actively editing a field or has checkboxes
+// selected — auto-refresh should be skipped to avoid disrupting their work.
+function _hasActiveInteraction() {
+  if (_formInteractionActive) return true;
+  if (document.querySelectorAll('.hub-vm-check:checked').length > 0) return true;
+  return false;
+}
+
+// Kept for backwards-compat — delegates to the full interaction check.
 function _hasActiveSelection() {
-  return document.querySelectorAll('.hub-vm-check:checked').length > 0;
+  return _hasActiveInteraction();
 }
 
 // Silently fetch fresh data for a tab and update in-memory caches without
@@ -11480,15 +11508,8 @@ function updateAutoRefreshCountdownDisplay(text, paused = false) {
 
 function computeHubRefreshPaused() {
   if (!currentUser) return true;
-  if (activeTab === "superadmin") {
-    return !autoRefreshActiveSuperadminTabs.has(superadminActiveSubtab);
-  }
-  if (activeTab !== "dashboard") {
-    return !autoRefreshActiveTabs.has(activeTab);
-  }
-  if (tenantDetailState.open) {
-    return !autoRefreshActiveTabs.has(tenantDetailState.activeTab);
-  }
+  // Pause while the user is actively editing a field or has items selected
+  if (_hasActiveInteraction()) return true;
   return false;
 }
 
@@ -11529,6 +11550,11 @@ function syncAutoRefreshState() {
   autoRefreshTimer = setInterval(async () => {
     autoRefreshSecondsLeft = seconds;
     updateAutoRefreshCountdownDisplay(String(autoRefreshSecondsLeft) + 's');
+    // Skip full DOM refresh if user is actively editing a field or has items selected
+    if (_hasActiveInteraction()) {
+      updateAutoRefreshCountdownDisplay("Paused", true);
+      return;
+    }
     await refreshCurrentView(false);
   }, seconds * 1000);
 }
@@ -11562,8 +11588,8 @@ function connectHubWebSocket() {
   ws.onmessage = event => {
     const data = JSON.parse(event.data);
     if (data.type === "telemetry") {
-      // Active tab: re-render only if user has no checkboxes selected
-      if (!_hasActiveSelection()) {
+      // Active tab: re-render only if user has no active form interaction or selections
+      if (!_hasActiveInteraction()) {
         if (activeTab === "dashboard") scheduleReload("ws-dashboard", () => loadDashboard(true));
         if (activeTab === "simulations") scheduleReload("ws-simulations", () => loadHubSimulations(true));
         if (activeTab === "clients") scheduleReload("ws-clients", () => loadClients(true));
@@ -11573,6 +11599,9 @@ function connectHubWebSocket() {
         if (activeTab === "reseed") scheduleReload("ws-reseed", () => ensureSpokes(true).then(() => renderHubReseedPanel()));
         if (activeTab === "tenant-setup") scheduleReload("ws-tenant-setup", () => loadTenantSetup(true));
         if (activeTab === "config") scheduleReload("ws-config", () => loadConfig(true));
+        if (activeTab === "setup") scheduleReload("ws-setup", () => loadSetup(true));
+        if (activeTab === "commands") scheduleReload("ws-commands", () => loadCommands());
+        if (activeTab === "superadmin") scheduleReload("ws-superadmin", () => loadSuperadmin());
       }
       // Background tabs: silently refresh data caches so tab switches show fresh data instantly
       const BG_TABS = ["vm-server", "simulations", "clients", "spokes"];

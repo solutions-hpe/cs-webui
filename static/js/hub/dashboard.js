@@ -5004,6 +5004,7 @@ function renderHubVmServer() {
   });
   container.querySelectorAll(".hub-vmserver-spoke-card").forEach(card => {
     const openCard = () => {
+      hubVmServerActiveSubtab = "vms"; // always open on VMs tab
       hubVmServerSelectedSpoke = card.dataset.spokeId;
       renderHubVmServer();
     };

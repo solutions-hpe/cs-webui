@@ -1936,6 +1936,43 @@ function scheduleReload(key, callback, delay = 250) {
   }, delay);
 }
 
+// Returns true if the user has checkboxes checked (e.g. VM selection) — skip
+// re-rendering the active tab when true so selections aren't lost on WS events.
+function _hasActiveSelection() {
+  return document.querySelectorAll('.hub-vm-check:checked').length > 0;
+}
+
+// Silently fetch fresh data for a tab and update in-memory caches without
+// touching the DOM. Called for background (inactive) tabs on WS telemetry
+// events so switching tabs always shows fresh data.
+async function _bgFetchTab(tab) {
+  if (!currentTenantId || !currentUser) return;
+  try {
+    if (tab === "vm-server") {
+      const [fresh] = await Promise.all([
+        loadAggregateData("proxmox"),
+        loadHubVmServerAggregateStatus(),
+      ]);
+      if (fresh?.hosts) {
+        aggregateProxmoxHosts = fresh.hosts;
+        try { localStorage.setItem(`hub_vmserver_${currentTenantId}`, JSON.stringify(fresh.hosts)); } catch (_) {}
+      }
+    } else if (tab === "simulations") {
+      const data = await loadAggregateData("central");
+      if (data) { hubCentralData = data; aggregateCentralData = data; }
+    } else if (tab === "clients") {
+      const data = await loadAggregateData("clients");
+      if (data) {
+        aggregateClientRows = normalizeAggregateClientRows(data);
+        primeHubClientExpandedSet([...new Set(aggregateClientRows.map(hubClientSiteKey))]);
+        saveHubClientsCache(aggregateClientRows);
+      }
+    } else if (tab === "spokes") {
+      await ensureSpokes(true);
+    }
+  } catch (_) { /* silent — background fetch, never surface errors */ }
+}
+
 async function refreshAfterSpokeApproval(tenantId = currentTenantId) {
   const refresh = async () => {
     if (currentUser?.is_superadmin) {
@@ -11292,14 +11329,23 @@ function connectHubWebSocket() {
   ws.onmessage = event => {
     const data = JSON.parse(event.data);
     if (data.type === "telemetry") {
-      if (activeTab === "dashboard") scheduleReload("ws-dashboard", () => loadDashboard(true));
-      if (activeTab === "simulations") scheduleReload("ws-simulations", () => loadHubSimulations(true));
-      if (activeTab === "clients") scheduleReload("ws-clients", () => loadClients(true));
-      if (activeTab === "central") scheduleReload("ws-hub-central", () => loadHubCentralMonitoring(true));
-      if (activeTab === "spokes") scheduleReload("ws-spokes", () => loadSpokes(true));
-      if (activeTab === "reseed") scheduleReload("ws-reseed", () => ensureSpokes(true).then(() => renderHubReseedPanel()));
-      if (activeTab === "tenant-setup") scheduleReload("ws-tenant-setup", () => loadTenantSetup(true));
-      if (activeTab === "config") scheduleReload("ws-config", () => loadConfig(true));
+      // Active tab: re-render only if user has no checkboxes selected
+      if (!_hasActiveSelection()) {
+        if (activeTab === "dashboard") scheduleReload("ws-dashboard", () => loadDashboard(true));
+        if (activeTab === "simulations") scheduleReload("ws-simulations", () => loadHubSimulations(true));
+        if (activeTab === "clients") scheduleReload("ws-clients", () => loadClients(true));
+        if (activeTab === "central") scheduleReload("ws-hub-central", () => loadHubCentralMonitoring(true));
+        if (activeTab === "spokes") scheduleReload("ws-spokes", () => loadSpokes(true));
+        if (activeTab === "vm-server") scheduleReload("ws-vm-server", () => loadVmServer(true));
+        if (activeTab === "reseed") scheduleReload("ws-reseed", () => ensureSpokes(true).then(() => renderHubReseedPanel()));
+        if (activeTab === "tenant-setup") scheduleReload("ws-tenant-setup", () => loadTenantSetup(true));
+        if (activeTab === "config") scheduleReload("ws-config", () => loadConfig(true));
+      }
+      // Background tabs: silently refresh data caches so tab switches show fresh data instantly
+      const BG_TABS = ["vm-server", "simulations", "clients", "spokes"];
+      for (const tab of BG_TABS) {
+        if (tab !== activeTab) scheduleReload(`ws-bg-${tab}`, () => _bgFetchTab(tab), 1500);
+      }
       if (activeSpokeModal && data.tenant_id === activeSpokeModal.tenant_id && data.spoke_id === activeSpokeModal.spoke.id) {
         scheduleReload("ws-modal", () => loadSpokes(true).then(() => renderSpokeClientsTab()));
       }

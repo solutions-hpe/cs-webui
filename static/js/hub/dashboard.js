@@ -526,22 +526,31 @@ function renderHubT3PciSection(site) {
 }
 
 function renderHubSimulationBadges(activeSims = [], emptyLabel = "—", demoScenario = null, opts = {}) {
-  const { hostname = "", spokeId = "", isAdmin = false } = opts;
-  const activeSet = new Set((activeSims || []).filter(Boolean));
-  // Show all known sims; active (admin) = colored, demo (temp) = colored + ⚡, inactive = dim
+  const { hostname = "", spokeId = "", isAdmin = false, overrides = [] } = opts;
+  const activeSet   = new Set((activeSims || []).filter(Boolean));
+  const overrideSet = new Set((overrides  || []).filter(Boolean));
+  // Show all known sims; active = colored, overridden = colored + 🔒, demo = colored + ⚡, inactive = dim
   return `<div class="badge-list sim-badge-list">${ALL_KNOWN_SIMS.map(sim => {
-    const isActive = activeSet.has(sim);
-    const isDemo = Boolean(demoScenario && sim === demoScenario);
-    if (isActive || isDemo) {
-      const cls = hubSimulationBadgeClass(sim) + (isDemo ? ' badge-demo-active' : '');
-      // Admin can toggle off a permanently-active sim; demo sims use the dropdown
-      if (isAdmin && hostname && !isDemo) {
-        return `<button type="button" class="sim-toggle-btn ${cls}" data-hostname="${escHtml(hostname)}" data-spoke-id="${escHtml(spokeId)}" data-sim="${escHtml(sim)}" data-active="1" title="Disable ${escHtml(sim)} (permanent)">${escHtml(sim)}</button>`;
-      }
-      return `<span class="${cls}" title="${escHtml(sim)}">${escHtml(sim)}${isDemo ? ' ⚡' : ''}</span>`;
+    const isActive   = activeSet.has(sim);
+    const isOverride = overrideSet.has(sim);
+    const isDemo     = Boolean(demoScenario && sim === demoScenario);
+    const lockIcon   = isOverride ? `<span style="font-size:0.72em;margin-right:2px;opacity:0.85;">🔒</span>` : "";
+    if (isDemo) {
+      const cls = hubSimulationBadgeClass(sim) + ' badge-demo-active';
+      return `<span class="${cls}" title="${escHtml(sim)}">${escHtml(sim)} ⚡</span>`;
     }
     if (isAdmin && hostname) {
-      return `<button type="button" class="sim-toggle-btn badge badge-sim-inactive" data-hostname="${escHtml(hostname)}" data-spoke-id="${escHtml(spokeId)}" data-sim="${escHtml(sim)}" data-active="0" title="Enable ${escHtml(sim)} (permanent)">${escHtml(sim)}</button>`;
+      // Colored if globally active OR overridden; lock icon if overridden
+      const cls = (isActive || isOverride)
+        ? hubSimulationBadgeClass(sim)
+        : 'badge badge-sim-inactive';
+      const titleStr = isOverride
+        ? `Remove override for ${escHtml(sim)}`
+        : `Override: force-enable ${escHtml(sim)} for ${escHtml(hostname)}`;
+      return `<button type="button" class="sim-toggle-btn ${cls}" data-hostname="${escHtml(hostname)}" data-spoke-id="${escHtml(spokeId)}" data-sim="${escHtml(sim)}" data-overridden="${isOverride ? '1' : '0'}" title="${titleStr}">${lockIcon}${escHtml(sim)}</button>`;
+    }
+    if (isActive) {
+      return `<span class="${hubSimulationBadgeClass(sim)}" title="${escHtml(sim)}">${escHtml(sim)}</span>`;
     }
     return `<span class="badge badge-sim-inactive" title="${escHtml(sim)}">${escHtml(sim)}</span>`;
   }).join("")}</div>`;
@@ -1856,15 +1865,9 @@ function renderClientRowsForHub() {
                       const demoScenario = hubDemoActiveMap[client.hostname]?.scenario || null;
                       const isAdminRole = myRole === 'admin' || myRole === 'superadmin';
                       const colSpan = showDemoButtons ? 6 : 5;
-                      const overrideBtn = isAdminRole && client.hostname
-                        ? `<button type="button" class="btn btn-secondary btn-small"
-                             style="margin-left:8px;vertical-align:middle;"
-                             data-user-override-hostname="${escHtml(client.hostname)}"
-                             data-user-override-simid="${escHtml(client.simulation_id || "")}"
-                             title="Pin ${escHtml(client.hostname)} to custom sim settings">↗ Override</button>`
-                        : "";
+                      const overrides = hubClientSimOverrides[client.hostname] || [];
                       const simsRow = `<tr class="hub-client-sims-row"><td colspan="${colSpan + 1}" class="hub-client-sims-cell">
-                        ${renderHubSimulationBadges(sims, "", demoScenario, { hostname: client.hostname || '', spokeId: client.spoke_id || '', isAdmin: isAdminRole })}${overrideBtn}
+                        ${renderHubSimulationBadges(sims, "", demoScenario, { hostname: client.hostname || '', spokeId: client.spoke_id || '', isAdmin: isAdminRole, overrides })}
                       </td></tr>`;
                       return `
                         <tr class="hub-client-main-row">
@@ -1906,9 +1909,9 @@ function renderClientRowsForHub() {
       btn.addEventListener("click", async (e) => {
         e.stopPropagation();
         const { hostname, sim } = btn.dataset;
-        const isCurrentlyActive = btn.dataset.active === "1";
+        const isCurrentlyOverridden = btn.dataset.overridden === "1";
         btn.disabled = true;
-        await toggleHubClientSimOverride(currentTenantId, hostname, sim, !isCurrentlyActive);
+        await toggleHubClientSimOverride(currentTenantId, hostname, sim, !isCurrentlyOverridden);
         btn.disabled = false;
         renderClientRowsForHub(); // re-render after state update
       });

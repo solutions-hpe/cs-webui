@@ -983,10 +983,10 @@ function getMonitoredItemStatusMeta(item) {
 
   // If backend says missing, honour that
   if (status === "missing") {
-    return { status, missingMins, tone: "red", label: `✗ ${missingMins}m absent` };
+    return { status, missingMins, tone: "red", label: "Failed" };
   }
   if (status === "warning") {
-    return { status, missingMins, tone: "yellow", label: `⚠ ${missingMins}m absent` };
+    return { status, missingMins, tone: "yellow", label: "Warning" };
   }
 
   // Override to stale if last_seen is old

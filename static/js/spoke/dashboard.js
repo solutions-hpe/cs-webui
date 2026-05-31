@@ -1563,12 +1563,18 @@ function renderServerTab(data) {
     { action: 'delete_vm',   label: '✕',  title: 'Delete'   },
   ];
 
-  const recloningVmids = new Set();
+// Build per-VM reclone status map: vmid → 'queued' | 'in_progress'
+  const vmRecloneStatus = new Map();
   if (latestRecloneState?.status === 'running') {
-    if (latestRecloneState.current_vm != null) recloningVmids.add(Number(latestRecloneState.current_vm));
     (latestRecloneState.log || []).forEach((e) => {
-      if (e.status === 'queued' || e.status === 'in_progress') recloningVmids.add(Number(e.vmid));
+      if (e.status === 'queued' || e.status === 'in_progress') {
+        vmRecloneStatus.set(Number(e.vmid), e.status);
+      }
     });
+    if (latestRecloneState.current_vm != null) {
+      const cid = Number(latestRecloneState.current_vm);
+      if (!vmRecloneStatus.has(cid)) vmRecloneStatus.set(cid, 'in_progress');
+    }
   }
 
   function _renderVmGroup(catKey, vmList) {
@@ -1577,11 +1583,19 @@ function renderServerTab(data) {
     const thChk  = document.getElementById(`server-th-check-${catKey}`);
     if (!tbody) return;
 
-    // Sort: stopped/paused first, then by VMID ascending
+    // Sort: in-flight states first (recloning/provisioning/deleting/queued), then stopped, then running by VMID
+    const statusPriority = (vm) => {
+      const rLog = vmRecloneStatus.get(Number(vm.vmid));
+      if (rLog === 'in_progress') return 0;
+      if (rLog === 'queued') return 1;
+      if (['deleting', 'provisioning', 'cloning', 'configuring'].includes(vm.status)) return 2;
+      if (vm.prov_status === 'provisioning' || vm.pending_checkin === true) return 2;
+      if (vm.status !== 'running') return 3;
+      return 4;
+    };
     const sorted = [...vmList].sort((a, b) => {
-      const aRunning = a.status === 'running' ? 1 : 0;
-      const bRunning = b.status === 'running' ? 1 : 0;
-      if (aRunning !== bRunning) return aRunning - bRunning;
+      const pa = statusPriority(a), pb = statusPriority(b);
+      if (pa !== pb) return pa - pb;
       return Number(a.vmid) - Number(b.vmid);
     });
 
@@ -1591,16 +1605,21 @@ function renderServerTab(data) {
     if (!sorted.length) return;
 
     sorted.forEach((vm) => {
-      const isRecloning  = recloningVmids.has(Number(vm.vmid));
+      const recloneLog   = vmRecloneStatus.get(Number(vm.vmid));
       const isDeleting   = vm.status === 'deleting';
       const isWebui      = webuiVmid != null && Number(vm.vmid) === webuiVmid;
       const isProvisioning = vm.prov_status === 'provisioning' || vm.pending_checkin === true;
       const baseStatusText = isDeleting
-        ? '🟡 deleting…'
+        ? '🔴 deleting…'
         : isProvisioning
-        ? '🔵 provisioning'
+        ? '🟡 provisioning…'
         : `${vm.status === 'running' ? '🟢' : vm.status === 'paused' ? '🟡' : '⚫'} ${vm.status || 'unknown'}`;
-      const statusLabel  = isRecloning ? '🟡 recloning…' : baseStatusText;
+      let statusLabel;
+      if (recloneLog === 'in_progress')      statusLabel = '🔄 recloning…';
+      else if (recloneLog === 'queued')      statusLabel = '⏳ queued';
+      else if (vm.status === 'cloning')      statusLabel = '🟡 cloning…';
+      else if (vm.status === 'configuring')  statusLabel = '🟡 configuring…';
+      else                                   statusLabel = baseStatusText;
       const memUsed  = vm.mem    ? fmtSize(Number(vm.mem)    * 1024 * 1024) : '—';
       const memTotal = vm.maxmem ? fmtSize(Number(vm.maxmem) * 1024 * 1024) : '—';
       // Show CPU only for running VMs — stopped VMs always report 0 which is misleading

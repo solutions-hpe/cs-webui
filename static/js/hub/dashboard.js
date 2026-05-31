@@ -6851,15 +6851,15 @@ function renderHubVmServerDetailsPanel(px, host) {
       ? `~${Number(px.mem_est_avg).toFixed(1)}%${_warmupRemainLabel ? ` <span class="muted" style="font-size:0.85em;">(${_warmupRemainLabel})</span>` : ''}`
       : `<span class="muted">${_warmupRemainLabel ? `warming up… ${_warmupRemainLabel}` : 'warming up…'}</span>`;
   const _cpuAvgTitle = px.cpu_1h_avg != null
-    ? "Confirmed 1-hour rolling average CPU usage. During warmup the UI shows an estimated ~value until the full 60-minute window is available."
+    ? "Confirmed rolling average CPU usage. During warmup the UI shows an estimated ~value until enough samples are collected."
     : px.cpu_est_avg != null
-      ? `Estimated CPU average from samples collected so far while the 1-hour window fills${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ""}.`
-      : `Collecting CPU samples for the 1-hour rolling average${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ""}.`;
+      ? `Estimated CPU average from samples collected so far${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ""}.`
+      : `Collecting CPU samples for the rolling average${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ""}.`;
   const _memAvgTitle = px.mem_1h_avg != null
-    ? "Confirmed 1-hour rolling average memory usage. During warmup the UI shows an estimated ~value until the full 60-minute window is available."
+    ? "Confirmed rolling average memory usage. During warmup the UI shows an estimated ~value until enough samples are collected."
     : px.mem_est_avg != null
-      ? `Estimated memory average from samples collected so far while the 1-hour window fills${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ""}.`
-      : `Collecting memory samples for the 1-hour rolling average${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ""}.`;
+      ? `Estimated memory average from samples collected so far${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ""}.`
+      : `Collecting memory samples for the rolling average${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ""}.`;
   const _agentVersionTitle = "Version reported by the Proxmox agent running on the host. Cached on the spoke so it survives service restarts.";
   const _pveVersionTitle = "Proxmox VE version reported by the host and cached on the spoke so Hub Details can show it immediately after restart.";
   const lastSeen = px.last_seen
@@ -6880,7 +6880,7 @@ function renderHubVmServerDetailsPanel(px, host) {
           <span class="server-stat-pill">⚡ CPU: ${cpu}</span>
           <span class="server-stat-pill">🧠 RAM: ${memUsed} / ${memTotal}</span>
           ${px.cpu_1h_avg != null ? `<span class="server-stat-pill" title="${escHtml(_cpuAvgTitle)}">📊 CPU avg: ${Number(px.cpu_1h_avg).toFixed(1)}%</span>` : px.cpu_est_avg != null ? `<span class="server-stat-pill muted" title="${escHtml(_cpuAvgTitle)}">📊 CPU avg: ~${Number(px.cpu_est_avg).toFixed(1)}%${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ''}</span>` : `<span class="server-stat-pill muted" title="${escHtml(_cpuAvgTitle)}">📊 ${_warmupRemainLabel ? `warming up… ${_warmupRemainLabel}` : 'warming up…'}</span>`}
-          ${px.mem_1h_avg != null ? `<span class="server-stat-pill" title="${escHtml(_memAvgTitle)}">📊 Mem avg: ${Number(px.mem_1h_avg).toFixed(1)}%</span>` : px.mem_est_avg != null ? `<span class="server-stat-pill muted" title="${escHtml(_memAvgTitle)}">📊 Mem avg: ~${Number(px.mem_est_avg).toFixed(1)}%${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ''}</span>` : ''}
+          ${px.mem_1h_avg != null ? `<span class="server-stat-pill" title="${escHtml(_memAvgTitle)}">📊 Mem avg: ${Number(px.mem_1h_avg).toFixed(1)}%</span>` : px.mem_est_avg != null ? `<span class="server-stat-pill muted" title="${escHtml(_memAvgTitle)}">📊 Mem avg: ~${Number(px.mem_est_avg).toFixed(1)}%${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ''}</span>` : `<span class="server-stat-pill muted" title="${escHtml(_memAvgTitle)}">📊 ${_warmupRemainLabel ? `warming up… ${_warmupRemainLabel}` : 'warming up…'}</span>`}
         </div>
       </div>
       <table class="data-table">
@@ -6890,9 +6890,9 @@ function renderHubVmServerDetailsPanel(px, host) {
           <tr><th title="${escHtml(_pveVersionTitle)}">PVE Version</th><td title="${escHtml(_pveVersionTitle)}">${escHtml(px.pve_version || "—")}</td></tr>
           <tr><th>Node</th><td>${escHtml(node.node || node.hostname || "—")}</td></tr>
           <tr><th>CPU</th><td>${cpu}</td></tr>
-          <tr><th title="${escHtml(_cpuAvgTitle)}">CPU (1h avg)</th><td title="${escHtml(_cpuAvgTitle)}">${_cpuDisplay}</td></tr>
+          <tr><th title="${escHtml(_cpuAvgTitle)}">CPU avg</th><td title="${escHtml(_cpuAvgTitle)}">${_cpuDisplay}</td></tr>
           <tr><th>Memory</th><td>${memUsed} / ${memTotal}</td></tr>
-          <tr><th title="${escHtml(_memAvgTitle)}">Memory (1h avg)</th><td title="${escHtml(_memAvgTitle)}">${_memDisplay}</td></tr>
+          <tr><th title="${escHtml(_memAvgTitle)}">Mem avg</th><td title="${escHtml(_memAvgTitle)}">${_memDisplay}</td></tr>
           ${storageRows}
           <tr><th>VMs</th><td>${escHtml(String(px.vm_count ?? "—"))} total, ${escHtml(String(px.running_count ?? "—"))} running</td></tr>
           <tr><th>Last Agent Check-in</th><td>${escHtml(lastSeen)}</td></tr>

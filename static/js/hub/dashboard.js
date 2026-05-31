@@ -8242,64 +8242,86 @@ async function initTsNotificationsTab(tenantId) {
 }
 
 async function initTsTroubleshootTab(tenantId) {
-  const select = $("#ts-troubleshoot-spoke-select");
   const updateBtn = $("#ts-troubleshoot-update-btn");
   const msg = $("#ts-troubleshoot-msg");
-  if (!select || !updateBtn || !tenantId) return;
+  if (!updateBtn || !tenantId) return;
   updateBtn.disabled = !canManageTenant(tenantId);
 
-  // Populate spokes then prepend "All Spokes" as the default
-  await populateSpokeSelect(select, tenantId, "__all__");
-  const allOpt = document.createElement("option");
-  allOpt.value = "__all__";
-  allOpt.textContent = "All Spokes";
-  select.insertBefore(allOpt, select.firstChild);
-  select.value = "__all__";
+  // Load health from first available spoke into the main panel
+  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes`);
+  const spokes = (res?.ok ? await res.json() : null) || [];
+  if (spokes.length) {
+    try {
+      const data = await loadSpokeConfig(tenantId, spokes[0].id);
+      const health = data.telemetry?.api_server?.health || {};
+      const label = $("#ts-trbl-spoke-label");
+      if (label) label.textContent = `— ${spokes[0].name || spokes[0].id}`;
+      setTroubleshootField("ts-trbl-version", health.version || "—");
+      setTroubleshootField("ts-trbl-repo-synced", health.repo_synced != null ? formatTsBool(Boolean(health.repo_synced), "Yes", "No") : "—");
+      setTroubleshootField("ts-trbl-repo-error", health.repo_error || "None");
+      setTroubleshootField("ts-trbl-installer-version", health.installer_version || "—");
+    } catch (_) { /* leave fields at defaults */ }
+  }
 
-  const loadTroubleshoot = async () => {
-    const spokeId = select.value;
-    if (!spokeId || spokeId === "__all__") {
-      setTroubleshootField("ts-trbl-version", "—");
-      setTroubleshootField("ts-trbl-repo-synced", "—");
-      setTroubleshootField("ts-trbl-repo-error", "—");
-      setTroubleshootField("ts-trbl-installer-version", "—");
-      showInlineMessage(msg, "Select a specific spoke to view health details.", false);
-      return;
-    }
-    if (!spokeId) {
-      showInlineMessage(msg, "No spokes available for this tenant.", true);
-      return;
-    }
-    const data = await loadSpokeConfig(tenantId, spokeId);
-    const health = data.telemetry?.api_server?.health || {};
-    setTroubleshootField("ts-trbl-version", health.version || "—");
-    setTroubleshootField("ts-trbl-repo-synced", health.repo_synced != null ? formatTsBool(Boolean(health.repo_synced), "Yes", "No") : "—");
-    setTroubleshootField("ts-trbl-repo-error", health.repo_error || "None");
-    setTroubleshootField("ts-trbl-installer-version", health.installer_version || "—");
-    showInlineMessage(msg, "", false, 0);
-  };
-
-  select.onchange = () => { void loadTroubleshoot().catch((error) => showInlineMessage(msg, error.message || "Failed to load troubleshooting data.", true)); };
+  // Trigger update on ALL spokes
   updateBtn.onclick = async () => {
-    const spokeId = select.value;
-    if (spokeId === "__all__") {
-      // Send update to every spoke in the list
-      const spokeOpts = [...select.options].filter((o) => o.value && o.value !== "__all__");
-      if (!spokeOpts.length) { showInlineMessage(msg, "No spokes to update.", true); return; }
-      let succeeded = 0;
-      for (const opt of spokeOpts) {
-        const ok = await sendCommandToSpoke(tenantId, opt.value, "update_now");
-        if (ok) succeeded++;
-      }
-      showInlineMessage(msg, `Update queued for ${succeeded} of ${spokeOpts.length} spoke(s) ✓`, succeeded === 0);
-      return;
+    if (!spokes.length) { showToast("No spokes available.", "error"); return; }
+    updateBtn.disabled = true;
+    let succeeded = 0;
+    for (const s of spokes) {
+      const ok = await sendCommandToSpoke(tenantId, s.id, "update_now");
+      if (ok) succeeded++;
     }
-    if (!spokeId) return;
-    const ok = await sendCommandToSpoke(tenantId, spokeId, "update_now");
-    showInlineMessage(msg, ok ? "Update queued for spoke ✓" : "Failed to queue update.", !ok);
+    updateBtn.disabled = !canManageTenant(tenantId);
+    showToast(`Update queued for ${succeeded} of ${spokes.length} spoke${spokes.length !== 1 ? "s" : ""}`, succeeded > 0 ? "success" : "error");
   };
 
-  await loadTroubleshoot();
+  // Per-spoke override section — collapsible
+  const overrideHeader = $("#ts-trbl-override-header");
+  const overrideBody = $("#ts-trbl-override-body");
+  const overrideChevron = $("#ts-trbl-override-chevron");
+  const overrideSelect = $("#ts-troubleshoot-spoke-select");
+  const overrideUpdateBtn = $("#ts-trbl-override-update-btn");
+  const overrideMsg = $("#ts-trbl-override-msg");
+
+  if (overrideHeader && overrideBody) {
+    overrideHeader.onclick = () => {
+      const hidden = overrideBody.classList.toggle("hidden");
+      if (overrideChevron) overrideChevron.textContent = hidden ? "▶ expand" : "▼ collapse";
+    };
+  }
+
+  if (overrideSelect) {
+    await populateSpokeSelect(overrideSelect, tenantId, "");
+    const loadOverride = async () => {
+      const spokeId = overrideSelect.value;
+      if (!spokeId) return;
+      try {
+        const data = await loadSpokeConfig(tenantId, spokeId);
+        const health = data.telemetry?.api_server?.health || {};
+        setTroubleshootField("ts-trbl-ov-version", health.version || "—");
+        setTroubleshootField("ts-trbl-ov-repo-synced", health.repo_synced != null ? formatTsBool(Boolean(health.repo_synced), "Yes", "No") : "—");
+        setTroubleshootField("ts-trbl-ov-repo-error", health.repo_error || "None");
+        setTroubleshootField("ts-trbl-ov-installer-version", health.installer_version || "—");
+        showInlineMessage(overrideMsg, "", false, 0);
+      } catch (error) {
+        showInlineMessage(overrideMsg, error.message || "Failed to load spoke health.", true);
+      }
+    };
+    overrideSelect.onchange = () => void loadOverride();
+    await loadOverride();
+  }
+
+  if (overrideUpdateBtn) {
+    overrideUpdateBtn.disabled = !canManageTenant(tenantId);
+    overrideUpdateBtn.onclick = async () => {
+      const spokeId = overrideSelect?.value;
+      if (!spokeId) return;
+      const ok = await sendCommandToSpoke(tenantId, spokeId, "update_now");
+      const spokeName = overrideSelect.options[overrideSelect.selectedIndex]?.text || spokeId;
+      showInlineMessage(overrideMsg, ok ? `Update queued for ${spokeName} ✓` : "Failed to queue update.", !ok);
+    };
+  }
 }
 
 async function initHubTenantSetupSubtab(subtab = hubTenantSetupActiveSubtab, force = false) {

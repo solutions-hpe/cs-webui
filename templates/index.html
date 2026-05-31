@@ -973,22 +973,54 @@
         <div class="page-toolbar">
           <span class="server-node-name">Troubleshooting</span>
           <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-            <label class="form-label" style="margin:0;">Spoke:</label>
-            <select id="ts-troubleshoot-spoke-select" class="form-input" style="width:200px;"></select>
-            <button id="ts-troubleshoot-update-btn" class="btn btn-primary btn-small" type="button">Trigger Update</button>
+            <button id="ts-troubleshoot-update-btn" class="btn btn-primary btn-small" type="button">🔄 Update All Spokes</button>
           </div>
         </div>
-        <div class="setup-card" style="margin:16px;">
-          <div class="setup-card-header"><h2>API Server Health</h2></div>
-          <table class="data-table">
-            <tbody>
-              <tr><td>Version</td><td id="ts-trbl-version">—</td></tr>
-              <tr><td>Repo Synced</td><td id="ts-trbl-repo-synced">—</td></tr>
-              <tr><td>Repo Error</td><td id="ts-trbl-repo-error">—</td></tr>
-              <tr><td>Installer Version</td><td id="ts-trbl-installer-version">—</td></tr>
-            </tbody>
-          </table>
-          <div id="ts-troubleshoot-msg" class="settings-message hidden" style="margin-top:12px;"></div>
+        <div id="ts-troubleshoot-content">
+          <div class="setup-card" style="margin:16px;">
+            <div class="setup-card-header"><h2>API Server Health <span id="ts-trbl-spoke-label" style="font-size:12px;font-weight:normal;color:var(--muted);"></span></h2></div>
+            <table class="data-table">
+              <tbody>
+                <tr><td>Version</td><td id="ts-trbl-version">—</td></tr>
+                <tr><td>Repo Synced</td><td id="ts-trbl-repo-synced">—</td></tr>
+                <tr><td>Repo Error</td><td id="ts-trbl-repo-error">—</td></tr>
+                <tr><td>Installer Version</td><td id="ts-trbl-installer-version">—</td></tr>
+              </tbody>
+            </table>
+            <div id="ts-troubleshoot-msg" class="settings-message hidden" style="margin-top:12px;"></div>
+          </div>
+
+          <!-- Per-spoke override card -->
+          <div class="setup-card" style="margin:16px;">
+            <div class="setup-card-header" id="ts-trbl-override-header" style="cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;">
+              <h2>Per-Spoke View <span style="font-size:12px;font-weight:normal;color:var(--muted);">— view health and trigger update for a specific spoke</span></h2>
+              <span id="ts-trbl-override-chevron" style="font-size:12px;color:var(--muted);">▶ expand</span>
+            </div>
+            <div id="ts-trbl-override-body" class="hidden">
+              <div class="setup-form" style="padding-top:0;">
+                <div class="settings-section">
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label class="form-label" for="ts-troubleshoot-spoke-select">Spoke</label>
+                      <select id="ts-troubleshoot-spoke-select" class="form-input"></select>
+                    </div>
+                  </div>
+                </div>
+                <table class="data-table" style="margin-bottom:12px;">
+                  <tbody>
+                    <tr><td>Version</td><td id="ts-trbl-ov-version">—</td></tr>
+                    <tr><td>Repo Synced</td><td id="ts-trbl-ov-repo-synced">—</td></tr>
+                    <tr><td>Repo Error</td><td id="ts-trbl-ov-repo-error">—</td></tr>
+                    <tr><td>Installer Version</td><td id="ts-trbl-ov-installer-version">—</td></tr>
+                  </tbody>
+                </table>
+                <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+                  <button id="ts-trbl-override-update-btn" class="btn btn-primary btn-small" type="button">🔄 Update This Spoke</button>
+                </div>
+                <div id="ts-trbl-override-msg" class="settings-message hidden"></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

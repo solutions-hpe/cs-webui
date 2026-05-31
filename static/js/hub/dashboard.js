@@ -5707,7 +5707,7 @@ function _hubVmFullTable(spokeId, vms, catId) {
     const dot = _hubVmStatusDot(vm);
     const statusLabel = isDeleting ? `🟡 deleting…` : `${dot} ${escHtml(_hubVmStatusLabel(vm))}`;
     const cpu = (!isDeleting && vm.status === "running" && vm.cpu != null && !Number.isNaN(Number(vm.cpu)))
-      ? Number(vm.cpu).toFixed(1) + "%" : "—";
+      ? Number(vm.cpu).toFixed(2) + "%" : "—";
     const ram = (vm.mem && vm.maxmem)
       ? (Number(vm.mem) >= Number(vm.maxmem) * 0.99
           ? `${fmtSize(Number(vm.maxmem) * 1024 * 1024)} (alloc)`
@@ -5750,7 +5750,7 @@ function _hubVmTemplateTable(vms) {
   if (!vms.length) return "";
   const rows = vms.map(vm => {
     const dot = _hubVmStatusDot(vm);
-    const cpu = vm.cpu != null ? Number(vm.cpu).toFixed(1) + "%" : "—";
+    const cpu = vm.cpu != null ? Number(vm.cpu).toFixed(2) + "%" : "—";
     const ram = (vm.mem && vm.maxmem)
       ? (Number(vm.mem) >= Number(vm.maxmem) * 0.99
           ? `${fmtSize(Number(vm.maxmem) * 1024 * 1024)} (alloc)`

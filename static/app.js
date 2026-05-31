@@ -1604,7 +1604,7 @@ function renderServerTab(data) {
       const statusText = isProvisioning ? 'provisioning' : (vm.status || 'unknown');
       const memUsed  = vm.mem    ? fmtSize(Number(vm.mem)    * 1024 * 1024) : '—';
       const memTotal = vm.maxmem ? fmtSize(Number(vm.maxmem) * 1024 * 1024) : '—';
-      const cpu = vm.cpu != null && !Number.isNaN(Number(vm.cpu)) ? Number(vm.cpu).toFixed(1) + '%' : '—';
+      const cpu = vm.cpu != null && !Number.isNaN(Number(vm.cpu)) ? Number(vm.cpu).toFixed(2) + '%' : '—';
       return `<tr class="vm-row-template">
         <td>${vm.vmid}</td>
         <td>${escHtml(vm.name || '—')}</td>
@@ -1668,7 +1668,7 @@ function renderServerTab(data) {
       const memTotal = vm.maxmem ? fmtSize(Number(vm.maxmem) * 1024 * 1024) : '—';
       // Show CPU only for running VMs — stopped VMs always report 0 which is misleading
       const cpuVal = (vm.status === 'running') && vm.cpu != null && !Number.isNaN(Number(vm.cpu))
-        ? Number(vm.cpu).toFixed(1) + '%' : '—';
+        ? Number(vm.cpu).toFixed(2) + '%' : '—';
       const recoveryBadge = autoRecoveryPending.has(Number(vm.vmid))
         ? ' <span class="badge badge-yellow" title="Auto-recovery reclone queued">↺ auto-recovery</span>'
         : '';

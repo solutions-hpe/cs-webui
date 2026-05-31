@@ -1490,17 +1490,17 @@ function renderServerTab(data) {
   const ramUsed  = node.mem_used_kb  ? fmtSizeKB(node.mem_used_kb)  : '—';
   const ramTotal = node.mem_total_kb ? fmtSizeKB(node.mem_total_kb) : '—';
   setEl('server-ram', `${ramUsed} / ${ramTotal}`);
-  // 1-hour averages — only shown once a full hour of data exists (non-null)
+  // 1-hour averages — show always; display "warming up…" until a full hour of data exists
   const cpuAvgPill = document.getElementById('server-cpu-avg-pill');
   const memAvgPill = document.getElementById('server-mem-avg-pill');
-  if (data.cpu_1h_avg != null && cpuAvgPill) {
-    setEl('server-cpu-avg', Number(data.cpu_1h_avg).toFixed(1));
+  if (cpuAvgPill) {
     cpuAvgPill.style.display = '';
-  } else if (cpuAvgPill) { cpuAvgPill.style.display = 'none'; }
-  if (data.mem_1h_avg != null && memAvgPill) {
-    setEl('server-mem-avg', Number(data.mem_1h_avg).toFixed(1));
+    setEl('server-cpu-avg', data.cpu_1h_avg != null ? Number(data.cpu_1h_avg).toFixed(1) : '…');
+  }
+  if (memAvgPill) {
     memAvgPill.style.display = '';
-  } else if (memAvgPill) { memAvgPill.style.display = 'none'; }
+    setEl('server-mem-avg', data.mem_1h_avg != null ? Number(data.mem_1h_avg).toFixed(1) : '…');
+  }
   // Cache last_seen to localStorage so we can show accurate "X ago" after restarts
   const PROXMOX_LS_KEY = 'proxmox_last_seen';
   if (latestProxmoxData.last_seen) {
@@ -3668,11 +3668,40 @@ function renderAutoProvisionStatus() {
   const resetBtn = document.getElementById('autoprov-reset-btn');
   if (resetBtn) resetBtn.style.display = run.running ? '' : 'none';
   if (!showPanel) {
-    liveSummary.innerHTML = `<div class="muted" style="padding:12px 0;">${
+    const cpuAvg = latestProxmoxData?.cpu_1h_avg;
+    const memAvg = latestProxmoxData?.mem_1h_avg;
+    const cpuProv = parseInt(currentSettings.cpu_provision_threshold ?? '80', 10);
+    const cpuDel  = parseInt(currentSettings.cpu_delete_threshold ?? '90', 10);
+    const memProv = parseInt(currentSettings.mem_provision_threshold ?? '80', 10);
+    const memDel  = parseInt(currentSettings.mem_delete_threshold ?? '90', 10);
+    const fmtAvg = (v) => v != null ? `${Number(v).toFixed(1)}%` : '<span class="muted">warming up…</span>';
+    const thresholdColor = (avg, prov, del) => {
+      if (avg == null) return '';
+      if (avg >= del)  return 'color:var(--danger,#ef4444);font-weight:600;';
+      if (avg >= prov) return 'color:var(--warning,#f59e0b);font-weight:600;';
+      return 'color:var(--success,#22c55e);';
+    };
+    const resourceRows = autoProv ? `
+      <table class="autoprov-resource-table" style="font-size:12px;margin-top:10px;border-collapse:collapse;width:100%;">
+        <thead><tr><th style="text-align:left;padding:2px 8px 2px 0;color:var(--muted);">Resource</th><th style="text-align:right;padding:2px 0;color:var(--muted);">1h avg</th><th style="text-align:right;padding:2px 0 2px 12px;color:var(--muted);">Prov / Del threshold</th></tr></thead>
+        <tbody>
+          <tr>
+            <td style="padding:3px 8px 3px 0;">⚡ CPU</td>
+            <td style="text-align:right;${thresholdColor(cpuAvg, cpuProv, cpuDel)}">${fmtAvg(cpuAvg)}</td>
+            <td style="text-align:right;padding-left:12px;color:var(--muted);">${cpuProv}% / ${cpuDel}%</td>
+          </tr>
+          <tr>
+            <td style="padding:3px 8px 3px 0;">🧠 Memory</td>
+            <td style="text-align:right;${thresholdColor(memAvg, memProv, memDel)}">${fmtAvg(memAvg)}</td>
+            <td style="text-align:right;padding-left:12px;color:var(--muted);">${memProv}% / ${memDel}%</td>
+          </tr>
+        </tbody>
+      </table>` : '';
+    liveSummary.innerHTML = `<div class="muted" style="padding:12px 0 4px;">${
       autoProv
         ? 'No provisioning in progress. Dongles inserted will trigger auto-provisioning.'
         : 'Auto-provisioning is disabled. Enable it in the USB settings below.'
-    }</div>`;
+    }</div>${resourceRows}`;
     logEl.innerHTML = '';
     return;
   }

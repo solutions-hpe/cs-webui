@@ -5577,6 +5577,8 @@ function connectWebSocket() {
       reconnectTimer = null;
     }
     setWsStatus(true, 'Connected');
+    // Refresh all data on reconnect so stale state doesn't linger after a disconnect
+    if (_spokeBooted) refreshAll().catch(() => {});
     // Fetch initial repo status via HTTP in case WS message races or was missed
     requestJson('/api/repo/status').then(d => {
       setRepoStatus(d.synced, d.error, d.last_sync, d.repo_version);

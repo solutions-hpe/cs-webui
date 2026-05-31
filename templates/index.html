@@ -801,63 +801,135 @@
         <div class="page-toolbar">
           <span class="server-node-name">Notifications</span>
           <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-            <label class="form-label" style="margin:0;">Spoke:</label>
-            <select id="ts-notifications-spoke-select" class="form-input" style="width:200px;"></select>
-            <button id="ts-notifications-save-btn" class="btn btn-primary btn-small" type="button">💾 Push to Spoke</button>
+            <button id="ts-notifications-save-btn" class="btn btn-primary btn-small" type="button">💾 Push to All Spokes</button>
           </div>
         </div>
-        <div class="setup-card" style="margin:16px;">
-          <div class="setup-card-header"><h2>Notification Settings</h2></div>
-          <div class="setup-form">
-            <div class="form-row">
-              <div class="form-group">
-                <label class="toggle-label">
-                  <input type="checkbox" id="ts-notif-email-enabled">
-                  <span>Email enabled</span>
-                </label>
+        <div id="ts-notifications-content">
+          <div class="setup-card" style="margin:16px;">
+            <div class="setup-card-header"><h2>Notification Settings</h2></div>
+            <div class="setup-form">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="toggle-label">
+                    <input type="checkbox" id="ts-notif-email-enabled">
+                    <span>Email enabled</span>
+                  </label>
+                </div>
+                <div class="form-group">
+                  <label class="toggle-label">
+                    <input type="checkbox" id="ts-notif-teams-enabled">
+                    <span>Teams enabled</span>
+                  </label>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="ts-notif-smtp-host">SMTP Host</label>
+                  <input id="ts-notif-smtp-host" class="form-input" type="text" placeholder="smtp.example.com">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="ts-notif-smtp-port">SMTP Port</label>
+                  <input id="ts-notif-smtp-port" class="form-input" type="number" value="587" placeholder="587">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="ts-notif-smtp-user">SMTP User</label>
+                  <input id="ts-notif-smtp-user" class="form-input" type="text" placeholder="user@example.com">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="ts-notif-smtp-password">SMTP Password</label>
+                  <input id="ts-notif-smtp-password" class="form-input" type="password" placeholder="Leave blank to keep current" autocomplete="new-password" data-secret-field="true">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="ts-notif-smtp-from">SMTP From</label>
+                  <input id="ts-notif-smtp-from" class="form-input" type="email" placeholder="client-sim@example.com">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="ts-notif-smtp-to">SMTP To</label>
+                  <input id="ts-notif-smtp-to" class="form-input" type="text" placeholder="ops@example.com, noc@example.com">
+                </div>
               </div>
               <div class="form-group">
-                <label class="toggle-label">
-                  <input type="checkbox" id="ts-notif-teams-enabled">
-                  <span>Teams enabled</span>
-                </label>
+                <label class="form-label" for="ts-notif-teams-webhook">Teams Webhook URL</label>
+                <input id="ts-notif-teams-webhook" class="form-input" type="url" placeholder="https://outlook.office.com/webhook/..." data-secret-field="true">
+              </div>
+              <div id="ts-notifications-msg" class="settings-message hidden"></div>
+            </div>
+          </div>
+
+          <!-- Per-spoke override card -->
+          <div class="setup-card" style="margin:16px;">
+            <div class="setup-card-header" id="ts-notif-override-header" style="cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;">
+              <h2>Spoke Override <span style="font-size:12px;font-weight:normal;color:var(--muted);">— push different values to a specific spoke</span></h2>
+              <span id="ts-notif-override-chevron" style="font-size:12px;color:var(--muted);">▶ expand</span>
+            </div>
+            <div id="ts-notif-override-body" class="hidden">
+              <div class="setup-form" style="padding-top:0;">
+                <div class="settings-section">
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label class="form-label" for="ts-notif-spoke-select">Spoke</label>
+                      <select id="ts-notif-spoke-select" class="form-input"></select>
+                    </div>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="toggle-label">
+                      <input type="checkbox" id="ts-ov-notif-email-enabled">
+                      <span>Email enabled</span>
+                    </label>
+                  </div>
+                  <div class="form-group">
+                    <label class="toggle-label">
+                      <input type="checkbox" id="ts-ov-notif-teams-enabled">
+                      <span>Teams enabled</span>
+                    </label>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label" for="ts-ov-notif-smtp-host">SMTP Host</label>
+                    <input id="ts-ov-notif-smtp-host" class="form-input" type="text" placeholder="smtp.example.com">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="ts-ov-notif-smtp-port">SMTP Port</label>
+                    <input id="ts-ov-notif-smtp-port" class="form-input" type="number" value="587" placeholder="587">
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label" for="ts-ov-notif-smtp-user">SMTP User</label>
+                    <input id="ts-ov-notif-smtp-user" class="form-input" type="text" placeholder="user@example.com">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="ts-ov-notif-smtp-password">SMTP Password</label>
+                    <input id="ts-ov-notif-smtp-password" class="form-input" type="password" placeholder="Leave blank to keep current" autocomplete="new-password" data-secret-field="true">
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label" for="ts-ov-notif-smtp-from">SMTP From</label>
+                    <input id="ts-ov-notif-smtp-from" class="form-input" type="email" placeholder="client-sim@example.com">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="ts-ov-notif-smtp-to">SMTP To</label>
+                    <input id="ts-ov-notif-smtp-to" class="form-input" type="text" placeholder="ops@example.com, noc@example.com">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="ts-ov-notif-teams-webhook">Teams Webhook URL</label>
+                  <input id="ts-ov-notif-teams-webhook" class="form-input" type="url" placeholder="https://outlook.office.com/webhook/..." data-secret-field="true">
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;margin-top:8px;">
+                  <button id="ts-notif-override-save-btn" class="btn btn-primary btn-small" type="button">💾 Push to Spoke</button>
+                </div>
+                <div id="ts-notif-override-msg" class="settings-message hidden"></div>
               </div>
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label" for="ts-notif-smtp-host">SMTP Host</label>
-                <input id="ts-notif-smtp-host" class="form-input" type="text" placeholder="smtp.example.com">
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="ts-notif-smtp-port">SMTP Port</label>
-                <input id="ts-notif-smtp-port" class="form-input" type="number" value="587" placeholder="587">
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label" for="ts-notif-smtp-user">SMTP User</label>
-                <input id="ts-notif-smtp-user" class="form-input" type="text" placeholder="user@example.com">
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="ts-notif-smtp-password">SMTP Password</label>
-                <input id="ts-notif-smtp-password" class="form-input" type="password" placeholder="Leave blank to keep current" autocomplete="new-password" data-secret-field="true">
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label" for="ts-notif-smtp-from">SMTP From</label>
-                <input id="ts-notif-smtp-from" class="form-input" type="email" placeholder="client-sim@example.com">
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="ts-notif-smtp-to">SMTP To</label>
-                <input id="ts-notif-smtp-to" class="form-input" type="text" placeholder="ops@example.com, noc@example.com">
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="ts-notif-teams-webhook">Teams Webhook URL</label>
-              <input id="ts-notif-teams-webhook" class="form-input" type="url" placeholder="https://outlook.office.com/webhook/..." data-secret-field="true">
-            </div>
-            <div id="ts-notifications-msg" class="settings-message hidden"></div>
           </div>
         </div>
       </div>

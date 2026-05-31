@@ -8057,72 +8057,134 @@ async function initTsSecurityTab(tenantId) {
 }
 
 async function initTsNotificationsTab(tenantId) {
-  const select = $("#ts-notifications-spoke-select");
   const saveBtn = $("#ts-notifications-save-btn");
   const msg = $("#ts-notifications-msg");
   const smtpPasswordInput = $("#ts-notif-smtp-password");
   const teamsWebhookInput = $("#ts-notif-teams-webhook");
-  if (!select || !saveBtn || !tenantId) return;
+  if (!saveBtn || !tenantId) return;
   saveBtn.disabled = !canManageTenant(tenantId);
-  await populateSpokeSelect(select, tenantId, select.value);
 
-  const loadNotifications = async () => {
-    const spokeId = select.value;
-    if (!spokeId) {
-      showInlineMessage(msg, "No spokes available for this tenant.", true);
-      return;
-    }
-    const data = await loadSpokeConfig(tenantId, spokeId);
-    const notif = data.config?.notifications || {};
-    $("#ts-notif-email-enabled") && ($("#ts-notif-email-enabled").checked = !!notif.email_enabled);
-    $("#ts-notif-teams-enabled") && ($("#ts-notif-teams-enabled").checked = !!notif.teams_enabled);
-    $("#ts-notif-smtp-host") && ($("#ts-notif-smtp-host").value = notif.smtp_host || "");
-    $("#ts-notif-smtp-port") && ($("#ts-notif-smtp-port").value = notif.smtp_port ?? 587);
-    $("#ts-notif-smtp-user") && ($("#ts-notif-smtp-user").value = notif.smtp_user || "");
-    $("#ts-notif-smtp-from") && ($("#ts-notif-smtp-from").value = notif.smtp_from || "");
-    $("#ts-notif-smtp-to") && ($("#ts-notif-smtp-to").value = Array.isArray(notif.smtp_to) ? notif.smtp_to.join(", ") : (notif.smtp_to || ""));
-    if (smtpPasswordInput) {
-      smtpPasswordInput.value = "";
-      setSecretInputConfigured(smtpPasswordInput, Boolean(notif.smtp_password || notif.smtp_password_configured));
-    }
-    if (teamsWebhookInput) {
-      teamsWebhookInput.value = "";
-      setSecretInputConfigured(teamsWebhookInput, Boolean(notif.teams_webhook_url || notif.teams_webhook_url_configured));
-    }
-    showInlineMessage(msg, "", false, 0);
-  };
-
-  select.onchange = () => { void loadNotifications().catch((error) => showInlineMessage(msg, error.message || "Failed to load notification settings.", true)); };
-  saveBtn.onclick = async () => {
-    const spokeId = select.value;
-    if (!spokeId) return;
+  // Load defaults from first available spoke so the form isn't blank
+  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes`);
+  const spokes = (res?.ok ? await res.json() : null) || [];
+  if (spokes.length) {
     try {
-      const current = await loadSpokeConfig(tenantId, spokeId);
-      const existing = current.config?.notifications || {};
-      const notifications = {
-        ...existing,
-        email_enabled: $("#ts-notif-email-enabled")?.checked ?? false,
-        teams_enabled: $("#ts-notif-teams-enabled")?.checked ?? false,
-        smtp_host: $("#ts-notif-smtp-host")?.value.trim() || "",
-        smtp_port: parseInt($("#ts-notif-smtp-port")?.value || "587", 10) || 587,
-        smtp_user: $("#ts-notif-smtp-user")?.value.trim() || "",
-        smtp_from: $("#ts-notif-smtp-from")?.value.trim() || "",
-        smtp_to: ($("#ts-notif-smtp-to")?.value || "").split(",").map((item) => item.trim()).filter(Boolean),
-      };
-      const smtpSecret = getSecretInputPayload(smtpPasswordInput);
-      if (smtpSecret.include) notifications.smtp_password = smtpSecret.value;
-      const teamsSecret = getSecretInputPayload(teamsWebhookInput);
-      if (teamsSecret.include) notifications.teams_webhook_url = teamsSecret.value.trim();
-      await pushSpokeConfig(tenantId, spokeId, { notifications });
+      const data = await loadSpokeConfig(tenantId, spokes[0].id);
+      const notif = data.config?.notifications || {};
+      $("#ts-notif-email-enabled") && ($("#ts-notif-email-enabled").checked = !!notif.email_enabled);
+      $("#ts-notif-teams-enabled") && ($("#ts-notif-teams-enabled").checked = !!notif.teams_enabled);
+      $("#ts-notif-smtp-host") && ($("#ts-notif-smtp-host").value = notif.smtp_host || "");
+      $("#ts-notif-smtp-port") && ($("#ts-notif-smtp-port").value = notif.smtp_port ?? 587);
+      $("#ts-notif-smtp-user") && ($("#ts-notif-smtp-user").value = notif.smtp_user || "");
+      $("#ts-notif-smtp-from") && ($("#ts-notif-smtp-from").value = notif.smtp_from || "");
+      $("#ts-notif-smtp-to") && ($("#ts-notif-smtp-to").value = Array.isArray(notif.smtp_to) ? notif.smtp_to.join(", ") : (notif.smtp_to || ""));
+      if (smtpPasswordInput) setSecretInputConfigured(smtpPasswordInput, Boolean(notif.smtp_password || notif.smtp_password_configured));
+      if (teamsWebhookInput) setSecretInputConfigured(teamsWebhookInput, Boolean(notif.teams_webhook_url || notif.teams_webhook_url_configured));
+    } catch (_) { /* leave form at HTML defaults */ }
+  }
+
+  // Push to ALL spokes
+  saveBtn.onclick = async () => {
+    if (!spokes.length) { showToast("No spokes available.", "error"); return; }
+    const smtpSecret = getSecretInputPayload(smtpPasswordInput);
+    const teamsSecret = getSecretInputPayload(teamsWebhookInput);
+    const notifications = {
+      email_enabled: $("#ts-notif-email-enabled")?.checked ?? false,
+      teams_enabled: $("#ts-notif-teams-enabled")?.checked ?? false,
+      smtp_host: $("#ts-notif-smtp-host")?.value.trim() || "",
+      smtp_port: parseInt($("#ts-notif-smtp-port")?.value || "587", 10) || 587,
+      smtp_user: $("#ts-notif-smtp-user")?.value.trim() || "",
+      smtp_from: $("#ts-notif-smtp-from")?.value.trim() || "",
+      smtp_to: ($("#ts-notif-smtp-to")?.value || "").split(",").map((item) => item.trim()).filter(Boolean),
+    };
+    if (smtpSecret.include) notifications.smtp_password = smtpSecret.value;
+    if (teamsSecret.include) notifications.teams_webhook_url = teamsSecret.value.trim();
+    saveBtn.disabled = true;
+    try {
+      await Promise.all(spokes.map((s) => pushSpokeConfig(tenantId, s.id, { notifications })));
       resetSecretInput(smtpPasswordInput);
       resetSecretInput(teamsWebhookInput);
-      showInlineMessage(msg, "Notification settings pushed ✓", false);
+      showToast(`Notification settings queued for ${spokes.length} spoke${spokes.length !== 1 ? "s" : ""}`, "success");
+      showInlineMessage(msg, "", false, 0);
     } catch (error) {
-      showInlineMessage(msg, error.message || "Failed to push notification settings.", true);
+      showToast(error.message || "Failed to push notification settings.", "error");
+    } finally {
+      saveBtn.disabled = !canManageTenant(tenantId);
     }
   };
 
-  await loadNotifications();
+  // Override section — collapsible, targets a single spoke
+  const overrideHeader = $("#ts-notif-override-header");
+  const overrideBody = $("#ts-notif-override-body");
+  const overrideChevron = $("#ts-notif-override-chevron");
+  const overrideSelect = $("#ts-notif-spoke-select");
+  const overrideSaveBtn = $("#ts-notif-override-save-btn");
+  const overrideMsg = $("#ts-notif-override-msg");
+  const ovSmtpPass = $("#ts-ov-notif-smtp-password");
+  const ovTeamsWebhook = $("#ts-ov-notif-teams-webhook");
+
+  if (overrideHeader && overrideBody) {
+    overrideHeader.onclick = () => {
+      const hidden = overrideBody.classList.toggle("hidden");
+      if (overrideChevron) overrideChevron.textContent = hidden ? "▶ expand" : "▼ collapse";
+    };
+  }
+
+  if (overrideSelect) {
+    await populateSpokeSelect(overrideSelect, tenantId, "");
+    const loadOverride = async () => {
+      const spokeId = overrideSelect.value;
+      if (!spokeId) return;
+      try {
+        const data = await loadSpokeConfig(tenantId, spokeId);
+        const notif = data.config?.notifications || {};
+        $("#ts-ov-notif-email-enabled") && ($("#ts-ov-notif-email-enabled").checked = !!notif.email_enabled);
+        $("#ts-ov-notif-teams-enabled") && ($("#ts-ov-notif-teams-enabled").checked = !!notif.teams_enabled);
+        $("#ts-ov-notif-smtp-host") && ($("#ts-ov-notif-smtp-host").value = notif.smtp_host || "");
+        $("#ts-ov-notif-smtp-port") && ($("#ts-ov-notif-smtp-port").value = notif.smtp_port ?? 587);
+        $("#ts-ov-notif-smtp-user") && ($("#ts-ov-notif-smtp-user").value = notif.smtp_user || "");
+        $("#ts-ov-notif-smtp-from") && ($("#ts-ov-notif-smtp-from").value = notif.smtp_from || "");
+        $("#ts-ov-notif-smtp-to") && ($("#ts-ov-notif-smtp-to").value = Array.isArray(notif.smtp_to) ? notif.smtp_to.join(", ") : (notif.smtp_to || ""));
+        if (ovSmtpPass) setSecretInputConfigured(ovSmtpPass, Boolean(notif.smtp_password || notif.smtp_password_configured));
+        if (ovTeamsWebhook) setSecretInputConfigured(ovTeamsWebhook, Boolean(notif.teams_webhook_url || notif.teams_webhook_url_configured));
+        showInlineMessage(overrideMsg, "", false, 0);
+      } catch (error) {
+        showInlineMessage(overrideMsg, error.message || "Failed to load spoke config.", true);
+      }
+    };
+    overrideSelect.onchange = () => void loadOverride();
+    await loadOverride();
+  }
+
+  if (overrideSaveBtn) {
+    overrideSaveBtn.disabled = !canManageTenant(tenantId);
+    overrideSaveBtn.onclick = async () => {
+      const spokeId = overrideSelect?.value;
+      if (!spokeId) return;
+      const ovSmtpSecret = getSecretInputPayload(ovSmtpPass);
+      const ovTeamsSecret = getSecretInputPayload(ovTeamsWebhook);
+      const notifications = {
+        email_enabled: $("#ts-ov-notif-email-enabled")?.checked ?? false,
+        teams_enabled: $("#ts-ov-notif-teams-enabled")?.checked ?? false,
+        smtp_host: $("#ts-ov-notif-smtp-host")?.value.trim() || "",
+        smtp_port: parseInt($("#ts-ov-notif-smtp-port")?.value || "587", 10) || 587,
+        smtp_user: $("#ts-ov-notif-smtp-user")?.value.trim() || "",
+        smtp_from: $("#ts-ov-notif-smtp-from")?.value.trim() || "",
+        smtp_to: ($("#ts-ov-notif-smtp-to")?.value || "").split(",").map((item) => item.trim()).filter(Boolean),
+      };
+      if (ovSmtpSecret.include) notifications.smtp_password = ovSmtpSecret.value;
+      if (ovTeamsSecret.include) notifications.teams_webhook_url = ovTeamsSecret.value.trim();
+      try {
+        await pushSpokeConfig(tenantId, spokeId, { notifications });
+        resetSecretInput(ovSmtpPass);
+        resetSecretInput(ovTeamsWebhook);
+        const spokeName = overrideSelect.options[overrideSelect.selectedIndex]?.text || spokeId;
+        showInlineMessage(overrideMsg, `Pushed to ${spokeName} ✓`, false);
+      } catch (error) {
+        showInlineMessage(overrideMsg, error.message || "Failed to push to spoke.", true);
+      }
+    };
+  }
 }
 
 async function initTsTroubleshootTab(tenantId) {

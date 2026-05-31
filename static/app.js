@@ -10626,7 +10626,13 @@ function openLoginModal() {
   setLoginOverlayVisible(true);
   setFormMessage("login-error", "", false);
   const password = $("#login-password");
-  if (password) password.value = "";
+  // Only clear the password when the modal is being opened fresh (field was
+  // already empty).  If the user started typing before the old-token 401 came
+  // back (race on page load), preserving their input avoids a confusing
+  // "first login always fails" experience.
+  if (password && !password.value) {
+    // nothing to clear — leave as-is so focus logic below applies cleanly
+  }
   const username = $("#login-username");
   if (username && !username.value.trim()) {
     username.focus();
@@ -10841,6 +10847,9 @@ function logout(showMessage = true) {
   } catch (_) {}
   sessionStorage.removeItem("hub_token");
   disconnectWebSocket();
+  // Clear login fields on explicit logout so the form is clean for the next user.
+  const pwField = $("#login-password");
+  if (pwField) pwField.value = "";
   applyAuthUI();
   closeSpokeModal();
   if (showMessage) showToast("Signed out.", "ok");

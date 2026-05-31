@@ -2982,7 +2982,8 @@ function openLoginModal() {
   setLoginOverlayVisible(true);
   setFormMessage("login-error", "", false);
   const password = $("#login-password");
-  if (password) password.value = "";
+  // Only clear password when field is already empty — preserve anything the user
+  // has typed to avoid the race where an old-token 401 wipes in-progress input.
   const username = $("#login-username");
   if (username && !username.value.trim()) {
     username.focus();
@@ -3237,6 +3238,9 @@ function logout(showMessage = true) {
   } catch (_) {}
   sessionStorage.removeItem("hub_token");
   disconnectWebSocket();
+  // Clear login fields on explicit logout so the form is clean for the next user.
+  const pwField = $("#login-password");
+  if (pwField) pwField.value = "";
   applyAuthUI();
   closeSpokeModal();
   if (showMessage) showToast("Signed out.", "ok");

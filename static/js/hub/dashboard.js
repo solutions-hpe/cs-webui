@@ -6961,6 +6961,16 @@ function renderHubVmServerDetailsPanel(px, host) {
         </div>
       </div>
       <pre id="hub-log-output" style="margin:0;max-height:320px;overflow:auto;background:#0f172a;color:#e2e8f0;border-radius:8px;padding:10px;font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-all;">[Select a source and click Fetch]</pre>
+    </div>
+    <div class="setup-card setup-section-gap" style="padding:14px 16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        <div style="font-weight:600;font-size:13px;">🔍 Command Trace</div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button id="hub-cmd-trace-btn" class="btn btn-secondary" style="font-size:12px;padding:4px 10px;" type="button">Fetch Trace</button>
+          <button id="hub-cmd-trace-clear-btn" class="btn" style="font-size:12px;padding:4px 10px;background:transparent;border:1px solid var(--muted);" type="button">Clear</button>
+        </div>
+      </div>
+      <pre id="hub-cmd-trace-output" style="margin:0;max-height:380px;overflow:auto;background:#0f172a;color:#e2e8f0;border-radius:8px;padding:10px;font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-all;">[Click "Fetch Trace" to view hub→spoke→agent relay events]</pre>
     </div>`;
 }
 
@@ -7052,6 +7062,46 @@ function wireHubVmServerDetailsPanel(panel, tenantId, spokeId) {
   panel.querySelector("#hub-log-clear-btn")?.addEventListener("click", () => {
     if (logOutput) logOutput.textContent = "[Cleared]";
     _vmLogPinned = false; // unpin: allow auto-refresh again
+  });
+
+  // ── Command trace viewer ────────────────────────────────────────────────────
+  const traceOutput = panel.querySelector("#hub-cmd-trace-output");
+  const fetchTrace = async () => {
+    if (traceOutput) traceOutput.textContent = "Fetching command trace…";
+    try {
+      const resp = await apiFetch(
+        `/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/command-trace`
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        if (traceOutput) traceOutput.textContent = `Error: ${err.detail || resp.status}`;
+        return;
+      }
+      const data = await resp.json();
+      const lines = [];
+      lines.push(`Agent connected: ${data.agent_connected ? "YES ✅" : "NO ❌"} (${data.agent_hostname || "unknown"})`);
+      lines.push(`Command queue (${(data.command_queue || []).length} entries):`);
+      for (const cmd of (data.command_queue || [])) {
+        const age = cmd.age_secs != null ? `${cmd.age_secs}s ago` : "";
+        lines.push(`  [${cmd.status}] ${cmd.action} vmid=${cmd.args?.vmid ?? ""} ${age}`);
+      }
+      lines.push("");
+      lines.push(`Relay trace (${(data.trace || []).length} events, newest first):`);
+      for (const ev of (data.trace || [])) {
+        const ts = ev.t ? new Date(ev.t).toLocaleTimeString() : "";
+        const rest = Object.entries(ev).filter(([k]) => k !== "t" && k !== "event").map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(" ");
+        lines.push(`  ${ts} ${ev.event} ${rest}`);
+      }
+      if (traceOutput) traceOutput.textContent = lines.join("\n") || "[No trace data yet]";
+      if (traceOutput) traceOutput.scrollTop = 0;
+    } catch (err) {
+      if (traceOutput) traceOutput.textContent = `Failed: ${err.message}`;
+    }
+  };
+
+  panel.querySelector("#hub-cmd-trace-btn")?.addEventListener("click", fetchTrace);
+  panel.querySelector("#hub-cmd-trace-clear-btn")?.addEventListener("click", () => {
+    if (traceOutput) traceOutput.textContent = "[Cleared]";
   });
 
   // Auto-fetch watchdog on open

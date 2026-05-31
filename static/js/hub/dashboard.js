@@ -5570,6 +5570,25 @@ function _hubVmStatusLabel(vm) {
   return vm.status || "unknown";
 }
 
+function _hubVmStatusTitle(vm) {
+  if (vm.prov_status === "provisioning") {
+    return "VM is still being provisioned on the spoke and is not ready yet.";
+  }
+  if (vm.prov_status === "post_prov_retry") {
+    return "Post-provision retry queue: the guest missed the post-reboot step, so the spoke retries it every 10 minutes and reclones after 1 hour if the guest agent never responds.";
+  }
+  if (vm.prov_status === "agent_rebooting") {
+    return "VM guest-agent watchdog rebooted this VM and is waiting for the guest agent to recover.";
+  }
+  if (vm.prov_status === "agent_unresponsive") {
+    return "VM guest-agent watchdog marked the guest agent unresponsive. The spoke may reboot or reclone this VM if it does not recover.";
+  }
+  if (vm.status === "deleting") return "VM delete is in progress on the spoke.";
+  if (vm.status === "running") return "VM is running.";
+  if (vm.status === "paused") return "VM is paused.";
+  return `VM status: ${vm.status || "unknown"}`;
+}
+
 // ── VMs tab ──────────────────────────────────────────────────────────────────
 
 function renderHubVmServerVmsPanel(tenantId, spokeId, { simVms, otherVms, containerVms, templateVms, reclone, px, host }) {
@@ -5710,7 +5729,7 @@ function _hubVmFullTable(spokeId, vms, catId) {
       : `<button class="btn-icon" disabled title="${isDeleting ? 'VM is being deleted' : 'VM must be running to open console'}" style="opacity:0.3;">⎕</button>`;
     return `<tr data-vmid="${vmidStr}">
       <td style="white-space:nowrap;"><input type="checkbox" class="hub-vm-check" data-vmid="${vmidStr}"></td>
-      <td style="white-space:nowrap;" class="vm-status-cell">${statusLabel}</td>
+      <td style="white-space:nowrap;" class="vm-status-cell" title="${escHtml(_hubVmStatusTitle(vm))}">${statusLabel}</td>
       <td style="white-space:nowrap;">${vmidStr}</td>
       <td style="white-space:nowrap;">${escHtml(vm.name || "—")}</td>
       <td style="white-space:nowrap;">${cpu}</td>
@@ -6831,6 +6850,18 @@ function renderHubVmServerDetailsPanel(px, host) {
     : px.mem_est_avg != null
       ? `~${Number(px.mem_est_avg).toFixed(1)}%${_warmupRemainLabel ? ` <span class="muted" style="font-size:0.85em;">(${_warmupRemainLabel})</span>` : ''}`
       : `<span class="muted">${_warmupRemainLabel ? `warming up… ${_warmupRemainLabel}` : 'warming up…'}</span>`;
+  const _cpuAvgTitle = px.cpu_1h_avg != null
+    ? "Confirmed 1-hour rolling average CPU usage. During warmup the UI shows an estimated ~value until the full 60-minute window is available."
+    : px.cpu_est_avg != null
+      ? `Estimated CPU average from samples collected so far while the 1-hour window fills${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ""}.`
+      : `Collecting CPU samples for the 1-hour rolling average${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ""}.`;
+  const _memAvgTitle = px.mem_1h_avg != null
+    ? "Confirmed 1-hour rolling average memory usage. During warmup the UI shows an estimated ~value until the full 60-minute window is available."
+    : px.mem_est_avg != null
+      ? `Estimated memory average from samples collected so far while the 1-hour window fills${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ""}.`
+      : `Collecting memory samples for the 1-hour rolling average${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ""}.`;
+  const _agentVersionTitle = "Version reported by the Proxmox agent running on the host. Cached on the spoke so it survives service restarts.";
+  const _pveVersionTitle = "Proxmox VE version reported by the host and cached on the spoke so Hub Details can show it immediately after restart.";
   const lastSeen = px.last_seen
     ? new Date(typeof px.last_seen === "number" ? px.last_seen * 1000 : px.last_seen).toLocaleString()
     : "—";
@@ -6848,20 +6879,20 @@ function renderHubVmServerDetailsPanel(px, host) {
           <h2 style="margin:0;">${escHtml(node.hostname || node.node || host.spoke_name || "Proxmox")}</h2>
           <span class="server-stat-pill">⚡ CPU: ${cpu}</span>
           <span class="server-stat-pill">🧠 RAM: ${memUsed} / ${memTotal}</span>
-          ${px.cpu_1h_avg != null ? `<span class="server-stat-pill" title="1-hour rolling average">📊 CPU avg: ${Number(px.cpu_1h_avg).toFixed(1)}%</span>` : px.cpu_est_avg != null ? `<span class="server-stat-pill muted" title="Estimated average — still collecting 1-hour window">📊 CPU avg: ~${Number(px.cpu_est_avg).toFixed(1)}%${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ''}</span>` : `<span class="server-stat-pill muted" title="Still collecting 1-hour sample window">📊 ${_warmupRemainLabel ? `warming up… ${_warmupRemainLabel}` : 'warming up…'}</span>`}
-          ${px.mem_1h_avg != null ? `<span class="server-stat-pill" title="1-hour rolling average">📊 Mem avg: ${Number(px.mem_1h_avg).toFixed(1)}%</span>` : px.mem_est_avg != null ? `<span class="server-stat-pill muted" title="Estimated average — still collecting 1-hour window">📊 Mem avg: ~${Number(px.mem_est_avg).toFixed(1)}%${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ''}</span>` : ''}
+          ${px.cpu_1h_avg != null ? `<span class="server-stat-pill" title="${escHtml(_cpuAvgTitle)}">📊 CPU avg: ${Number(px.cpu_1h_avg).toFixed(1)}%</span>` : px.cpu_est_avg != null ? `<span class="server-stat-pill muted" title="${escHtml(_cpuAvgTitle)}">📊 CPU avg: ~${Number(px.cpu_est_avg).toFixed(1)}%${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ''}</span>` : `<span class="server-stat-pill muted" title="${escHtml(_cpuAvgTitle)}">📊 ${_warmupRemainLabel ? `warming up… ${_warmupRemainLabel}` : 'warming up…'}</span>`}
+          ${px.mem_1h_avg != null ? `<span class="server-stat-pill" title="${escHtml(_memAvgTitle)}">📊 Mem avg: ${Number(px.mem_1h_avg).toFixed(1)}%</span>` : px.mem_est_avg != null ? `<span class="server-stat-pill muted" title="${escHtml(_memAvgTitle)}">📊 Mem avg: ~${Number(px.mem_est_avg).toFixed(1)}%${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ''}</span>` : ''}
         </div>
       </div>
       <table class="data-table">
         <tbody>
           <tr><th>Proxmox Connected</th><td>${px.connected ? "🟢 Yes" : "⚫ No"}</td></tr>
-          <tr><th>Agent Version</th><td>${escHtml(px.agent_version || "—")}</td></tr>
-          <tr><th>PVE Version</th><td>${escHtml(px.pve_version || "—")}</td></tr>
+          <tr><th title="${escHtml(_agentVersionTitle)}">Agent Version</th><td title="${escHtml(_agentVersionTitle)}">${escHtml(px.agent_version || "—")}</td></tr>
+          <tr><th title="${escHtml(_pveVersionTitle)}">PVE Version</th><td title="${escHtml(_pveVersionTitle)}">${escHtml(px.pve_version || "—")}</td></tr>
           <tr><th>Node</th><td>${escHtml(node.node || node.hostname || "—")}</td></tr>
           <tr><th>CPU</th><td>${cpu}</td></tr>
-          <tr><th>CPU (1h avg)</th><td>${_cpuDisplay}</td></tr>
+          <tr><th title="${escHtml(_cpuAvgTitle)}">CPU (1h avg)</th><td title="${escHtml(_cpuAvgTitle)}">${_cpuDisplay}</td></tr>
           <tr><th>Memory</th><td>${memUsed} / ${memTotal}</td></tr>
-          <tr><th>Memory (1h avg)</th><td>${_memDisplay}</td></tr>
+          <tr><th title="${escHtml(_memAvgTitle)}">Memory (1h avg)</th><td title="${escHtml(_memAvgTitle)}">${_memDisplay}</td></tr>
           ${storageRows}
           <tr><th>VMs</th><td>${escHtml(String(px.vm_count ?? "—"))} total, ${escHtml(String(px.running_count ?? "—"))} running</td></tr>
           <tr><th>Last Agent Check-in</th><td>${escHtml(lastSeen)}</td></tr>
@@ -6893,7 +6924,7 @@ function renderHubVmServerDetailsPanel(px, host) {
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
         <div style="font-weight:600;font-size:13px;">📋 Remote Logs</div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-          <select id="hub-log-source-select" style="font-size:12px;padding:3px 6px;">
+          <select id="hub-log-source-select" style="font-size:12px;padding:3px 6px;" title="Choose which spoke-side log to fetch. Watchdog includes guest-agent watchdog and recovery events.">
             <option value="watchdog">Watchdog</option>
             <option value="journal">Journal</option>
             <option value="agent">Agent</option>

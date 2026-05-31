@@ -2,7 +2,7 @@
 
 ![Release](https://img.shields.io/badge/release-v1.0.0-success)
 
-`cs-webui` is the shared browser frontend for the HPE Client-Sim platform. Version **v1.0.0** on `main` is the production frontend consumed by both Hub and Spoke deployments. The same `index.html`, `app.js`, and `style.css` are served by both:
+`cs-webui` is the shared browser frontend for the HPE Client-Sim platform. Version **v1.0.0** on `main` is the production frontend consumed by both Hub and Spoke deployments. The same `templates/index.html`, `static/js/*` modules, legacy `static/app.js` compatibility bundle, and `static/style.css` are served by both:
 
 - `webui-hub` in **hub** mode
 - `client-sim/webui-spoke` in **spoke** mode
@@ -21,6 +21,7 @@ The UI is the operator-facing surface for:
 - approving and managing spokes
 - sending commands
 - managing Proxmox VM/USB operations
+- viewing Proxmox 1-hour CPU/memory warmup states, guest-agent watchdog recovery status, post-provision retry state, and agent/PVE version metadata
 - editing GitHub-backed `simulation.conf` and `user-overrides.conf` flows in hub or standalone spoke mode
 - configuring Aruba Central, notifications, relay, and TLS
 - checking service health and troubleshooting state
@@ -60,7 +61,7 @@ Hub requires login. Spoke mode does not implement the same tenant-auth flow.
 | **Simulations** | Current simulation buckets, counts, Central correlation, hardware alert status, and 7-day client-count baseline monitoring |
 | **Clients** | Live client inventory, status, SSID, active simulations, errors, and per-client control panel. Client type tabs: **All**, **T1** (no USB dongle), **T2** (has USB dongle), **IoT/T3** (placeholder) |
 | **Central** | Aruba Central overview plus site alerts, wireless client counts, and 24-hour history |
-| **VM Server** | Proxmox VM and USB management; appears when Proxmox integration is active. Sub-tabs: **VMs**, **USB (T2)**, **IoT (T3)**, **VirtualHere**, **Command Queue**, **Details** |
+| **VM Server** | Proxmox VM and USB management; appears when Proxmox integration is active. Sub-tabs: **VMs**, **USB (T2)**, **IoT (T3)**, **Other**, **VirtualHere**, **Command Queue**, **Details** |
 | **API Server** | Spoke service status, health, and service log views |
 | **Config** | Unified `simulation.conf` editor plus standalone `user-overrides.conf` management |
 | **Setup** | Repository, Simulation, VM/USB, Hub relay, Central API, notifications, TLS, and troubleshooting configuration |
@@ -72,7 +73,7 @@ Hub requires login. Spoke mode does not implement the same tenant-auth flow.
 | **Tenants** | Superadmin landing view and tenant selection |
 | **Simulations** | Cross-spoke simulation summary inside a tenant context, including 7-day client-count baseline alarms |
 | **Clients** | Aggregate client list across the selected tenant |
-| **Spokes** | Approved spokes, detail modal, processing mode, spoke health, and access to VM Server workflows for backup/reseed operations |
+| **Spokes** | Approved spokes, detail modal, processing mode, spoke health, relayed Proxmox Details metrics, watchdog/retry status, and access to VM Server workflows for backup/reseed operations |
 | **Commands** | Queue commands to a spoke |
 | **Setup** | Tenant settings, notifications, API info, TLS, and pending spoke approval |
 | **Config** | Tenant processing-mode summary plus `simulation.conf` / `user-overrides.conf` editors |
@@ -108,12 +109,19 @@ When the spoke has a connected Proxmox agent, **VM Server** exposes sub-tabs:
 
 | Sub-tab | Content |
 |---------|---------|
-| **VMs** | All simulation and other VMs with VMID, name, type, status |
+| **VMs** | Simulation VMs plus recovery states such as `retrying…`, `agent rebooting…`, and `agent down` when the post-provision retry queue or guest-agent watchdog is active |
 | **USB (T2)** | USB dongle inventory, VID:PID, assigned VMs, missing/available status |
-| **IoT (T3)** | IoT client VM inventory (T3 classification in development) |
+| **IoT (T3)** | VMs with T3 PCI passthrough on this node |
+| **Other** | Non-sim, non-IoT VMs plus containers |
 | **VirtualHere** | VH hub/server name, device names, connection state, auto-use status |
 | **Command Queue** | Queued and completed commands for clients and the Proxmox host |
-| **Details** | Proxmox node info, agent version, and health statistics |
+| **Details** | Proxmox node info, agent/PVE version metadata, live CPU/RAM, and 1-hour CPU/memory average pills with warmup countdowns |
+
+Hub and spoke Details views use the same three resource-average states:
+
+1. `📊 warming up… <N> min remaining` — no confirmed 1-hour window yet
+2. `📊 CPU avg: ~3.2% (<N> min remaining)` / `Mem avg: ~…` — estimated average from samples collected so far
+3. `📊 CPU avg: 3.2%` / `Mem avg: 41.7%` — confirmed 1-hour rolling average once the full window is available
 
 **T1 / T2 client classification** is visible on the **Clients** tab using the type filter buttons at the top of the client list:
 - **T1** — client VM has no USB dongle assigned
@@ -212,7 +220,13 @@ cs-webui/
 ├── templates/
 │   └── index.html
 ├── static/
-│   ├── app.js
+│   ├── js/
+│   │   ├── main.js
+│   │   ├── hub/dashboard.js
+│   │   ├── spoke/dashboard.js
+│   │   └── shared helpers (state, utils, websocket, nav, agent-log)
+│   ├── app.js            # legacy compatibility bundle
+│   ├── docs/
 │   └── style.css
 ├── shared/
 │   └── shared_utils.py
@@ -229,37 +243,30 @@ The frontend is intentionally simple:
 - no npm build
 - no framework runtime
 - one HTML template
-- one JS bundle
-- one CSS file
+- ES-module loading under `static/js/`
+- one shared CSS file
 
 #### Mode injection
 
-`templates/index.html` sets:
-
-```html
-<script>window.WEBUI_MODE = "{{WEBUI_MODE}}";</script>
-```
+`templates/index.html` provides the shared shell and the backend injects `window.WEBUI_MODE` / `__CS_WEBUI_INIT__` at runtime so the browser can pick the correct module set.
 
 At runtime:
 
-- Hub replaces it with `hub`
-- Spoke replaces it with `spoke`
+- Hub replaces the mode with `hub`
+- Spoke replaces the mode with `spoke`
 
-#### IIFE structure in `static/app.js`
+#### Module structure
 
-`app.js` has three layers:
+`static/js/main.js` is the entry point. It:
 
-1. **shared preamble**
-   - reads `window.WEBUI_MODE`
-   - adds `mode-hub` or `mode-spoke` to `<body>`
-2. **spoke IIFE**
-   - runs only when `WEBUI_MODE === 'spoke'`
-   - owns local clients, Proxmox, config editing, Central, setup, and logs UI
-3. **hub IIFE**
-   - runs only when `WEBUI_MODE === 'hub'`
-   - owns login, tenant context, spoke detail, aggregate dashboards, and hub admin flows
+1. detects the active mode from the injected init payload (or `/api/init` fallback)
+2. applies `mode-hub` or `mode-spoke` to `<body>`
+3. lazy-loads `static/js/hub/dashboard.js` or `static/js/spoke/dashboard.js`
+4. sets footer version pills from the init payload
 
-This keeps hub and spoke logic in one file while avoiding runtime overlap.
+Shared helpers such as `state.js`, `utils.js`, `websocket.js`, `nav.js`, and `agent-log.js` are imported by the mode-specific dashboards as needed.
+
+`static/app.js` is kept as a legacy compatibility bundle, but new work should target the modular files under `static/js/`.
 
 ### How to add a new tab or feature
 
@@ -273,7 +280,7 @@ This keeps hub and spoke logic in one file while avoiding runtime overlap.
 4. Add mode classes if needed:
    - `hub-only`
    - `spoke-only`
-5. In `static/app.js`, wire the new tab into the correct mode-specific IIFE.
+5. In the correct mode module (`static/js/hub/dashboard.js` or `static/js/spoke/dashboard.js`), wire the new tab into the appropriate init/render flow.
 6. Add fetch/render/init logic for the new panel.
 7. Update `static/style.css` if the layout needs new classes.
 
@@ -281,9 +288,9 @@ This keeps hub and spoke logic in one file while avoiding runtime overlap.
 
 1. Decide whether the backend source is Hub, Spoke, or both.
 2. Add or reuse the backend endpoint in `webui-hub` or `client-sim/webui-spoke`.
-3. Add UI fetch logic in the correct IIFE.
+3. Add UI fetch logic in the correct dashboard module.
 4. Render into the existing page/card/table pattern used in `index.html`.
-5. If the feature belongs in both modes, keep selectors and function names mode-scoped so the two IIFEs stay isolated.
+5. If the feature belongs in both modes, keep selectors and function names mode-scoped so the hub and spoke modules stay isolated.
 
 ### UI conventions
 
@@ -313,12 +320,12 @@ This keeps hub and spoke logic in one file while avoiding runtime overlap.
 
 #### `webui-hub`
 
-- copies `static/` and `index.html` into its runtime image
+- consumes `frontend/` as a submodule in local development and copies `static/` plus `templates/index.html` into its runtime image/build context
 - injects `WEBUI_MODE=hub`
 
 #### `client-sim/webui-spoke`
 
-- `install-lxc.sh` downloads `static/app.js`, `static/style.css`, and `templates/index.html` from `cs-webui`
+- `install-lxc.sh` downloads `static/js/*`, the legacy `static/app.js` compatibility bundle, `static/style.css`, and `templates/index.html` from `cs-webui`
 - injects `WEBUI_MODE=spoke`
 
 ### Local development notes

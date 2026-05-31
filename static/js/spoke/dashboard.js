@@ -151,7 +151,12 @@ let currentSettings = {
   reclone_concurrency: '1',
   protected_vmids: '',
   l1_vlan_start: '100',
-  l1_vlan_end: '199'
+  l1_vlan_end: '199',
+  guest_agent_watchdog_enabled: 'on',
+  guest_agent_grace_minutes: '20',
+  guest_agent_check_interval_minutes: '10',
+  guest_agent_reboot_after_minutes: '10',
+  guest_agent_reclone_after_minutes: '30'
 };
 let configData = {};
 let configLoaded = false;
@@ -740,6 +745,7 @@ const l1VlanEndInput = document.getElementById('l1-vlan-end');
 const l1VlanMsg = document.getElementById('l1-vlan-message');
 const usbSettingsMsg = document.getElementById('usb-settings-message');
 const vmMaintenanceMsg = document.getElementById('vm-maintenance-message');
+const agentWatchdogMsg = document.getElementById('agent-watchdog-message');
 const addVidPidBtn = document.getElementById('add-vidpid-btn');
 const usbSummaryPanel = document.getElementById('usb-summary-panel');
 const usbSummaryTbody = document.getElementById('usb-summary-tbody');
@@ -933,7 +939,12 @@ function mergeSettings(next = {}) {
     reclone_concurrency: next.reclone_concurrency ?? currentSettings.reclone_concurrency ?? '1',
     protected_vmids: next.protected_vmids ?? currentSettings.protected_vmids ?? '',
     l1_vlan_start: next.l1_vlan_start ?? currentSettings.l1_vlan_start ?? '100',
-    l1_vlan_end: next.l1_vlan_end ?? currentSettings.l1_vlan_end ?? '199'
+    l1_vlan_end: next.l1_vlan_end ?? currentSettings.l1_vlan_end ?? '199',
+    guest_agent_watchdog_enabled: next.guest_agent_watchdog_enabled ?? currentSettings.guest_agent_watchdog_enabled ?? 'on',
+    guest_agent_grace_minutes: next.guest_agent_grace_minutes ?? currentSettings.guest_agent_grace_minutes ?? '20',
+    guest_agent_check_interval_minutes: next.guest_agent_check_interval_minutes ?? currentSettings.guest_agent_check_interval_minutes ?? '10',
+    guest_agent_reboot_after_minutes: next.guest_agent_reboot_after_minutes ?? currentSettings.guest_agent_reboot_after_minutes ?? '10',
+    guest_agent_reclone_after_minutes: next.guest_agent_reclone_after_minutes ?? currentSettings.guest_agent_reclone_after_minutes ?? '30'
   };
   currentSettings = merged;
   return merged;
@@ -1610,6 +1621,7 @@ function renderServerTab(data) {
       if (['deleting', 'provisioning', 'cloning', 'configuring'].includes(vm.status)) return 2;
       if (vm.prov_status === 'provisioning' || vm.pending_checkin === true) return 2;
       if (vm.prov_status === 'post_prov_retry') return 2;
+      if (vm.prov_status === 'agent_unresponsive' || vm.prov_status === 'agent_rebooting') return 2;
       if (vm.status !== 'running') return 3;
       return 4;
     };
@@ -1640,6 +1652,8 @@ function renderServerTab(data) {
       else if (vm.status === 'cloning')                  statusLabel = '🟡 cloning…';
       else if (vm.status === 'configuring')              statusLabel = '🟡 configuring…';
       else if (vm.prov_status === 'post_prov_retry')     statusLabel = '🔁 retrying…';
+      else if (vm.prov_status === 'agent_rebooting')     statusLabel = '🔄 agent rebooting…';
+      else if (vm.prov_status === 'agent_unresponsive')  statusLabel = '⚠️ agent down';
       else                                               statusLabel = baseStatusText;
       const memUsed  = vm.mem    ? fmtSize(Number(vm.mem)    * 1024 * 1024) : '—';
       const memTotal = vm.maxmem ? fmtSize(Number(vm.maxmem) * 1024 * 1024) : '—';
@@ -2001,6 +2015,16 @@ function applySettingsToUI(s) {
   if (protectedVmidsInput && !protectedVmidsInput.matches(':focus')) protectedVmidsInput.value = settings.protected_vmids ?? '';
   if (l1VlanStartInput && !l1VlanStartInput.matches(':focus')) l1VlanStartInput.value = settings.l1_vlan_start ?? '100';
   if (l1VlanEndInput && !l1VlanEndInput.matches(':focus')) l1VlanEndInput.value = settings.l1_vlan_end ?? '199';
+  const agentWatchdogEnabled = document.getElementById('guest-agent-watchdog-enabled');
+  if (agentWatchdogEnabled) agentWatchdogEnabled.checked = (settings.guest_agent_watchdog_enabled ?? 'on') === 'on';
+  const agentGrace = document.getElementById('guest-agent-grace-minutes');
+  if (agentGrace && !agentGrace.matches(':focus')) agentGrace.value = settings.guest_agent_grace_minutes ?? '20';
+  const agentInterval = document.getElementById('guest-agent-check-interval-minutes');
+  if (agentInterval && !agentInterval.matches(':focus')) agentInterval.value = settings.guest_agent_check_interval_minutes ?? '10';
+  const agentReboot = document.getElementById('guest-agent-reboot-after-minutes');
+  if (agentReboot && !agentReboot.matches(':focus')) agentReboot.value = settings.guest_agent_reboot_after_minutes ?? '10';
+  const agentReclone = document.getElementById('guest-agent-reclone-after-minutes');
+  if (agentReclone && !agentReclone.matches(':focus')) agentReclone.value = settings.guest_agent_reclone_after_minutes ?? '30';
   if (recloneScheduleDayInput && !recloneScheduleDayInput.matches(':focus')) recloneScheduleDayInput.value = schedule.day;
   if (recloneScheduleTimeInput && !recloneScheduleTimeInput.matches(':focus')) recloneScheduleTimeInput.value = schedule.time;
   try { renderUsbVidPidTable(); } catch (_) {}
@@ -2939,6 +2963,11 @@ function collectUsbSettingsPayload() {
     protected_vmids: String(document.getElementById('protected-vmids')?.value ?? currentSettings.protected_vmids ?? ''),
     l1_vlan_start: String(l1VlanStartInput?.value ?? currentSettings.l1_vlan_start ?? '100'),
     l1_vlan_end: String(l1VlanEndInput?.value ?? currentSettings.l1_vlan_end ?? '199'),
+    guest_agent_watchdog_enabled: document.getElementById('guest-agent-watchdog-enabled')?.checked ? 'on' : 'off',
+    guest_agent_grace_minutes: String(document.getElementById('guest-agent-grace-minutes')?.value ?? currentSettings.guest_agent_grace_minutes ?? '20'),
+    guest_agent_check_interval_minutes: String(document.getElementById('guest-agent-check-interval-minutes')?.value ?? currentSettings.guest_agent_check_interval_minutes ?? '10'),
+    guest_agent_reboot_after_minutes: String(document.getElementById('guest-agent-reboot-after-minutes')?.value ?? currentSettings.guest_agent_reboot_after_minutes ?? '10'),
+    guest_agent_reclone_after_minutes: String(document.getElementById('guest-agent-reclone-after-minutes')?.value ?? currentSettings.guest_agent_reclone_after_minutes ?? '30'),
   };
 }
 
@@ -7185,6 +7214,17 @@ if (usbAutoProvisionInput) usbAutoProvisionInput.addEventListener('change', () =
 // Layer 1 VLAN — save on blur
 [l1VlanStartInput, l1VlanEndInput].forEach((el) => {
   if (el) el.addEventListener('blur', () => _autoSaveUsb(l1VlanMsg));
+});
+
+// VM Agent Watchdog — save on change/blur
+['guest-agent-watchdog-enabled'].forEach((id) => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', () => _autoSaveUsb(agentWatchdogMsg));
+});
+['guest-agent-grace-minutes', 'guest-agent-check-interval-minutes',
+ 'guest-agent-reboot-after-minutes', 'guest-agent-reclone-after-minutes'].forEach((id) => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('blur', () => _autoSaveUsb(agentWatchdogMsg));
 });
 
 // VM Maintenance — checkboxes/selects: save on change; number/time inputs: save on blur.

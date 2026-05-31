@@ -1345,6 +1345,11 @@
                 <label>VM Silent Timeout (h)<input type="number" id="hc-vm_silent_timeout" placeholder="24"></label>
                 <label>L1 VLAN Start<input type="text" id="hc-l1_vlan_start" placeholder="100"></label>
                 <label>L1 VLAN End<input type="text" id="hc-l1_vlan_end" placeholder="199"></label>
+                <label>Agent Watchdog<select id="hc-guest_agent_watchdog_enabled"><option value="on">On</option><option value="off">Off</option></select></label>
+                <label>Grace Period (min)<input type="number" id="hc-guest_agent_grace_minutes" placeholder="20"></label>
+                <label>Watchdog Interval (min)<input type="number" id="hc-guest_agent_check_interval_minutes" placeholder="10"></label>
+                <label>Reboot After (min)<input type="number" id="hc-guest_agent_reboot_after_minutes" placeholder="10"></label>
+                <label>Reclone After (min)<input type="number" id="hc-guest_agent_reclone_after_minutes" placeholder="30"></label>
                 <label style="grid-column:1/-1;">USB VID:PIDs (JSON array)<input type="text" id="hc-usb_vidpids" placeholder='["vid:pid"]'></label>
                 <label style="grid-column:1/-1;">Ignored Hostnames (JSON array)<input type="text" id="hc-ignored_hostnames" placeholder='["sim-rpi-0000"]'></label>
               </div>
@@ -2963,6 +2968,45 @@
                 </div>
               </div>
               <div id="l1-vlan-message" class="settings-message hidden" role="alert"></div>
+            </div>
+          </div>
+
+          <!-- VM Agent Watchdog card -->
+          <div class="setup-card setup-section-gap">
+            <div class="setup-card-header">
+              <h2>VM Agent Watchdog</h2>
+              <p>Monitors the QEMU guest agent on each sim VM. If the agent becomes unresponsive after the grace period, the VM is soft-rebooted. If still unresponsive after a further timeout, it is recloned.</p>
+            </div>
+            <div class="setup-form">
+              <div class="settings-section">
+                <div class="form-row" style="align-items:center;gap:12px;">
+                  <label class="form-label" for="guest-agent-watchdog-enabled">Enable watchdog</label>
+                  <input id="guest-agent-watchdog-enabled" type="checkbox" checked>
+                </div>
+                <div class="form-row" style="margin-top:10px;">
+                  <div class="form-group">
+                    <label class="form-label" for="guest-agent-grace-minutes">Grace period (min)</label>
+                    <input id="guest-agent-grace-minutes" class="form-input" type="number" value="20" min="1" max="1440"
+                           style="width:100px;" title="Minutes after provisioning before the watchdog starts checking.">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="guest-agent-check-interval-minutes">Check interval (min)</label>
+                    <input id="guest-agent-check-interval-minutes" class="form-input" type="number" value="10" min="1" max="60"
+                           style="width:100px;" title="How often the watchdog pings each VM's guest agent.">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="guest-agent-reboot-after-minutes">Reboot after (min)</label>
+                    <input id="guest-agent-reboot-after-minutes" class="form-input" type="number" value="10" min="1" max="120"
+                           style="width:100px;" title="Minutes of unresponsiveness before a soft reboot is issued.">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="guest-agent-reclone-after-minutes">Reclone after (min)</label>
+                    <input id="guest-agent-reclone-after-minutes" class="form-input" type="number" value="30" min="1" max="240"
+                           style="width:100px;" title="Minutes after the reboot before the VM is destroyed and recloned.">
+                  </div>
+                </div>
+              </div>
+              <div id="agent-watchdog-message" class="settings-message hidden" role="alert"></div>
             </div>
           </div>
 

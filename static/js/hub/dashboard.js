@@ -5548,17 +5548,21 @@ function renderHubVmServerSubpanel({ tenantId, spokeId, simVms, iotVms, otherVms
 // ── VM status dot helper ─────────────────────────────────────────────────────
 
 function _hubVmStatusDot(vm) {
-  if (vm.status === "deleting")              return "🟡";
-  if (vm.prov_status === "provisioning")     return "🔵";
-  if (vm.prov_status === "post_prov_retry")  return "🔁";
+  if (vm.status === "deleting")                return "🟡";
+  if (vm.prov_status === "provisioning")       return "🔵";
+  if (vm.prov_status === "post_prov_retry")    return "🔁";
+  if (vm.prov_status === "agent_rebooting")    return "🔄";
+  if (vm.prov_status === "agent_unresponsive") return "⚠️";
   if (vm.status === "running") return "🟢";
   if (vm.status === "paused") return "🟡";
   return "⚫";
 }
 
 function _hubVmStatusLabel(vm) {
-  if (vm.prov_status === "provisioning")     return "provisioning";
-  if (vm.prov_status === "post_prov_retry")  return "retrying…";
+  if (vm.prov_status === "provisioning")       return "provisioning";
+  if (vm.prov_status === "post_prov_retry")    return "retrying…";
+  if (vm.prov_status === "agent_rebooting")    return "agent rebooting…";
+  if (vm.prov_status === "agent_unresponsive") return "agent down";
   return vm.status || "unknown";
 }
 
@@ -11441,6 +11445,8 @@ const HUB_CONFIG_FIELDS = [
   "vm_image_1_template_id","vm_image_2_template_id","vm_image_1_pct",
   "usb_auto_provision","usb_missing_timeout","usb_max_slots","vm_silent_timeout",
   "l1_vlan_start","l1_vlan_end","usb_vidpids","ignored_hostnames",
+  "guest_agent_watchdog_enabled","guest_agent_grace_minutes","guest_agent_check_interval_minutes",
+  "guest_agent_reboot_after_minutes","guest_agent_reclone_after_minutes",
 ];
 
 async function loadHubConfig() {

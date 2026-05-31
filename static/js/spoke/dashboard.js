@@ -1479,6 +1479,17 @@ function renderServerTab(data) {
   const ramUsed  = node.mem_used_kb  ? fmtSizeKB(node.mem_used_kb)  : '—';
   const ramTotal = node.mem_total_kb ? fmtSizeKB(node.mem_total_kb) : '—';
   setEl('server-ram', `${ramUsed} / ${ramTotal}`);
+  // 1-hour averages — only shown once a full hour of data exists (non-null)
+  const cpuAvgPill = document.getElementById('server-cpu-avg-pill');
+  const memAvgPill = document.getElementById('server-mem-avg-pill');
+  if (data.cpu_1h_avg != null && cpuAvgPill) {
+    setEl('server-cpu-avg', Number(data.cpu_1h_avg).toFixed(1));
+    cpuAvgPill.style.display = '';
+  } else if (cpuAvgPill) { cpuAvgPill.style.display = 'none'; }
+  if (data.mem_1h_avg != null && memAvgPill) {
+    setEl('server-mem-avg', Number(data.mem_1h_avg).toFixed(1));
+    memAvgPill.style.display = '';
+  } else if (memAvgPill) { memAvgPill.style.display = 'none'; }
   // Cache last_seen to localStorage so we can show accurate "X ago" after restarts
   const PROXMOX_LS_KEY = 'proxmox_last_seen';
   if (latestProxmoxData.last_seen) {

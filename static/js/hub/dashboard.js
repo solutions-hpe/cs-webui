@@ -6813,6 +6813,13 @@ function renderHubVmServerDetailsPanel(px, host) {
     const pct = s.total ? Math.round(((s.used || 0) / s.total) * 100) : 0;
     return `<tr><th>Storage (${escHtml(s.storage || "disk")})</th><td>${used} / ${total} (${pct}%)</td></tr>`;
   }).join("") : "";
+  // Warmup countdown: show remaining minutes until the 1-hour rolling window is full.
+  const _warmupRemainS = px.resource_samples_started
+    ? Math.max(0, 3600 - (Date.now() / 1000 - Number(px.resource_samples_started)))
+    : null;
+  const _warmupLabel = _warmupRemainS != null && _warmupRemainS > 0
+    ? `warming up… ${Math.ceil(_warmupRemainS / 60)} min remaining`
+    : 'warming up…';
   const lastSeen = px.last_seen
     ? new Date(typeof px.last_seen === "number" ? px.last_seen * 1000 : px.last_seen).toLocaleString()
     : "—";
@@ -6830,7 +6837,7 @@ function renderHubVmServerDetailsPanel(px, host) {
           <h2 style="margin:0;">${escHtml(node.hostname || node.node || host.spoke_name || "Proxmox")}</h2>
           <span class="server-stat-pill">⚡ CPU: ${cpu}</span>
           <span class="server-stat-pill">🧠 RAM: ${memUsed} / ${memTotal}</span>
-          ${px.cpu_1h_avg != null ? `<span class="server-stat-pill" title="1-hour rolling average">📊 CPU avg: ${Number(px.cpu_1h_avg).toFixed(1)}%</span>` : ''}
+          ${px.cpu_1h_avg != null ? `<span class="server-stat-pill" title="1-hour rolling average">📊 CPU avg: ${Number(px.cpu_1h_avg).toFixed(1)}%</span>` : `<span class="server-stat-pill muted" title="Still collecting 1-hour sample window">📊 ${escHtml(_warmupLabel)}</span>`}
           ${px.mem_1h_avg != null ? `<span class="server-stat-pill" title="1-hour rolling average">📊 Mem avg: ${Number(px.mem_1h_avg).toFixed(1)}%</span>` : ''}
         </div>
       </div>
@@ -6841,9 +6848,9 @@ function renderHubVmServerDetailsPanel(px, host) {
           <tr><th>PVE Version</th><td>${escHtml(px.pve_version || "—")}</td></tr>
           <tr><th>Node</th><td>${escHtml(node.node || node.hostname || "—")}</td></tr>
           <tr><th>CPU</th><td>${cpu}</td></tr>
-          <tr><th>CPU (1h avg)</th><td>${px.cpu_1h_avg != null ? `${Number(px.cpu_1h_avg).toFixed(1)}%` : '<span class="muted">warming up…</span>'}</td></tr>
+          <tr><th>CPU (1h avg)</th><td>${px.cpu_1h_avg != null ? `${Number(px.cpu_1h_avg).toFixed(1)}%` : `<span class="muted">${escHtml(_warmupLabel)}</span>`}</td></tr>
           <tr><th>Memory</th><td>${memUsed} / ${memTotal}</td></tr>
-          <tr><th>Memory (1h avg)</th><td>${px.mem_1h_avg != null ? `${Number(px.mem_1h_avg).toFixed(1)}%` : '<span class="muted">warming up…</span>'}</td></tr>
+          <tr><th>Memory (1h avg)</th><td>${px.mem_1h_avg != null ? `${Number(px.mem_1h_avg).toFixed(1)}%` : `<span class="muted">${escHtml(_warmupLabel)}</span>`}</td></tr>
           ${storageRows}
           <tr><th>VMs</th><td>${escHtml(String(px.vm_count ?? "—"))} total, ${escHtml(String(px.running_count ?? "—"))} running</td></tr>
           <tr><th>Last Agent Check-in</th><td>${escHtml(lastSeen)}</td></tr>

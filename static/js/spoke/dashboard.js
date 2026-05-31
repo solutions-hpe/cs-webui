@@ -135,6 +135,10 @@ let currentSettings = {
   usb_vidpids: '[]',
   usb_missing_timeout: '60',
   usb_max_slots: '24',
+  cpu_provision_threshold: '80',
+  cpu_delete_threshold: '90',
+  mem_provision_threshold: '80',
+  mem_delete_threshold: '90',
   vm_image_1_template_id: '100',
   vm_image_2_template_id: '200',
   vm_image_1_pct: '50',
@@ -913,6 +917,10 @@ function mergeSettings(next = {}) {
     usb_vidpids: next.usb_vidpids ?? currentSettings.usb_vidpids ?? '[]',
     usb_missing_timeout: next.usb_missing_timeout ?? currentSettings.usb_missing_timeout ?? '60',
     usb_max_slots: next.usb_max_slots ?? currentSettings.usb_max_slots ?? '24',
+    cpu_provision_threshold: next.cpu_provision_threshold ?? currentSettings.cpu_provision_threshold ?? '80',
+    cpu_delete_threshold:    next.cpu_delete_threshold    ?? currentSettings.cpu_delete_threshold    ?? '90',
+    mem_provision_threshold: next.mem_provision_threshold ?? currentSettings.mem_provision_threshold ?? '80',
+    mem_delete_threshold:    next.mem_delete_threshold    ?? currentSettings.mem_delete_threshold    ?? '90',
     vm_image_1_template_id: next.vm_image_1_template_id ?? currentSettings.vm_image_1_template_id ?? '100',
     vm_image_2_template_id: next.vm_image_2_template_id ?? currentSettings.vm_image_2_template_id ?? '200',
     vm_image_1_pct: next.vm_image_1_pct ?? currentSettings.vm_image_1_pct ?? '50',
@@ -1961,6 +1969,14 @@ function applySettingsToUI(s) {
   if (usbAutoProvisionInput) usbAutoProvisionInput.checked = settings.usb_auto_provision === 'on';
   if (usbMissingTimeoutInput && !usbMissingTimeoutInput.matches(':focus')) usbMissingTimeoutInput.value = settings.usb_missing_timeout ?? '60';
   if (usbMaxSlotsInput && !usbMaxSlotsInput.matches(':focus')) usbMaxSlotsInput.value = settings.usb_max_slots ?? '24';
+  const cpuProvThrInput = document.getElementById('cpu-provision-threshold');
+  const cpuDelThrInput  = document.getElementById('cpu-delete-threshold');
+  const memProvThrInput = document.getElementById('mem-provision-threshold');
+  const memDelThrInput  = document.getElementById('mem-delete-threshold');
+  if (cpuProvThrInput && !cpuProvThrInput.matches(':focus')) cpuProvThrInput.value = settings.cpu_provision_threshold ?? '80';
+  if (cpuDelThrInput  && !cpuDelThrInput.matches(':focus'))  cpuDelThrInput.value  = settings.cpu_delete_threshold ?? '90';
+  if (memProvThrInput && !memProvThrInput.matches(':focus'))  memProvThrInput.value = settings.mem_provision_threshold ?? '80';
+  if (memDelThrInput  && !memDelThrInput.matches(':focus'))   memDelThrInput.value  = settings.mem_delete_threshold ?? '90';
   if (vmImage1TemplateIdInput && !vmImage1TemplateIdInput.matches(':focus')) vmImage1TemplateIdInput.value = settings.vm_image_1_template_id ?? '100';
   if (vmImage2TemplateIdInput && !vmImage2TemplateIdInput.matches(':focus')) vmImage2TemplateIdInput.value = settings.vm_image_2_template_id ?? '200';
   if (vmImage1PctInput && !vmImage1PctInput.matches(':focus')) vmImage1PctInput.value = settings.vm_image_1_pct ?? '50';
@@ -2894,6 +2910,10 @@ function collectUsbSettingsPayload() {
     usb_vidpids: currentSettings.usb_vidpids,
     usb_missing_timeout: String(usbMissingTimeoutInput?.value || currentSettings.usb_missing_timeout || '60'),
     usb_max_slots: String(usbMaxSlotsInput?.value || currentSettings.usb_max_slots || '24'),
+    cpu_provision_threshold: String(document.getElementById('cpu-provision-threshold')?.value ?? currentSettings.cpu_provision_threshold ?? '80'),
+    cpu_delete_threshold:    String(document.getElementById('cpu-delete-threshold')?.value ?? currentSettings.cpu_delete_threshold ?? '90'),
+    mem_provision_threshold: String(document.getElementById('mem-provision-threshold')?.value ?? currentSettings.mem_provision_threshold ?? '80'),
+    mem_delete_threshold:    String(document.getElementById('mem-delete-threshold')?.value ?? currentSettings.mem_delete_threshold ?? '90'),
     vm_image_1_template_id: String(vmImage1TemplateIdInput?.value || currentSettings.vm_image_1_template_id || '100'),
     vm_image_2_template_id: String(vmImage2TemplateIdInput?.value || currentSettings.vm_image_2_template_id || '200'),
     vm_image_1_pct: String(vmImage1PctInput?.value ?? currentSettings.vm_image_1_pct ?? '50'),

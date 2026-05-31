@@ -631,6 +631,30 @@
                 </div>
               </div>
               <div class="settings-section">
+                <div class="settings-section-title">Resource Thresholds (1-hour average)</div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label" for="ts-cpu-prov-thr">CPU — Block provisioning above (%)</label>
+                    <input id="ts-cpu-prov-thr" class="form-input" type="number" value="80" min="0" max="100" placeholder="80">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="ts-cpu-del-thr">CPU — Delete VM above (%)</label>
+                    <input id="ts-cpu-del-thr" class="form-input" type="number" value="90" min="0" max="100" placeholder="90">
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label" for="ts-mem-prov-thr">Memory — Block provisioning above (%)</label>
+                    <input id="ts-mem-prov-thr" class="form-input" type="number" value="80" min="0" max="100" placeholder="80">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="ts-mem-del-thr">Memory — Delete VM above (%)</label>
+                    <input id="ts-mem-del-thr" class="form-input" type="number" value="90" min="0" max="100" placeholder="90">
+                  </div>
+                </div>
+                <p class="form-hint">When the 1-hour rolling average exceeds the provision threshold no new VMs are spun up. When it exceeds the delete threshold the newest sim VM is removed (one per cycle). Values apply only after a full hour of telemetry data is available.</p>
+              </div>
+              <div class="settings-section">
                 <div class="settings-section-title">VM Templates <button class="help-icon" data-help-topic="vm-templates" type="button" aria-label="Help">?</button></div>
                 <div class="form-row">
                   <div class="form-group">

@@ -6108,6 +6108,38 @@ function renderHubVmServerUsbPanel(host) {
               <span class="form-hint">Maximum number of concurrent USB-provisioned VMs.</span>
             </div>
             <div class="form-group">
+              <label class="form-label">CPU Provision Threshold (%)</label>
+              <div style="display:flex;gap:8px;">
+                <div style="flex:1;">
+                  <label class="form-label" style="font-size:0.8rem;color:var(--muted);" for="hvmusb-cpu-prov-thr">Block provisioning above</label>
+                  <input id="hvmusb-cpu-prov-thr" class="form-input" type="number"
+                         value="${escHtml(cfg.cpu_provision_threshold || "80")}" min="0" max="100" placeholder="80">
+                </div>
+                <div style="flex:1;">
+                  <label class="form-label" style="font-size:0.8rem;color:var(--muted);" for="hvmusb-cpu-del-thr">Delete VM above</label>
+                  <input id="hvmusb-cpu-del-thr" class="form-input" type="number"
+                         value="${escHtml(cfg.cpu_delete_threshold || "90")}" min="0" max="100" placeholder="90">
+                </div>
+              </div>
+              <span class="form-hint">1-hour average CPU utilization gates. Below the provision threshold VMs may spin up; above the delete threshold the newest sim VM is removed.</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Memory Provision Threshold (%)</label>
+              <div style="display:flex;gap:8px;">
+                <div style="flex:1;">
+                  <label class="form-label" style="font-size:0.8rem;color:var(--muted);" for="hvmusb-mem-prov-thr">Block provisioning above</label>
+                  <input id="hvmusb-mem-prov-thr" class="form-input" type="number"
+                         value="${escHtml(cfg.mem_provision_threshold || "80")}" min="0" max="100" placeholder="80">
+                </div>
+                <div style="flex:1;">
+                  <label class="form-label" style="font-size:0.8rem;color:var(--muted);" for="hvmusb-mem-del-thr">Delete VM above</label>
+                  <input id="hvmusb-mem-del-thr" class="form-input" type="number"
+                         value="${escHtml(cfg.mem_delete_threshold || "90")}" min="0" max="100" placeholder="90">
+                </div>
+              </div>
+              <span class="form-hint">1-hour average memory utilization gates. Same logic as CPU above.</span>
+            </div>
+            <div class="form-group">
               <label class="form-label" for="hvmusb-concurrency">Max parallel reclones</label>
               <input id="hvmusb-concurrency" class="form-input" type="number"
                      value="${escHtml(cfg.reclone_concurrency || "1")}" min="1" max="20" placeholder="1">
@@ -6443,6 +6475,10 @@ function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
         const simPhy         = panel.querySelector("#hvmusb-sim-phy")?.value || "wireless";
         const missingTimeout = String(parseInt(panel.querySelector("#hvmusb-missing-timeout")?.value || "60", 10) || 60);
         const maxSlots       = String(parseInt(panel.querySelector("#hvmusb-max-slots")?.value || "24", 10) || 24);
+        const cpuProvThr     = String(parseInt(panel.querySelector("#hvmusb-cpu-prov-thr")?.value || "80", 10) || 80);
+        const cpuDelThr      = String(parseInt(panel.querySelector("#hvmusb-cpu-del-thr")?.value || "90", 10) || 90);
+        const memProvThr     = String(parseInt(panel.querySelector("#hvmusb-mem-prov-thr")?.value || "80", 10) || 80);
+        const memDelThr      = String(parseInt(panel.querySelector("#hvmusb-mem-del-thr")?.value || "90", 10) || 90);
         const concurrency    = String(parseInt(panel.querySelector("#hvmusb-concurrency")?.value || "1", 10) || 1);
         const protectedVmids = String(panel.querySelector("#hvmusb-protected-vmids")?.value || "").trim();
 
@@ -6450,12 +6486,16 @@ function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
         const res  = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/config`, {
           method: "POST",
           body: {
-            usb_auto_provision:  autoProvision,
-            usb_sim_phy:         simPhy,
-            usb_missing_timeout: missingTimeout,
-            usb_max_slots:       maxSlots,
-            reclone_concurrency: concurrency,
-            protected_vmids:     protectedVmids,
+            usb_auto_provision:       autoProvision,
+            usb_sim_phy:              simPhy,
+            usb_missing_timeout:      missingTimeout,
+            usb_max_slots:            maxSlots,
+            cpu_provision_threshold:  cpuProvThr,
+            cpu_delete_threshold:     cpuDelThr,
+            mem_provision_threshold:  memProvThr,
+            mem_delete_threshold:     memDelThr,
+            reclone_concurrency:      concurrency,
+            protected_vmids:          protectedVmids,
           },
         });
         const data = await readJson(res);
@@ -7862,6 +7902,10 @@ async function initTsProxmoxTab(tenantId) {
       $("#ts-usb-auto-provision") && ($("#ts-usb-auto-provision").checked = autoProvision);
       $("#ts-usb-missing-timeout") && ($("#ts-usb-missing-timeout").value = cfg.usb_missing_timeout ?? 60);
       $("#ts-usb-max-slots") && ($("#ts-usb-max-slots").value = cfg.usb_max_slots ?? 24);
+      $("#ts-cpu-prov-thr") && ($("#ts-cpu-prov-thr").value = cfg.cpu_provision_threshold ?? 80);
+      $("#ts-cpu-del-thr") && ($("#ts-cpu-del-thr").value = cfg.cpu_delete_threshold ?? 90);
+      $("#ts-mem-prov-thr") && ($("#ts-mem-prov-thr").value = cfg.mem_provision_threshold ?? 80);
+      $("#ts-mem-del-thr") && ($("#ts-mem-del-thr").value = cfg.mem_delete_threshold ?? 90);
       $("#ts-vm-image-1-template-id") && ($("#ts-vm-image-1-template-id").value = cfg.vm_image_1_template_id ?? 100);
       $("#ts-vm-image-2-template-id") && ($("#ts-vm-image-2-template-id").value = cfg.vm_image_2_template_id ?? 200);
       $("#ts-vm-image-1-pct") && ($("#ts-vm-image-1-pct").value = cfg.vm_image_1_pct ?? 50);
@@ -7874,14 +7918,18 @@ async function initTsProxmoxTab(tenantId) {
   saveBtn.onclick = async () => {
     if (!spokes.length) { showToast("No spokes available.", "error"); return; }
     const config = {
-      usb_auto_provision: $("#ts-usb-auto-provision")?.checked ? "on" : "off",
-      usb_missing_timeout: parseInt($("#ts-usb-missing-timeout")?.value || "60", 10) || 60,
-      usb_max_slots: parseInt($("#ts-usb-max-slots")?.value || "24", 10) || 24,
-      vm_image_1_template_id: parseInt($("#ts-vm-image-1-template-id")?.value || "100", 10) || 100,
-      vm_image_2_template_id: parseInt($("#ts-vm-image-2-template-id")?.value || "200", 10) || 200,
-      vm_image_1_pct: parseInt($("#ts-vm-image-1-pct")?.value || "50", 10) || 50,
-      reclone_concurrency: parseInt($("#ts-reclone-concurrency")?.value || "1", 10) || 1,
-      protected_vmids: $("#ts-protected-vmids")?.value?.trim() ?? "",
+      usb_auto_provision:      $("#ts-usb-auto-provision")?.checked ? "on" : "off",
+      usb_missing_timeout:     parseInt($("#ts-usb-missing-timeout")?.value || "60", 10) || 60,
+      usb_max_slots:           parseInt($("#ts-usb-max-slots")?.value || "24", 10) || 24,
+      cpu_provision_threshold: String(parseInt($("#ts-cpu-prov-thr")?.value || "80", 10) || 80),
+      cpu_delete_threshold:    String(parseInt($("#ts-cpu-del-thr")?.value || "90", 10) || 90),
+      mem_provision_threshold: String(parseInt($("#ts-mem-prov-thr")?.value || "80", 10) || 80),
+      mem_delete_threshold:    String(parseInt($("#ts-mem-del-thr")?.value || "90", 10) || 90),
+      vm_image_1_template_id:  parseInt($("#ts-vm-image-1-template-id")?.value || "100", 10) || 100,
+      vm_image_2_template_id:  parseInt($("#ts-vm-image-2-template-id")?.value || "200", 10) || 200,
+      vm_image_1_pct:          parseInt($("#ts-vm-image-1-pct")?.value || "50", 10) || 50,
+      reclone_concurrency:     parseInt($("#ts-reclone-concurrency")?.value || "1", 10) || 1,
+      protected_vmids:         $("#ts-protected-vmids")?.value?.trim() ?? "",
     };
     saveBtn.disabled = true;
     try {

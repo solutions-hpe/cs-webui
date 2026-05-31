@@ -3917,6 +3917,8 @@ async function toggleHubClientSimOverride(tenantId, hostname, simulation, enable
       hubClientSimOverrides[hostname] = hubClientSimOverrides[hostname].filter(s => s !== simulation);
     }
     showToast(`${enabled ? "Enabled" : "Disabled"} ${simulation} for ${hostname}`, "success");
+    // Always reload user-overrides.conf so the editor below is never stale
+    loadSetupUserOverridesConf(tenantId, true);
   } catch (e) {
     showToast(`Failed to update simulation: ${e.message}`, "error");
   }
@@ -8152,7 +8154,7 @@ async function initHubTenantSetupSubtab(subtab = hubTenantSetupActiveSubtab, for
     await initTsProcessingTab(tenantId);
   }
   if (subtab === "ts-simulations") {
-    initTsSimulationsTab();
+    initTsSimulationsTab(force);
   }
 }
 
@@ -8226,11 +8228,11 @@ async function initTsProcessingTab(tenantId) {
     </div>`;
 }
 
-function initTsSimulationsTab() {
+function initTsSimulationsTab(force = false) {
   const tenantId = currentTenantId || getActiveTenantId();
   renderSetupSimulationConfigEditor();
-  if (tenantId && !hubSimulationConfState.loaded) loadSetupSimulationConf(tenantId);
-  if (tenantId && !hubUserOverridesConfState.loaded) loadSetupUserOverridesConf(tenantId);
+  if (tenantId && (!hubSimulationConfState.loaded || force)) loadSetupSimulationConf(tenantId, force);
+  if (tenantId && (!hubUserOverridesConfState.loaded || force)) loadSetupUserOverridesConf(tenantId, true);
 }
 
 async function activateHubTenantSetupSubtab(subtab = "ts-central-api", force = false) {

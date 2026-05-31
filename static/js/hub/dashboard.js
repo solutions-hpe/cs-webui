@@ -5548,15 +5548,17 @@ function renderHubVmServerSubpanel({ tenantId, spokeId, simVms, iotVms, otherVms
 // ── VM status dot helper ─────────────────────────────────────────────────────
 
 function _hubVmStatusDot(vm) {
-  if (vm.status === "deleting")    return "🟡";
-  if (vm.prov_status === "provisioning") return "🔵";
+  if (vm.status === "deleting")              return "🟡";
+  if (vm.prov_status === "provisioning")     return "🔵";
+  if (vm.prov_status === "post_prov_retry")  return "🔁";
   if (vm.status === "running") return "🟢";
   if (vm.status === "paused") return "🟡";
   return "⚫";
 }
 
 function _hubVmStatusLabel(vm) {
-  if (vm.prov_status === "provisioning") return "provisioning";
+  if (vm.prov_status === "provisioning")     return "provisioning";
+  if (vm.prov_status === "post_prov_retry")  return "retrying…";
   return vm.status || "unknown";
 }
 

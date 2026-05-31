@@ -1609,6 +1609,7 @@ function renderServerTab(data) {
       if (rLog === 'queued') return 1;
       if (['deleting', 'provisioning', 'cloning', 'configuring'].includes(vm.status)) return 2;
       if (vm.prov_status === 'provisioning' || vm.pending_checkin === true) return 2;
+      if (vm.prov_status === 'post_prov_retry') return 2;
       if (vm.status !== 'running') return 3;
       return 4;
     };
@@ -1634,11 +1635,12 @@ function renderServerTab(data) {
         ? '🟡 provisioning…'
         : `${vm.status === 'running' ? '🟢' : vm.status === 'paused' ? '🟡' : '⚫'} ${vm.status || 'unknown'}`;
       let statusLabel;
-      if (recloneLog === 'in_progress')      statusLabel = '🔄 recloning…';
-      else if (recloneLog === 'queued')      statusLabel = '⏳ queued';
-      else if (vm.status === 'cloning')      statusLabel = '🟡 cloning…';
-      else if (vm.status === 'configuring')  statusLabel = '🟡 configuring…';
-      else                                   statusLabel = baseStatusText;
+      if (recloneLog === 'in_progress')                  statusLabel = '🔄 recloning…';
+      else if (recloneLog === 'queued')                  statusLabel = '⏳ queued';
+      else if (vm.status === 'cloning')                  statusLabel = '🟡 cloning…';
+      else if (vm.status === 'configuring')              statusLabel = '🟡 configuring…';
+      else if (vm.prov_status === 'post_prov_retry')     statusLabel = '🔁 retrying…';
+      else                                               statusLabel = baseStatusText;
       const memUsed  = vm.mem    ? fmtSize(Number(vm.mem)    * 1024 * 1024) : '—';
       const memTotal = vm.maxmem ? fmtSize(Number(vm.maxmem) * 1024 * 1024) : '—';
       // Show CPU only for running VMs — stopped VMs always report 0 which is misleading

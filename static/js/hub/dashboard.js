@@ -6693,6 +6693,29 @@ function renderHubVmServerVhPanel(px) {
 
 // ── Command Queue tab ─────────────────────────────────────────────────────────
 
+/** Return a human-readable one-line summary of a command payload. */
+function _fmtCmdPayload(type, payload) {
+  if (!payload || !Object.keys(payload).length) return "—";
+  // Config update: list the top-level config keys being changed
+  if (type === "config_update" && payload.config && typeof payload.config === "object") {
+    const keys = Object.keys(payload.config);
+    return `config: ${keys.join(", ")}`;
+  }
+  // VM commands: show vmid + vm_name if present
+  if (payload.vmid != null) {
+    const parts = [`vmid: ${payload.vmid}`];
+    if (payload.vm_name) parts.push(payload.vm_name);
+    if (payload.vm_type) parts.push(`(${payload.vm_type})`);
+    return parts.join(" ");
+  }
+  // Kill switch or simple flag commands
+  if (payload.value !== undefined) return `value: ${payload.value}`;
+  // Fallback: show top-level keys only, truncated
+  const keys = Object.keys(payload);
+  const summary = keys.length <= 4 ? keys.join(", ") : keys.slice(0, 4).join(", ") + ` +${keys.length - 4} more`;
+  return summary;
+}
+
 function renderHubVmServerCommandQueuePanel() {
   return `
     <div class="setup-card setup-section-gap">
@@ -6732,7 +6755,7 @@ function renderHubVmServerCommandQueuePanel() {
       <div id="hub-spoke-cmd-msg" class="form-msg" style="margin-bottom:6px;"></div>
       <div class="table-scroll">
         <table class="data-table">
-          <thead><tr><th>Target</th><th>Action</th><th>Payload</th><th>Status</th><th>Age</th><th>Result</th></tr></thead>
+          <thead><tr><th>Target</th><th>Action</th><th>Details</th><th>Status</th><th>Age</th><th>Result</th></tr></thead>
           <tbody id="hub-spoke-cmd-tbody"></tbody>
         </table>
       </div>
@@ -6778,13 +6801,16 @@ async function loadHubSpokeCommands(tenantId, spokeId) {
     };
     tbody.innerHTML = commands.map(cmd => {
       const statusClass = cmd.status === "queued" ? "badge-blue" : cmd.status === "acked" ? "badge-green" : "badge-grey";
+      const payloadSummary = _fmtCmdPayload(cmd.type, cmd.payload);
+      const fullJson = Object.keys(cmd.payload || {}).length ? JSON.stringify(cmd.payload, null, 2) : "";
+      const resultDetail = cmd.result?.detail || "—";
       return `<tr>
         <td>${escHtml(cmd.target || "spoke")}</td>
         <td>${escHtml(typeLabels[cmd.type] || cmd.type)}</td>
-        <td style="font-size:0.8rem;">${escHtml(Object.keys(cmd.payload || {}).length ? JSON.stringify(cmd.payload) : "—")}</td>
+        <td style="font-size:0.8rem;max-width:220px;" title="${escHtml(fullJson)}">${escHtml(payloadSummary)}</td>
         <td><span class="badge ${statusClass}">${escHtml(cmd.status || "—")}</span></td>
         <td>${relativeTime(cmd.created_at)}</td>
-        <td>${escHtml(cmd.result?.detail || "—")}</td>
+        <td style="max-width:260px;word-break:break-word;white-space:normal;font-size:0.85rem;">${escHtml(resultDetail)}</td>
       </tr>`;
     }).join("");
   } catch (err) {

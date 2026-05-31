@@ -6082,80 +6082,85 @@ function renderHubVmServerUsbPanel(host) {
       </div>
       <div class="setup-form">
         <div class="settings-section">
-          <div class="settings-section-title">Provisioning Behavior</div>
-          <div class="toggle-grid">
-            <label class="toggle-label">
-              <input type="checkbox" id="hvmusb-auto-provision"${autoProvOn ? " checked" : ""}>
-              <span>Auto-Provision VMs</span>
-            </label>
-          </div>
-          <div class="form-row" style="margin-top:12px;">
+
+          <!-- Toggle row -->
+          <label class="toggle-label" style="display:inline-flex;align-items:center;gap:8px;margin-bottom:16px;cursor:pointer;">
+            <input type="checkbox" id="hvmusb-auto-provision"${autoProvOn ? " checked" : ""}>
+            <span style="font-weight:500;">Auto-Provision VMs</span>
+          </label>
+
+          <!-- Row 1: Dongle Type · Missing Timeout · Max USB Slots · Max Reclones -->
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:16px;">
             <div class="form-group">
               <label class="form-label" for="hvmusb-sim-phy">Preferred Dongle Type</label>
               <select id="hvmusb-sim-phy" class="form-input">${phyOptions}</select>
-              <span class="form-hint">Preferred dongle type for auto-provisioning.</span>
             </div>
             <div class="form-group">
-              <label class="form-label" for="hvmusb-missing-timeout">Destroy after missing (minutes)</label>
+              <label class="form-label" for="hvmusb-missing-timeout">Missing Timeout (min)</label>
               <input id="hvmusb-missing-timeout" class="form-input" type="number"
                      value="${escHtml(cfg.usb_missing_timeout || "60")}" min="1" placeholder="60">
-              <span class="form-hint">How long a dongle can be absent before its VM is destroyed.</span>
+              <span class="form-hint">Dongle absent this long → VM destroyed.</span>
             </div>
             <div class="form-group">
-              <label class="form-label" for="hvmusb-max-slots">Max USB slots</label>
+              <label class="form-label" for="hvmusb-max-slots">Max USB Slots</label>
               <input id="hvmusb-max-slots" class="form-input" type="number"
                      value="${escHtml(cfg.usb_max_slots || "24")}" min="1" max="256" placeholder="24">
-              <span class="form-hint">Maximum number of concurrent USB-provisioned VMs.</span>
+              <span class="form-hint">Max concurrent USB-provisioned VMs.</span>
             </div>
             <div class="form-group">
-              <label class="form-label">CPU Provision Threshold (%)</label>
-              <div style="display:flex;gap:8px;">
-                <div style="flex:1;">
-                  <label class="form-label" style="font-size:0.8rem;color:var(--muted);" for="hvmusb-cpu-prov-thr">Block provisioning above</label>
+              <label class="form-label" for="hvmusb-concurrency">Max Parallel Reclones</label>
+              <input id="hvmusb-concurrency" class="form-input" type="number"
+                     value="${escHtml(cfg.reclone_concurrency || "1")}" min="1" max="20" placeholder="1">
+              <span class="form-hint">VMs to reclone or provision at once.</span>
+            </div>
+          </div>
+
+          <!-- Row 2: CPU thresholds · Memory thresholds · Protected VMIDs -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+            <div class="form-group">
+              <label class="form-label">CPU Thresholds (%)</label>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                <div>
+                  <label class="form-label" style="font-size:0.78rem;color:var(--muted);" for="hvmusb-cpu-prov-thr">Block above</label>
                   <input id="hvmusb-cpu-prov-thr" class="form-input" type="number"
                          value="${escHtml(cfg.cpu_provision_threshold || "80")}" min="0" max="100" placeholder="80">
                 </div>
-                <div style="flex:1;">
-                  <label class="form-label" style="font-size:0.8rem;color:var(--muted);" for="hvmusb-cpu-del-thr">Delete VM above</label>
+                <div>
+                  <label class="form-label" style="font-size:0.78rem;color:var(--muted);" for="hvmusb-cpu-del-thr">Delete above</label>
                   <input id="hvmusb-cpu-del-thr" class="form-input" type="number"
                          value="${escHtml(cfg.cpu_delete_threshold || "90")}" min="0" max="100" placeholder="90">
                 </div>
               </div>
-              <span class="form-hint">1-hour average CPU utilization gates. Below the provision threshold VMs may spin up; above the delete threshold the newest sim VM is removed.</span>
+              <span class="form-hint">1-hr avg CPU gates for provisioning and deletion.</span>
             </div>
             <div class="form-group">
-              <label class="form-label">Memory Provision Threshold (%)</label>
-              <div style="display:flex;gap:8px;">
-                <div style="flex:1;">
-                  <label class="form-label" style="font-size:0.8rem;color:var(--muted);" for="hvmusb-mem-prov-thr">Block provisioning above</label>
+              <label class="form-label">Memory Thresholds (%)</label>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                <div>
+                  <label class="form-label" style="font-size:0.78rem;color:var(--muted);" for="hvmusb-mem-prov-thr">Block above</label>
                   <input id="hvmusb-mem-prov-thr" class="form-input" type="number"
                          value="${escHtml(cfg.mem_provision_threshold || "80")}" min="0" max="100" placeholder="80">
                 </div>
-                <div style="flex:1;">
-                  <label class="form-label" style="font-size:0.8rem;color:var(--muted);" for="hvmusb-mem-del-thr">Delete VM above</label>
+                <div>
+                  <label class="form-label" style="font-size:0.78rem;color:var(--muted);" for="hvmusb-mem-del-thr">Delete above</label>
                   <input id="hvmusb-mem-del-thr" class="form-input" type="number"
                          value="${escHtml(cfg.mem_delete_threshold || "90")}" min="0" max="100" placeholder="90">
                 </div>
               </div>
-              <span class="form-hint">1-hour average memory utilization gates. Same logic as CPU above.</span>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="hvmusb-concurrency">Max parallel reclones</label>
-              <input id="hvmusb-concurrency" class="form-input" type="number"
-                     value="${escHtml(cfg.reclone_concurrency || "1")}" min="1" max="20" placeholder="1">
-              <span class="form-hint">VMs to reclone or provision simultaneously.</span>
+              <span class="form-hint">Same logic as CPU, applied to memory.</span>
             </div>
             <div class="form-group">
               <label class="form-label" for="hvmusb-protected-vmids">Protected VMIDs</label>
               <input id="hvmusb-protected-vmids" class="form-input" type="text"
                      value="${escHtml(cfg.protected_vmids || "")}" placeholder="e.g. 101, 102, 200">
-              <span class="form-hint">Comma-separated VMIDs that cannot be started, stopped, recloned, or deleted from this UI. VM 1001 is always protected.</span>
+              <span class="form-hint">Comma-separated VMIDs immune from start/stop/reclone/delete. VM 1001 is always protected.</span>
             </div>
           </div>
+
         </div>
-        <div style="margin-top:8px;">
+        <div style="margin-top:16px;display:flex;align-items:center;gap:12px;">
           <button type="button" class="btn btn-primary" id="hvmusb-save-btn">Save Settings</button>
-          <span id="hvmusb-save-msg" style="margin-left:12px;font-size:0.85rem;color:var(--muted);"></span>
+          <span id="hvmusb-save-msg" style="font-size:0.85rem;color:var(--muted);"></span>
         </div>
       </div>
     </div>`;

@@ -1981,9 +1981,14 @@ document.addEventListener('focusout', e => {
 
 // Returns true when the user is actively editing a field or has checkboxes
 // selected — auto-refresh should be skipped to avoid disrupting their work.
+// Set when the remote log viewer has fetched output — cleared on Clear click.
+// Prevents auto-refresh from wiping log content while the user is reading it.
+let _vmLogPinned = false;
+
 function _hasActiveInteraction() {
   if (_formInteractionActive) return true;
   if (document.querySelectorAll('.hub-vm-check:checked').length > 0) return true;
+  if (_vmLogPinned) return true;
   return false;
 }
 
@@ -3279,6 +3284,8 @@ function showTab(rawTabId, opts = {}) {
     tenantContextActive = true;
   }
   activeTab = tabId;
+  // Clear the log pin whenever the user navigates away from vm-server
+  if (tabId !== "vm-server") _vmLogPinned = false;
   $("#hub-root")?.querySelectorAll(".tab-content").forEach(panel => panel.classList.add("hidden"));
   const panel = $("#hub-root")?.querySelector(`#tab-hub-${CSS.escape(tabId)}`);
   if (panel) panel.classList.remove("hidden");
@@ -6901,6 +6908,7 @@ function wireHubVmServerDetailsPanel(panel, tenantId, spokeId) {
       const data = await resp.json();
       if (logOutput) logOutput.textContent = (data.lines || []).join("\n") || "[No log output]";
       if (logOutput) logOutput.scrollTop = logOutput.scrollHeight;
+      _vmLogPinned = true; // pin: keep auto-refresh from wiping the output
     } catch (err) {
       if (logOutput) logOutput.textContent = `Failed: ${err.message}`;
     }
@@ -6909,6 +6917,7 @@ function wireHubVmServerDetailsPanel(panel, tenantId, spokeId) {
   panel.querySelector("#hub-log-fetch-btn")?.addEventListener("click", fetchLogs);
   panel.querySelector("#hub-log-clear-btn")?.addEventListener("click", () => {
     if (logOutput) logOutput.textContent = "[Cleared]";
+    _vmLogPinned = false; // unpin: allow auto-refresh again
   });
 
   // Auto-fetch watchdog on open

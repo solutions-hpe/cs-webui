@@ -12510,7 +12510,7 @@ function bindEvents() {
     btn.disabled = true;
     btn.textContent = "⏳ Clearing…";
     try {
-      const resp = await fetch(`/api/${currentTenantId}/spokes/clients/history`, { method: "DELETE" });
+      const resp = await apiFetch(`/api/${currentTenantId}/spokes/clients/history`, { method: "DELETE" });
       if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
       const data = await resp.json();
       const sent = (data.sent_to || []).length;

@@ -14488,46 +14488,100 @@ async function initTsProxmoxTab(tenantId) {
 }
 
 async function initTsSecurityTab(tenantId) {
-  const select = $("#ts-security-spoke-select");
   const saveBtn = $("#ts-security-save-btn");
   const msg = $("#ts-security-msg");
   const providerSelect = $("#ts-auth-provider");
-  if (!select || !saveBtn || !tenantId) return;
+  if (!saveBtn || !tenantId) return;
   saveBtn.disabled = !canManageTenant(tenantId);
-  await populateSpokeSelect(select, tenantId, select.value);
 
-  const loadSecurity = async () => {
-    const spokeId = select.value;
-    if (!spokeId) {
-      showInlineMessage(msg, "No spokes available for this tenant.", true);
-      return;
-    }
-    const data = await loadSpokeConfig(tenantId, spokeId);
-    const cfg = data.config || {};
-    $("#ts-session-timeout") && ($("#ts-session-timeout").value = cfg.session_timeout_minutes ?? 30);
-    const provider = String(cfg.auth_provider || "local").toLowerCase();
-    ensureSelectHasOption(providerSelect, provider, provider.toUpperCase());
-    if (providerSelect) providerSelect.value = provider;
-    showInlineMessage(msg, "", false, 0);
-  };
+  // Load defaults from first available spoke so the form isn't blank
+  const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes`);
+  const spokes = (res?.ok ? await res.json() : null) || [];
+  if (spokes.length) {
+    try {
+      const data = await loadSpokeConfig(tenantId, spokes[0].id);
+      const cfg = data.config || {};
+      $("#ts-session-timeout") && ($("#ts-session-timeout").value = cfg.session_timeout_minutes ?? 30);
+      const provider = String(cfg.auth_provider || "local").toLowerCase();
+      ensureSelectHasOption(providerSelect, provider, provider.toUpperCase());
+      if (providerSelect) providerSelect.value = provider;
+    } catch (_) { /* leave form at HTML defaults */ }
+  }
 
-  select.onchange = () => { void loadSecurity().catch((error) => showInlineMessage(msg, error.message || "Failed to load security settings.", true)); };
+  // Push to ALL spokes
   saveBtn.onclick = async () => {
-    const spokeId = select.value;
-    if (!spokeId) return;
+    if (!spokes.length) { showToast("No spokes available.", "error"); return; }
     const payload = {
       session_timeout_minutes: parseInt($("#ts-session-timeout")?.value || "30", 10) || 30,
       auth_provider: providerSelect?.value || "local",
     };
+    saveBtn.disabled = true;
     try {
-      await pushSpokeConfig(tenantId, spokeId, payload);
-      showInlineMessage(msg, "Security settings pushed ✓", false);
+      await Promise.all(spokes.map((s) => pushSpokeConfig(tenantId, s.id, payload)));
+      showToast(`Security settings queued for ${spokes.length} spoke${spokes.length !== 1 ? "s" : ""}`, "success");
+      showInlineMessage(msg, "", false, 0);
     } catch (error) {
-      showInlineMessage(msg, error.message || "Failed to push security settings.", true);
+      showToast(error.message || "Failed to push security settings.", "error");
+    } finally {
+      saveBtn.disabled = !canManageTenant(tenantId);
     }
   };
 
-  await loadSecurity();
+  // Override section — collapsible, targets a single spoke
+  const overrideHeader = $("#ts-security-override-header");
+  const overrideBody = $("#ts-security-override-body");
+  const overrideChevron = $("#ts-security-override-chevron");
+  const overrideSelect = $("#ts-security-spoke-select");
+  const overrideSaveBtn = $("#ts-security-override-save-btn");
+  const overrideMsg = $("#ts-security-override-msg");
+  const ovProviderSelect = $("#ts-ov-auth-provider");
+
+  if (overrideHeader && overrideBody) {
+    overrideHeader.onclick = () => {
+      const hidden = overrideBody.classList.toggle("hidden");
+      if (overrideChevron) overrideChevron.textContent = hidden ? "▶ expand" : "▼ collapse";
+    };
+  }
+
+  if (overrideSelect) {
+    await populateSpokeSelect(overrideSelect, tenantId, "");
+    const loadOverride = async () => {
+      const spokeId = overrideSelect.value;
+      if (!spokeId) return;
+      try {
+        const data = await loadSpokeConfig(tenantId, spokeId);
+        const cfg = data.config || {};
+        $("#ts-ov-session-timeout") && ($("#ts-ov-session-timeout").value = cfg.session_timeout_minutes ?? 30);
+        const provider = String(cfg.auth_provider || "local").toLowerCase();
+        ensureSelectHasOption(ovProviderSelect, provider, provider.toUpperCase());
+        if (ovProviderSelect) ovProviderSelect.value = provider;
+        showInlineMessage(overrideMsg, "", false, 0);
+      } catch (error) {
+        showInlineMessage(overrideMsg, error.message || "Failed to load spoke config.", true);
+      }
+    };
+    overrideSelect.onchange = () => void loadOverride();
+    await loadOverride();
+  }
+
+  if (overrideSaveBtn) {
+    overrideSaveBtn.disabled = !canManageTenant(tenantId);
+    overrideSaveBtn.onclick = async () => {
+      const spokeId = overrideSelect?.value;
+      if (!spokeId) return;
+      const payload = {
+        session_timeout_minutes: parseInt($("#ts-ov-session-timeout")?.value || "30", 10) || 30,
+        auth_provider: ovProviderSelect?.value || "local",
+      };
+      try {
+        await pushSpokeConfig(tenantId, spokeId, payload);
+        const spokeName = overrideSelect.options[overrideSelect.selectedIndex]?.text || spokeId;
+        showInlineMessage(overrideMsg, `Pushed to ${spokeName} ✓`, false);
+      } catch (error) {
+        showInlineMessage(overrideMsg, error.message || "Failed to push to spoke.", true);
+      }
+    };
+  }
 }
 
 async function initTsNotificationsTab(tenantId) {

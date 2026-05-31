@@ -6817,9 +6817,20 @@ function renderHubVmServerDetailsPanel(px, host) {
   const _warmupRemainS = px.resource_samples_started
     ? Math.max(0, 3600 - (Date.now() / 1000 - Number(px.resource_samples_started)))
     : null;
-  const _warmupLabel = _warmupRemainS != null && _warmupRemainS > 0
-    ? `warming up… ${Math.ceil(_warmupRemainS / 60)} min remaining`
-    : 'warming up…';
+  const _warmupRemainLabel = _warmupRemainS != null && _warmupRemainS > 0
+    ? `${Math.ceil(_warmupRemainS / 60)} min remaining`
+    : null;
+  // During warmup, show estimated average from samples collected so far (prefix ~).
+  const _cpuDisplay = px.cpu_1h_avg != null
+    ? `${Number(px.cpu_1h_avg).toFixed(1)}%`
+    : px.cpu_est_avg != null
+      ? `~${Number(px.cpu_est_avg).toFixed(1)}%${_warmupRemainLabel ? ` <span class="muted" style="font-size:0.85em;">(${_warmupRemainLabel})</span>` : ''}`
+      : `<span class="muted">${_warmupRemainLabel ? `warming up… ${_warmupRemainLabel}` : 'warming up…'}</span>`;
+  const _memDisplay = px.mem_1h_avg != null
+    ? `${Number(px.mem_1h_avg).toFixed(1)}%`
+    : px.mem_est_avg != null
+      ? `~${Number(px.mem_est_avg).toFixed(1)}%${_warmupRemainLabel ? ` <span class="muted" style="font-size:0.85em;">(${_warmupRemainLabel})</span>` : ''}`
+      : `<span class="muted">${_warmupRemainLabel ? `warming up… ${_warmupRemainLabel}` : 'warming up…'}</span>`;
   const lastSeen = px.last_seen
     ? new Date(typeof px.last_seen === "number" ? px.last_seen * 1000 : px.last_seen).toLocaleString()
     : "—";
@@ -6837,8 +6848,8 @@ function renderHubVmServerDetailsPanel(px, host) {
           <h2 style="margin:0;">${escHtml(node.hostname || node.node || host.spoke_name || "Proxmox")}</h2>
           <span class="server-stat-pill">⚡ CPU: ${cpu}</span>
           <span class="server-stat-pill">🧠 RAM: ${memUsed} / ${memTotal}</span>
-          ${px.cpu_1h_avg != null ? `<span class="server-stat-pill" title="1-hour rolling average">📊 CPU avg: ${Number(px.cpu_1h_avg).toFixed(1)}%</span>` : `<span class="server-stat-pill muted" title="Still collecting 1-hour sample window">📊 ${escHtml(_warmupLabel)}</span>`}
-          ${px.mem_1h_avg != null ? `<span class="server-stat-pill" title="1-hour rolling average">📊 Mem avg: ${Number(px.mem_1h_avg).toFixed(1)}%</span>` : ''}
+          ${px.cpu_1h_avg != null ? `<span class="server-stat-pill" title="1-hour rolling average">📊 CPU avg: ${Number(px.cpu_1h_avg).toFixed(1)}%</span>` : px.cpu_est_avg != null ? `<span class="server-stat-pill muted" title="Estimated average — still collecting 1-hour window">📊 CPU avg: ~${Number(px.cpu_est_avg).toFixed(1)}%${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ''}</span>` : `<span class="server-stat-pill muted" title="Still collecting 1-hour sample window">📊 ${_warmupRemainLabel ? `warming up… ${_warmupRemainLabel}` : 'warming up…'}</span>`}
+          ${px.mem_1h_avg != null ? `<span class="server-stat-pill" title="1-hour rolling average">📊 Mem avg: ${Number(px.mem_1h_avg).toFixed(1)}%</span>` : px.mem_est_avg != null ? `<span class="server-stat-pill muted" title="Estimated average — still collecting 1-hour window">📊 Mem avg: ~${Number(px.mem_est_avg).toFixed(1)}%${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ''}</span>` : ''}
         </div>
       </div>
       <table class="data-table">
@@ -6848,9 +6859,9 @@ function renderHubVmServerDetailsPanel(px, host) {
           <tr><th>PVE Version</th><td>${escHtml(px.pve_version || "—")}</td></tr>
           <tr><th>Node</th><td>${escHtml(node.node || node.hostname || "—")}</td></tr>
           <tr><th>CPU</th><td>${cpu}</td></tr>
-          <tr><th>CPU (1h avg)</th><td>${px.cpu_1h_avg != null ? `${Number(px.cpu_1h_avg).toFixed(1)}%` : `<span class="muted">${escHtml(_warmupLabel)}</span>`}</td></tr>
+          <tr><th>CPU (1h avg)</th><td>${_cpuDisplay}</td></tr>
           <tr><th>Memory</th><td>${memUsed} / ${memTotal}</td></tr>
-          <tr><th>Memory (1h avg)</th><td>${px.mem_1h_avg != null ? `${Number(px.mem_1h_avg).toFixed(1)}%` : `<span class="muted">${escHtml(_warmupLabel)}</span>`}</td></tr>
+          <tr><th>Memory (1h avg)</th><td>${_memDisplay}</td></tr>
           ${storageRows}
           <tr><th>VMs</th><td>${escHtml(String(px.vm_count ?? "—"))} total, ${escHtml(String(px.running_count ?? "—"))} running</td></tr>
           <tr><th>Last Agent Check-in</th><td>${escHtml(lastSeen)}</td></tr>

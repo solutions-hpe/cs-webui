@@ -12299,6 +12299,30 @@ function bindEvents() {
   $("#hub-status-refresh-btn")?.addEventListener("click", () => { loadAndRenderHubMonitoredItems(true).then(() => renderHubStatusTab()); });
   $("#hub-monitored-alerts-refresh-btn")?.addEventListener("click", () => loadAndRenderHubMonitoredItems(true));
   $("#refresh-clients-btn")?.addEventListener("click", () => loadClients(true));
+  $("#hub-purge-all-clients-btn")?.addEventListener("click", async () => {
+    const btn = $("#hub-purge-all-clients-btn");
+    if (!confirm("Clear ALL client history across every spoke in this tenant? Records on disk will also be deleted. This cannot be undone.")) return;
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "⏳ Clearing…";
+    try {
+      const resp = await fetch(`/api/${currentTenantId}/spokes/clients/history`, { method: "DELETE" });
+      if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
+      const data = await resp.json();
+      const sent = (data.sent_to || []).length;
+      const offline = (data.offline || []).length;
+      const msg = offline > 0
+        ? `Cleared ${sent} spoke(s). ${offline} spoke(s) were offline and will clear on reconnect.`
+        : `Client history cleared across ${sent} spoke(s).`;
+      alert(msg);
+      await loadClients(true);
+    } catch (err) {
+      alert(`Clear failed: ${err.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  });
   $("#refresh-hub-central-btn")?.addEventListener("click", () => loadHubCentralMonitoring(true));
   $("#refresh-vm-server-btn")?.addEventListener("click", () => loadVmServer(true));
   $("#refresh-spokes-btn")?.addEventListener("click", () => loadSpokes(true));

@@ -12486,11 +12486,11 @@ function bindEvents() {
       const offline = (data.offline || []).length;
       const msg = offline > 0
         ? `Cleared ${sent} spoke(s). ${offline} spoke(s) were offline and will clear on reconnect.`
-        : `Client history cleared across ${sent} spoke(s).`;
-      alert(msg);
+        : `Clear command sent to ${sent} spoke(s).`;
+      showToast(msg, "ok");
       await loadClients(true);
     } catch (err) {
-      alert(`Clear failed: ${err.message}`);
+      showToast(`Clear failed: ${err.message}`, "error");
     } finally {
       btn.disabled = false;
       btn.textContent = orig;

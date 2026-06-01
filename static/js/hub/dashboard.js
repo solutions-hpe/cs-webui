@@ -3289,6 +3289,9 @@ function showTab(rawTabId, opts = {}) {
   activeTab = tabId;
   // Clear the log pin whenever the user navigates away from vm-server
   if (tabId !== "vm-server") _vmLogPinned = false;
+  // Reset spoke drill-in whenever the user navigates to vm-server so they
+  // always land on the host list, not a stale spoke context.
+  if (tabId === "vm-server") hubVmServerSelectedSpoke = null;
   $("#hub-root")?.querySelectorAll(".tab-content").forEach(panel => panel.classList.add("hidden"));
   const panel = $("#hub-root")?.querySelector(`#tab-hub-${CSS.escape(tabId)}`);
   if (panel) panel.classList.remove("hidden");

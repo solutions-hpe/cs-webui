@@ -10897,7 +10897,9 @@ function showTab(rawTabId, opts = {}) {
     tenantContextActive = true;
   }
   activeTab = tabId;
-  $("#hub-root")?.querySelectorAll(".tab-content").forEach(panel => panel.classList.add("hidden"));
+  // Reset spoke drill-in whenever the user navigates to vm-server so they
+  // always land on the host list, not a stale spoke context.
+  if (tabId === "vm-server") hubVmServerSelectedSpoke = null;
   const panel = $("#hub-root")?.querySelector(`#tab-hub-${CSS.escape(tabId)}`);
   if (panel) panel.classList.remove("hidden");
   $$("#tab-nav .hub-only .tab").forEach(button => {

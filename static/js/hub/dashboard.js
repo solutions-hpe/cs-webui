@@ -8945,9 +8945,13 @@ async function loadHubCaBrowseData(force = false) {
   if (!tenantId || !content) return;
 
   const cached = loadHubCaBrowseCache(tenantId);
-  // Only use localStorage cache if it has sites — empty cache may be stale (token expired)
+  // Only use localStorage cache if it has sites AND is fresh (< 90s since last server poll).
+  // After 90s the cache is treated as stale and we re-fetch from the server.
+  // The server has its own 5-min Aruba API cache, so this is not rate-limited.
   const cachedHasSites = cached && (cached.sites || []).length > 0;
-  if (cachedHasSites && !force) {
+  const cacheAgeSecs = cached?.cached_at ? (Date.now() / 1000) - Number(cached.cached_at) : Infinity;
+  const cacheIsFresh = cachedHasSites && cacheAgeSecs < 90;
+  if (cacheIsFresh && !force) {
     // Render cached data immediately — no flash of loading message
     hubCentralBrowseData = cached;
     updateHubCaBrowsePills(cached);

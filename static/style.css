@@ -1654,6 +1654,7 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 }
 .hub-client-sims-cell {
   padding-left: 36px; /* align with Hostname column */
+  white-space: normal;
 }
 /* Demo bolt on badge */
 .badge-demo-active {

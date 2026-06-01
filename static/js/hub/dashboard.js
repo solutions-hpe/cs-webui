@@ -1862,13 +1862,13 @@ function renderClientRowsForHub() {
               ${hubClientTypeFilter === 't3' ? renderHubT3PciSection(site) : ""}
               <div class="table-scroll">
                 <table class="data-table hub-client-site-table">
-                  <thead><tr><th>Status</th><th>Hostname</th><th>Platform</th><th style="min-width:120px;white-space:nowrap">SSID</th><th style="white-space:nowrap">Last Seen</th><th>Errors</th><th>Sim</th>${showDemoButtons ? '<th>Demo Scenario</th>' : ''}</tr></thead>
+                  <thead><tr><th>Status</th><th>Hostname</th><th>Platform</th><th style="min-width:120px;white-space:nowrap">SSID</th><th style="white-space:nowrap">Last Seen</th><th>Errors</th>${showDemoButtons ? '<th>Demo Scenario</th>' : ''}</tr></thead>
                   <tbody>
                     ${site.clients.map(client => {
                       const sims = normalizeHubClientActiveSimulations(client.active_simulations);
                       const demoScenario = hubDemoActiveMap[client.hostname]?.scenario || null;
                       const isAdminRole = myRole === 'admin' || myRole === 'superadmin';
-                      const colSpan = showDemoButtons ? 7 : 6;
+                      const colSpan = showDemoButtons ? 6 : 5;
                       const overrides = hubClientSimOverrides[client.hostname] || [];
                       const simsRow = `<tr class="hub-client-sims-row"><td colspan="${colSpan + 1}" class="hub-client-sims-cell">
                         ${renderHubSimulationBadges(sims, "", demoScenario, { hostname: client.hostname || '', spokeId: client.spoke_id || '', isAdmin: isAdminRole, overrides })}
@@ -1876,12 +1876,11 @@ function renderClientRowsForHub() {
                       return `
                         <tr class="hub-client-main-row">
                           <td class="status-cell">${statusDot(Boolean(client.online))}</td>
-                          <td class="hostname-cell">${escHtml(client.hostname || "—")}</td>
+                          <td class="hostname-cell">${escHtml(client.hostname || "—")}${client.simulation_id ? `<br><span style="font-size:0.75em;color:var(--muted);font-family:monospace">${escHtml(client.simulation_id)}</span>` : ''}</td>
                           <td>${escHtml(client.platform || client.hw_type || "—")}</td>
                           <td style="white-space:nowrap">${escHtml(client.connected_ssid || "—")}</td>
                           <td class="nowrap-cell"><span title="${escHtml(fmtDate(client.last_seen))}">${escHtml(relativeTime(client.last_seen))}</span></td>
                           <td>${Number(client.error_count || 0)}</td>
-                          <td style="font-family:monospace;font-size:0.85em;white-space:nowrap">${escHtml(client.simulation_id || "—")}</td>
                           ${showDemoButtons ? `<td class="hub-demo-btn-cell" data-hostname="${escHtml(client.hostname || '')}" data-spoke-id="${escHtml(client.spoke_id || '')}"></td>` : ''}
                         </tr>${simsRow}`;
                     }).join("")}

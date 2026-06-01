@@ -965,10 +965,12 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 .table-scroll-v { width:100%; overflow-y:auto; max-height:252px; border:1px solid var(--border); border-radius:6px; }
 .table-scroll-v .data-table { margin:0; width:100%; }
 .table-scroll-v .data-table thead th { position:sticky; top:0; background:var(--card-bg,#fff); z-index:1; }
-.settings-section input,
+.settings-section input:not([type="checkbox"]):not([type="radio"]),
 .settings-section select { border:1px solid var(--border); border-radius:3px; padding:9px 12px; font-family:inherit; font-size:0.9rem; color:var(--text); background:#fff; width:100%; }
-.settings-section input:focus,
+.settings-section input:not([type="checkbox"]):not([type="radio"]):focus,
 .settings-section select:focus { outline:none; border-color:var(--hpe-green); box-shadow:0 0 0 3px rgba(1,169,130,0.15); }
+.settings-section input[type="checkbox"],
+.settings-section input[type="radio"] { width:auto; padding:0; border:none; background:none; }
 .settings-section-title { font-size:0.88rem; font-weight:600; color:var(--hpe-navy); margin-bottom:12px; }
 .app-notification { position:fixed; top:72px; right:24px; z-index:200; min-width:240px; box-shadow:0 4px 16px rgba(0,0,0,0.15); }
 

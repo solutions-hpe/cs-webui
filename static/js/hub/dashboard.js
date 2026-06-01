@@ -6905,6 +6905,8 @@ function renderHubVmServerDetailsPanel(px, host) {
       : `Collecting memory samples for the rolling average${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ""}.`;
   const _agentVersionTitle = "Version reported by the Proxmox agent running on the host. Cached on the spoke so it survives service restarts.";
   const _pveVersionTitle = "Proxmox VE version reported by the host and cached on the spoke so Hub Details can show it immediately after restart.";
+  const _spokeVersionTitle = "CS-WebUI version running on the spoke server.";
+  const _spokeVersion = host.api_server?.health?.version ?? "—";
   const lastSeen = px.last_seen
     ? new Date(typeof px.last_seen === "number" ? px.last_seen * 1000 : px.last_seen).toLocaleString()
     : "—";
@@ -6929,7 +6931,8 @@ function renderHubVmServerDetailsPanel(px, host) {
       <table class="data-table">
         <tbody>
           <tr><th>Proxmox Connected</th><td>${px.connected ? "🟢 Yes" : "⚫ No"}</td><th title="${escHtml(_agentVersionTitle)}">Agent Version</th><td title="${escHtml(_agentVersionTitle)}">${escHtml(px.agent_version || "—")}</td></tr>
-          <tr><th title="${escHtml(_pveVersionTitle)}">PVE Version</th><td title="${escHtml(_pveVersionTitle)}">${escHtml(px.pve_version || "—")}</td><th>Node</th><td>${escHtml(node.node || node.hostname || "—")}</td></tr>
+          <tr><th title="${escHtml(_spokeVersionTitle)}">Spoke Version</th><td title="${escHtml(_spokeVersionTitle)}">${escHtml(_spokeVersion)}</td><th>Node</th><td>${escHtml(node.node || node.hostname || "—")}</td></tr>
+          <tr><th title="${escHtml(_pveVersionTitle)}">PVE Version</th><td colspan="3" title="${escHtml(_pveVersionTitle)}">${escHtml(px.pve_version || "—")}</td></tr>
           <tr><th>CPU</th><td>${cpu}</td><th title="${escHtml(_cpuAvgTitle)}">CPU avg</th><td title="${escHtml(_cpuAvgTitle)}">${_cpuDisplay}</td></tr>
           <tr><th>Memory</th><td>${memUsed} / ${memTotal}</td><th title="${escHtml(_memAvgTitle)}">Mem avg</th><td title="${escHtml(_memAvgTitle)}">${_memDisplay}</td></tr>
           ${storageRows}

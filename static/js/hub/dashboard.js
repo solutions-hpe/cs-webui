@@ -5608,7 +5608,11 @@ function renderHubVmServerVmsPanel(tenantId, spokeId, { simVms, otherVms, contai
   const usbSlots = usbDevices.filter(d => d.vmid != null).length;
   const maxSlots = parseInt((host?.spoke_config || {}).usb_max_slots || px.usb_max_slots || "24", 10) || 24;
   const autoprovPct = maxSlots > 0 ? Math.min(100, Math.round((usbSlots / maxSlots) * 100)) : 0;
-  const autoprovOn = (host?.spoke_config || {}).usb_auto_provision === "on" || px.usb_auto_provision === "on";
+  // Hub DB config is authoritative — only fall back to proxmox telemetry when no config is stored.
+  // Using || between config and telemetry caused the button to show "Disable" even after the hub
+  // set the config to "off", because stale telemetry still reported "on".
+  const _autoprovCfgVal = (host?.spoke_config || {}).usb_auto_provision;
+  const autoprovOn = _autoprovCfgVal != null ? _autoprovCfgVal === "on" : px.usb_auto_provision === "on";
 
   const cats = [
     { id: "sim",        label: "Simulation Clients", vms: simVms },

@@ -8729,7 +8729,10 @@ function scheduleHubCaBrowseRefresh() {
   const tenantId = getActiveTenantId();
   if (!tenantId) return;
   hubCaBrowseRefreshTimer = setTimeout(() => {
-    if (hubTenantSetupActiveSubtab === "ts-central-api" && getActiveTenantId() === tenantId) {
+    if (getActiveTenantId() !== tenantId) return;
+    const onCentralTab = activeTab === "central";
+    const onCentralApiTab = hubTenantSetupActiveSubtab === "ts-central-api";
+    if (onCentralTab || onCentralApiTab) {
       loadHubCaBrowseData(true).catch(() => {});
     }
   }, 5 * 60 * 1000);
@@ -8945,13 +8948,9 @@ async function loadHubCaBrowseData(force = false) {
   if (!tenantId || !content) return;
 
   const cached = loadHubCaBrowseCache(tenantId);
-  // Only use localStorage cache if it has sites AND is fresh (< 90s since last server poll).
-  // After 90s the cache is treated as stale and we re-fetch from the server.
-  // The server has its own 5-min Aruba API cache, so this is not rate-limited.
+  // Only use localStorage cache if it has sites — empty cache may be stale (token expired)
   const cachedHasSites = cached && (cached.sites || []).length > 0;
-  const cacheAgeSecs = cached?.cached_at ? (Date.now() / 1000) - Number(cached.cached_at) : Infinity;
-  const cacheIsFresh = cachedHasSites && cacheAgeSecs < 90;
-  if (cacheIsFresh && !force) {
+  if (cachedHasSites && !force) {
     // Render cached data immediately — no flash of loading message
     hubCentralBrowseData = cached;
     updateHubCaBrowsePills(cached);

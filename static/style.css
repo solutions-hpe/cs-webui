@@ -1798,6 +1798,10 @@ button.sim-toggle-btn.badge-sim-inactive:hover {
 #usb-summary-table th, #usb-summary-table td,
 #unknown-usb-table th, #unknown-usb-table td { padding-left: 12px; padding-right: 12px; }
 
+/* Hub VM-server USB devices table — tighter padding, compact rows */
+#hub-usb-cert-table th,
+#hub-usb-cert-table td { padding: 8px 14px; }
+
 /* VID:PID table column widths: VID:PID | Type | Label | Actions */
 #usb-vidpid-table  th:nth-child(1), #usb-vidpid-table  td:nth-child(1) { width: 18%; }
 #usb-vidpid-table  th:nth-child(2), #usb-vidpid-table  td:nth-child(2) { width: 14%; }

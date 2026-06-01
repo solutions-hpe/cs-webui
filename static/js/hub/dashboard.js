@@ -6006,8 +6006,8 @@ function renderHubVmServerUsbPanel(host) {
                   || presentUsb.find(p => (p.vidpid || "").toLowerCase() === vidLower)?.name
                   || "";
     const vidHtml  = hwName
-      ? `${escHtml(device.vidpid || "—")}<div class="muted" style="font-size:0.78rem;margin-top:2px;">${escHtml(hwName)}</div>`
-      : escHtml(device.vidpid || "—");
+      ? `<span style="white-space:nowrap">${escHtml(device.vidpid || "—")}</span><div class="muted" style="font-size:0.78rem;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;" title="${escHtml(hwName)}">${escHtml(hwName)}</div>`
+      : `<span style="white-space:nowrap">${escHtml(device.vidpid || "—")}</span>`;
 
     // Source badge: global devices are locked (managed by superadmin); tenant devices can be removed.
     const isGlobal  = device.source === "global";
@@ -6021,9 +6021,9 @@ function renderHubVmServerUsbPanel(host) {
                title="Remove from tenant certified list">Remove</button>`;
 
     return `<tr>
-      <td>${escHtml(device.label || device.vidpid || "—")}</td>
+      <td style="white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(device.label || device.vidpid || '')}">${escHtml(device.label || device.vidpid || "—")}</td>
       <td>${vidHtml}</td>
-      <td class="usb-type-${device.type || "wireless"}">${escHtml(device.type || "wireless")}</td>
+      <td class="usb-type-${device.type || "wireless"}" style="white-space:nowrap;">${escHtml(device.type || "wireless")}</td>
       <td>${activeVmHtml}</td>
       <td>${missingHtml}</td>
       <td>${available > 0 ? `<span class="badge badge-green">${available}</span>` : '<span class="muted">—</span>'}</td>
@@ -6204,7 +6204,7 @@ function renderHubVmServerUsbPanel(host) {
       ${certified.length === 0 && usbState.length === 0 && presentUsb.length === 0
         ? '<div class="empty-state" style="padding:24px;">No certified USB devices configured for this spoke.</div>'
         : `<div class="table-scroll">
-            <table class="data-table">
+            <table class="data-table" id="hub-usb-cert-table">
               <colgroup>
                 <col><!-- Device: flexible -->
                 <col style="width:115px"><!-- VID:PID -->
@@ -6273,8 +6273,8 @@ function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
         const available      = Math.max(0, total - activeEntries.length);
         const hwName         = entries.find(e => e.name)?.name || presentUsb.find(p => (p.vidpid || "").toLowerCase() === vidLower)?.name || "";
         const vidHtml        = hwName
-          ? `${escHtml(device.vidpid || "—")}<div class="muted" style="font-size:0.78rem;margin-top:2px;">${escHtml(hwName)}</div>`
-          : escHtml(device.vidpid || "—");
+          ? `<span style="white-space:nowrap">${escHtml(device.vidpid || "—")}</span><div class="muted" style="font-size:0.78rem;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;" title="${escHtml(hwName)}">${escHtml(hwName)}</div>`
+          : `<span style="white-space:nowrap">${escHtml(device.vidpid || "—")}</span>`;
         const activeVmHtml = activeEntries.length === 0 ? "—"
           : activeEntries.map(e => {
               const vm = vmMap.get(Number(e.vmid));
@@ -6294,9 +6294,9 @@ function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
                      data-hvmusb-action="decertify" data-vidpid="${escHtml(device.vidpid || '')}"
                      title="Remove from tenant certified list">Remove</button>`;
         return `<tr>
-          <td>${escHtml(device.label || device.vidpid || "—")}</td>
+          <td style="white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(device.label || device.vidpid || '')}">${escHtml(device.label || device.vidpid || "—")}</td>
           <td>${vidHtml}</td>
-          <td class="usb-type-${device.type || "wireless"}">${escHtml(device.type || "wireless")}</td>
+          <td class="usb-type-${device.type || "wireless"}" style="white-space:nowrap;">${escHtml(device.type || "wireless")}</td>
           <td>${activeVmHtml}</td>
           <td>${missingHtml}</td>
           <td>${available > 0 ? `<span class="badge badge-green">${available}</span>` : '<span class="muted">—</span>'}</td>

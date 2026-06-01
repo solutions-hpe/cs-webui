@@ -7071,6 +7071,8 @@ function wireHubVmServerDetailsPanel(panel, tenantId, spokeId) {
       if (logOutput) logOutput.textContent = (data.lines || []).slice().reverse().join("\n") || "[No log output]";
       if (logOutput) logOutput.scrollTop = 0;
       _vmLogPinned = true; // pin: keep auto-refresh from wiping the output
+      // Auto-unpin after 5 minutes so a forgotten log fetch doesn't block refresh forever
+      setTimeout(() => { _vmLogPinned = false; }, 5 * 60 * 1000);
     } catch (err) {
       if (logOutput) logOutput.textContent = `Failed: ${err.message}`;
     }
@@ -12077,17 +12079,20 @@ function syncAutoRefreshState() {
   autoRefreshSecondsLeft = seconds;
   updateAutoRefreshCountdownDisplay(String(autoRefreshSecondsLeft) + 's');
   autoRefreshCountdownTimer = setInterval(() => {
-    autoRefreshSecondsLeft = Math.max(0, autoRefreshSecondsLeft - 1);
-    updateAutoRefreshCountdownDisplay(String(autoRefreshSecondsLeft) + 's');
-  }, 1000);
-  autoRefreshTimer = setInterval(async () => {
-    autoRefreshSecondsLeft = seconds;
-    updateAutoRefreshCountdownDisplay(String(autoRefreshSecondsLeft) + 's');
-    // Skip full DOM refresh if user is actively editing a field or has items selected
+    // Show "Paused" persistently when auto-refresh is blocked by an active interaction
+    // (e.g. VM log pinned, checkbox checked, or input focused).
     if (_hasActiveInteraction()) {
       updateAutoRefreshCountdownDisplay("Paused", true);
       return;
     }
+    autoRefreshSecondsLeft = Math.max(0, autoRefreshSecondsLeft - 1);
+    updateAutoRefreshCountdownDisplay(String(autoRefreshSecondsLeft) + 's');
+  }, 1000);
+  autoRefreshTimer = setInterval(async () => {
+    // Skip full DOM refresh if user is actively editing a field or has items selected
+    if (_hasActiveInteraction()) return;
+    autoRefreshSecondsLeft = seconds;
+    updateAutoRefreshCountdownDisplay(String(autoRefreshSecondsLeft) + 's');
     await refreshCurrentView(false);
   }, seconds * 1000);
 }

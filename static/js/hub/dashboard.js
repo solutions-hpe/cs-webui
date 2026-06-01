@@ -6856,12 +6856,23 @@ function renderHubVmServerDetailsPanel(px, host) {
     : node.mem ? fmtSize(Number(node.mem) * 1024 * 1024) : "—";
   const memTotal = node.mem_total_kb ? fmtSizeKB(node.mem_total_kb)
     : node.maxmem ? fmtSize(Number(node.maxmem) * 1024 * 1024) : "—";
-  const storageRows = Array.isArray(node.storage) ? node.storage.map(s => {
-    const used = fmtSizeKB(s.used || 0);
-    const total = fmtSizeKB(s.total || 0);
-    const pct = s.total ? Math.round(((s.used || 0) / s.total) * 100) : 0;
-    return `<tr><th>Storage (${escHtml(s.storage || "disk")})</th><td>${used} / ${total} (${pct}%)</td></tr>`;
-  }).join("") : "";
+  const storageRows = (() => {
+    if (!Array.isArray(node.storage) || !node.storage.length) return "";
+    const cells = node.storage.map(s => {
+      const used = fmtSizeKB(s.used || 0);
+      const total = fmtSizeKB(s.total || 0);
+      const pct = s.total ? Math.round(((s.used || 0) / s.total) * 100) : 0;
+      return { label: `Storage (${escHtml(s.storage || "disk")})`, value: `${used} / ${total} (${pct}%)` };
+    });
+    let rows = "";
+    for (let i = 0; i < cells.length; i += 2) {
+      const a = cells[i], b = cells[i + 1];
+      rows += b
+        ? `<tr><th>${a.label}</th><td>${a.value}</td><th>${b.label}</th><td>${b.value}</td></tr>`
+        : `<tr><th>${a.label}</th><td colspan="3">${a.value}</td></tr>`;
+    }
+    return rows;
+  })();
   // Warmup countdown: show remaining minutes until the 1-hour rolling window is full.
   const _warmupRemainS = px.resource_samples_started
     ? Math.max(0, 3600 - (Date.now() / 1000 - Number(px.resource_samples_started)))
@@ -6915,19 +6926,13 @@ function renderHubVmServerDetailsPanel(px, host) {
       </div>
       <table class="data-table">
         <tbody>
-          <tr><th>Proxmox Connected</th><td>${px.connected ? "🟢 Yes" : "⚫ No"}</td></tr>
-          <tr><th title="${escHtml(_agentVersionTitle)}">Agent Version</th><td title="${escHtml(_agentVersionTitle)}">${escHtml(px.agent_version || "—")}</td></tr>
-          <tr><th title="${escHtml(_pveVersionTitle)}">PVE Version</th><td title="${escHtml(_pveVersionTitle)}">${escHtml(px.pve_version || "—")}</td></tr>
-          <tr><th>Node</th><td>${escHtml(node.node || node.hostname || "—")}</td></tr>
-          <tr><th>CPU</th><td>${cpu}</td></tr>
-          <tr><th title="${escHtml(_cpuAvgTitle)}">CPU avg</th><td title="${escHtml(_cpuAvgTitle)}">${_cpuDisplay}</td></tr>
-          <tr><th>Memory</th><td>${memUsed} / ${memTotal}</td></tr>
-          <tr><th title="${escHtml(_memAvgTitle)}">Mem avg</th><td title="${escHtml(_memAvgTitle)}">${_memDisplay}</td></tr>
+          <tr><th>Proxmox Connected</th><td>${px.connected ? "🟢 Yes" : "⚫ No"}</td><th title="${escHtml(_agentVersionTitle)}">Agent Version</th><td title="${escHtml(_agentVersionTitle)}">${escHtml(px.agent_version || "—")}</td></tr>
+          <tr><th title="${escHtml(_pveVersionTitle)}">PVE Version</th><td title="${escHtml(_pveVersionTitle)}">${escHtml(px.pve_version || "—")}</td><th>Node</th><td>${escHtml(node.node || node.hostname || "—")}</td></tr>
+          <tr><th>CPU</th><td>${cpu}</td><th title="${escHtml(_cpuAvgTitle)}">CPU avg</th><td title="${escHtml(_cpuAvgTitle)}">${_cpuDisplay}</td></tr>
+          <tr><th>Memory</th><td>${memUsed} / ${memTotal}</td><th title="${escHtml(_memAvgTitle)}">Mem avg</th><td title="${escHtml(_memAvgTitle)}">${_memDisplay}</td></tr>
           ${storageRows}
-          <tr><th>VMs</th><td>${escHtml(String(px.vm_count ?? "—"))} total, ${escHtml(String(px.running_count ?? "—"))} running</td></tr>
-          <tr><th>Last Agent Check-in</th><td>${escHtml(lastSeen)}</td></tr>
-          <tr><th>Hub Round-Trip (RTT)</th><td>${rttCell}</td></tr>
-          <tr><th>Hub Processing Time</th><td>${procCell}</td></tr>
+          <tr><th>VMs</th><td>${escHtml(String(px.vm_count ?? "—"))} total, ${escHtml(String(px.running_count ?? "—"))} running</td><th>Last Agent Check-in</th><td>${escHtml(lastSeen)}</td></tr>
+          <tr><th>Hub Round-Trip (RTT)</th><td>${rttCell}</td><th>Hub Processing Time</th><td>${procCell}</td></tr>
         </tbody>
       </table>
     </div>

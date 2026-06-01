@@ -6755,7 +6755,7 @@ function renderHubVmServerCommandQueuePanel() {
       <div id="hub-spoke-cmd-msg" class="form-msg" style="margin-bottom:6px;"></div>
       <div class="table-scroll">
         <table class="data-table">
-          <thead><tr><th>Target</th><th>Action</th><th>Details</th><th>Status</th><th>Age</th><th>Result</th></tr></thead>
+          <thead><tr><th>Target</th><th>Action</th><th>Details</th><th>Status</th><th>Age</th></tr></thead>
           <tbody id="hub-spoke-cmd-tbody"></tbody>
         </table>
       </div>
@@ -6804,14 +6804,16 @@ async function loadHubSpokeCommands(tenantId, spokeId) {
       const payloadSummary = _fmtCmdPayload(cmd.type, cmd.payload);
       const fullJson = Object.keys(cmd.payload || {}).length ? JSON.stringify(cmd.payload, null, 2) : "";
       const resultDetail = cmd.result?.detail || "—";
+      const resultRow = resultDetail !== "—"
+        ? `<tr><td colspan="5" style="padding-top:0;padding-bottom:6px;font-size:0.8rem;color:var(--muted);">↳ ${escHtml(resultDetail)}</td></tr>`
+        : "";
       return `<tr>
-        <td>${escHtml(cmd.target || "spoke")}</td>
+        <td style="white-space:nowrap">${escHtml(cmd.target || "spoke")}</td>
         <td>${escHtml(typeLabels[cmd.type] || cmd.type)}</td>
         <td style="font-size:0.8rem;max-width:220px;" title="${escHtml(fullJson)}">${escHtml(payloadSummary)}</td>
         <td><span class="badge ${statusClass}">${escHtml(cmd.status || "—")}</span></td>
-        <td>${relativeTime(cmd.created_at)}</td>
-        <td style="max-width:260px;word-break:break-word;white-space:normal;font-size:0.85rem;">${escHtml(resultDetail)}</td>
-      </tr>`;
+        <td style="white-space:nowrap">${relativeTime(cmd.created_at)}</td>
+      </tr>${resultRow}`;
     }).join("");
   } catch (err) {
     if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Error loading commands: ${escHtml(err.message)}</td></tr>`;

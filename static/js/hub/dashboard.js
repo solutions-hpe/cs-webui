@@ -7064,8 +7064,8 @@ function wireHubVmServerDetailsPanel(panel, tenantId, spokeId) {
         return;
       }
       const data = await resp.json();
-      if (logOutput) logOutput.textContent = (data.lines || []).join("\n") || "[No log output]";
-      if (logOutput) logOutput.scrollTop = logOutput.scrollHeight;
+      if (logOutput) logOutput.textContent = (data.lines || []).slice().reverse().join("\n") || "[No log output]";
+      if (logOutput) logOutput.scrollTop = 0;
       _vmLogPinned = true; // pin: keep auto-refresh from wiping the output
     } catch (err) {
       if (logOutput) logOutput.textContent = `Failed: ${err.message}`;

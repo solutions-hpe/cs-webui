@@ -973,6 +973,8 @@
         <div class="page-toolbar">
           <span class="server-node-name">Troubleshooting</span>
           <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+            <button id="ts-troubleshoot-delete-vms-btn" class="btn btn-danger btn-small" type="button">🗑 Delete All Sim VMs</button>
+            <button id="ts-troubleshoot-clear-queue-btn" class="btn btn-warning btn-small" type="button">🧹 Clear All Queues</button>
             <button id="ts-troubleshoot-update-btn" class="btn btn-primary btn-small" type="button">🔄 Update All Spokes</button>
           </div>
         </div>
@@ -990,7 +992,29 @@
             <div id="ts-troubleshoot-msg" class="settings-message hidden" style="margin-top:12px;"></div>
           </div>
 
-          <!-- Per-spoke override card -->
+          <!-- Fleet maintenance actions -->
+          <div class="setup-card" style="margin:16px;">
+            <div class="setup-card-header"><h2>Fleet Maintenance</h2><p>Tenant-wide actions for resetting and troubleshooting the simulation fleet.</p></div>
+            <div style="display:flex;flex-direction:column;gap:12px;padding:12px 0;">
+              <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:220px;">
+                  <strong style="display:block;margin-bottom:4px;">Clear All Queues</strong>
+                  <p style="margin:0;font-size:13px;color:var(--muted);">Removes all pending commands from the hub queue for this tenant. Use before a clean reset to avoid stale commands being processed by spokes.</p>
+                </div>
+                <button id="ts-trbl-clear-queue-btn" class="btn btn-warning btn-small" style="align-self:flex-start;white-space:nowrap;" type="button">🧹 Clear All Queues</button>
+              </div>
+              <hr style="border:none;border-top:1px solid var(--border);margin:4px 0;">
+              <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+                <div style="flex:1;min-width:220px;">
+                  <strong style="display:block;margin-bottom:4px;">Delete All Simulation VMs</strong>
+                  <p style="margin:0;font-size:13px;color:var(--muted);">Queues deletion of every auto-provisioned simulation VM (VMID &gt; 9000) across all spokes. Disable auto-provisioning first to prevent immediate re-creation.</p>
+                </div>
+                <button id="ts-trbl-delete-vms-btn" class="btn btn-danger btn-small" style="align-self:flex-start;white-space:nowrap;" type="button">🗑 Delete All Sim VMs</button>
+              </div>
+            </div>
+            <div id="ts-trbl-maintenance-msg" class="settings-message hidden" style="margin-top:8px;"></div>
+          </div>
+
           <div class="setup-card" style="margin:16px;">
             <div class="setup-card-header" id="ts-trbl-override-header" style="cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;">
               <h2>Per-Spoke View <span style="font-size:12px;font-weight:normal;color:var(--muted);">— view health and trigger update for a specific spoke</span></h2>

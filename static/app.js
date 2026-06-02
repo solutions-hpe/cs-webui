@@ -14732,6 +14732,57 @@ async function initTsTroubleshootTab(tenantId) {
   if (!updateBtn || !tenantId) return;
   updateBtn.disabled = !canManageTenant(tenantId);
 
+  // ── Fleet maintenance: Clear All Queues ──────────────────────────────────
+  const clearQueueBtn = $("#ts-trbl-clear-queue-btn");
+  const toolbarClearBtn = $("#ts-troubleshoot-clear-queue-btn");
+  const maintenanceMsg = $("#ts-trbl-maintenance-msg");
+  const canManage = canManageTenant(tenantId);
+
+  const onClearQueue = async () => {
+    if (!canManage) return;
+    if (!confirm("Clear ALL pending commands from the hub queue for this tenant?\n\nThis removes queued updates, config pushes, and VM commands. It cannot be undone.")) return;
+    [clearQueueBtn, toolbarClearBtn].forEach(b => { if (b) b.disabled = true; });
+    try {
+      const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/commands`, { method: "DELETE" });
+      const data = res?.ok ? await res.json() : null;
+      if (!res?.ok) throw new Error(data?.detail || `HTTP ${res?.status}`);
+      const cleared = data?.cleared ?? "?";
+      showInlineMessage(maintenanceMsg, `✓ Cleared ${cleared} queued command${cleared !== 1 ? "s" : ""}.`, false, 5000);
+      showToast(`Queue cleared — ${cleared} command${cleared !== 1 ? "s" : ""} removed.`, "success");
+    } catch (e) {
+      showInlineMessage(maintenanceMsg, `Failed to clear queue: ${e.message}`, true);
+    } finally {
+      [clearQueueBtn, toolbarClearBtn].forEach(b => { if (b) b.disabled = !canManage; });
+    }
+  };
+  if (clearQueueBtn) { clearQueueBtn.disabled = !canManage; clearQueueBtn.onclick = onClearQueue; }
+  if (toolbarClearBtn) { toolbarClearBtn.disabled = !canManage; toolbarClearBtn.onclick = onClearQueue; }
+
+  // ── Fleet maintenance: Delete All Simulation VMs ─────────────────────────
+  const deleteVmsBtn = $("#ts-trbl-delete-vms-btn");
+  const toolbarDeleteBtn = $("#ts-troubleshoot-delete-vms-btn");
+
+  const onDeleteVms = async () => {
+    if (!canManage) return;
+    if (!confirm("Queue deletion of ALL simulation VMs (VMID > 9000) across every spoke?\n\nDisable auto-provisioning first to prevent immediate re-creation.")) return;
+    [deleteVmsBtn, toolbarDeleteBtn].forEach(b => { if (b) b.disabled = true; });
+    try {
+      const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/qa/teardown-all-vms`, { method: "POST" });
+      const data = res?.ok ? await res.json() : null;
+      if (!res?.ok) throw new Error(data?.detail || `HTTP ${res?.status}`);
+      const total = data?.total_vms_queued ?? "?";
+      const details = (data?.spokes || []).map(s => `${s.spoke_name || s.spoke_id}: ${s.vms_queued} VMs`).join(", ");
+      showInlineMessage(maintenanceMsg, `✓ Queued deletion of ${total} VM${total !== 1 ? "s" : ""}${details ? ` (${details})` : ""}.`, false, 8000);
+      showToast(`Delete queued for ${total} sim VM${total !== 1 ? "s" : ""}.`, "success");
+    } catch (e) {
+      showInlineMessage(maintenanceMsg, `Failed to queue VM deletion: ${e.message}`, true);
+    } finally {
+      [deleteVmsBtn, toolbarDeleteBtn].forEach(b => { if (b) b.disabled = !canManage; });
+    }
+  };
+  if (deleteVmsBtn) { deleteVmsBtn.disabled = !canManage; deleteVmsBtn.onclick = onDeleteVms; }
+  if (toolbarDeleteBtn) { toolbarDeleteBtn.disabled = !canManage; toolbarDeleteBtn.onclick = onDeleteVms; }
+
   // Load health from first available spoke into the main panel
   const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes`);
   const spokes = (res?.ok ? await res.json() : null) || [];

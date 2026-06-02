@@ -6907,6 +6907,13 @@ function renderHubVmServerDetailsPanel(px, host) {
     : px.mem_est_avg != null
       ? `Estimated memory average from samples collected so far${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ""}.`
       : `Collecting memory samples for the rolling average${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ""}.`;
+  const ph = px.provision_halt;
+  const provHaltTitle = (ph && ph.halted)
+    ? `Provisioning paused: ${ph.reason === 'cpu' ? 'CPU' : 'Memory'} ${ph.reason === 'cpu' ? `${ph.cpu_pct ?? '?'}% >= ${ph.cpu_threshold ?? 80}%` : `${ph.mem_pct ?? '?'}% >= ${ph.mem_threshold ?? 80}%`}`
+    : "";
+  const provHaltBadge = (ph && ph.halted)
+    ? `<span class="server-stat-pill warn" title="${escHtml(provHaltTitle)}">⏸ prov paused</span>`
+    : '';
   const _agentVersionTitle = "Version reported by the Proxmox agent running on the host. Cached on the spoke so it survives service restarts.";
   const _pveVersionTitle = "Proxmox VE version reported by the host and cached on the spoke so Hub Details can show it immediately after restart.";
   const _spokeVersionTitle = "CS-WebUI version running on the spoke server.";
@@ -6929,6 +6936,7 @@ function renderHubVmServerDetailsPanel(px, host) {
           <span class="server-stat-pill">⚡ CPU: ${cpu}</span>
           <span class="server-stat-pill">🧠 RAM: ${memUsed} / ${memTotal}</span>
           ${px.cpu_1h_avg != null ? `<span class="server-stat-pill" title="${escHtml(_cpuAvgTitle)}">📊 CPU avg: ${Number(px.cpu_1h_avg).toFixed(1)}%</span>` : px.cpu_est_avg != null ? `<span class="server-stat-pill muted" title="${escHtml(_cpuAvgTitle)}">📊 CPU avg: ~${Number(px.cpu_est_avg).toFixed(1)}%${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ''}</span>` : `<span class="server-stat-pill muted" title="${escHtml(_cpuAvgTitle)}">📊 ${_warmupRemainLabel ? `warming up… ${_warmupRemainLabel}` : 'warming up…'}</span>`}
+          ${provHaltBadge}
           ${px.mem_1h_avg != null ? `<span class="server-stat-pill" title="${escHtml(_memAvgTitle)}">📊 Mem avg: ${Number(px.mem_1h_avg).toFixed(1)}%</span>` : px.mem_est_avg != null ? `<span class="server-stat-pill muted" title="${escHtml(_memAvgTitle)}">📊 Mem avg: ~${Number(px.mem_est_avg).toFixed(1)}%${_warmupRemainLabel ? ` (${_warmupRemainLabel})` : ''}</span>` : `<span class="server-stat-pill muted" title="${escHtml(_memAvgTitle)}">📊 ${_warmupRemainLabel ? `warming up… ${_warmupRemainLabel}` : 'warming up…'}</span>`}
         </div>
       </div>

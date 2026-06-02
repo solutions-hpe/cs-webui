@@ -7506,9 +7506,11 @@ async function loadVmServer(force = false) {
       loadAggregateData("proxmox"),
       loadHubVmServerAggregateStatus(),
     ]);
-    const hosts = fresh?.hosts || [];
-    aggregateProxmoxHosts = hosts;
-    saveCache(hosts);
+    // Guard against null response (transient error) — don't clobber good data or cache.
+    if (fresh?.hosts != null) {
+      aggregateProxmoxHosts = fresh.hosts;
+      if (fresh.hosts.length) saveCache(fresh.hosts);
+    }
     renderHubVmServer();
   };
 

@@ -5315,6 +5315,15 @@ function renderHubVmServer() {
                 <span class="stat-pill">${escHtml(String(host.vm_count || 0))} VMs</span>
                 <span class="stat-pill">${escHtml(String(host.usb_count || 0))} USB</span>
                 ${recloneStatus !== "idle" ? `<span class="stat-pill badge-${recloneStatus === "running" ? "blue" : "grey"}">${escHtml(recloneStatus)}</span>` : ""}
+                ${(() => {
+                  const px = host.proxmox || {};
+                  const cpuAvg = px.cpu_1h_avg != null ? `${Number(px.cpu_1h_avg).toFixed(1)}%` : px.cpu_est_avg != null ? `~${Number(px.cpu_est_avg).toFixed(1)}%` : null;
+                  const memAvg = px.mem_1h_avg != null ? `${Number(px.mem_1h_avg).toFixed(1)}%` : px.mem_est_avg != null ? `~${Number(px.mem_est_avg).toFixed(1)}%` : null;
+                  return [
+                    cpuAvg ? `<span class="server-stat-pill" title="1-hour average CPU usage">📊 CPU: ${cpuAvg}</span>` : "",
+                    memAvg ? `<span class="server-stat-pill" title="1-hour average memory usage">📊 Mem: ${memAvg}</span>` : "",
+                  ].join("");
+                })()}
                 <span class="stat-pill" style="margin-left:auto;">Click to open →</span>
               </div>
               <div style="padding:8px 16px;font-size:0.82rem;color:var(--muted);">
@@ -6950,6 +6959,7 @@ function renderHubVmServerDetailsPanel(px, host) {
           ${storageRows}
           <tr><th>VMs</th><td>${escHtml(String(px.vm_count ?? "—"))} total, ${escHtml(String(px.running_count ?? "—"))} running</td><th>Last Agent Check-in</th><td>${escHtml(lastSeen)}</td></tr>
           <tr><th>Hub Round-Trip (RTT)</th><td>${rttCell}</td><th>Hub Processing Time</th><td>${procCell}</td></tr>
+          <tr><th title="Commands queued or delivered but not yet acknowledged by the spoke">Pending Commands</th><td colspan="3">${host.pending_command_count != null ? (host.pending_command_count > 0 ? `<span style="color:var(--accent-orange,#f39c12);font-weight:600;">${host.pending_command_count}</span>` : `<span class="muted">0</span>`) : `<span class="muted">—</span>`}</td></tr>
         </tbody>
       </table>
     </div>

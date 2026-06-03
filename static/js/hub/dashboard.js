@@ -13029,9 +13029,9 @@ function _qaUpdateSummary(startMs) {
 
 /** Helper: run a single API check. Returns { status, detail }. */
 async function _qaCheck(method, url, label, opts = {}) {
-  const { expect200 = true, jsonTest } = opts;
+  const { expect200 = true, jsonTest, body } = opts;
   try {
-    const res = await _qaFetch(url, { method: method || "GET" });
+    const res = await _qaFetch(url, { method: method || "GET", ...(body !== undefined ? { body } : {}) });
     if (!res) return { status: "FAIL", detail: "No response / network error" };
     if (expect200 && !res.ok) return { status: "FAIL", detail: `HTTP ${res.status}` };
     if (jsonTest) {
@@ -13174,6 +13174,110 @@ function _qaModuleChecks(tenantId) {
       },
     ],
 
+    sim_cycle: [
+      // Step 1 — verify dongles present
+      { name: "Dongles present", url: `/api/${T}/aggregate/usb-provisioning-status`,
+        jsonTest: d => {
+          if (!d) return { status: "FAIL", detail: "No response" };
+          if ((d.total_dongles || 0) === 0) return { status: "SKIP", detail: "No USB dongles detected — cannot run simulation cycle" };
+          const spokeDetail = (d.spokes || []).filter(s => (s.dongle_count || 0) > 0)
+            .map(s => `${s.spoke_name || s.spoke_id}: ${s.dongle_count} dongle(s)`).join(", ");
+          return { status: "PASS", detail: `${d.total_dongles} dongle(s) detected → ${spokeDetail}` };
+        }},
+      // Step 2 — disable auto-provisioning before teardown
+      { name: "Disable Auto-Provisioning fleet-wide", method: "POST",
+        url: `/api/${T}/aggregate/toggle-auto-provision`, body: { enable: false },
+        jsonTest: d => {
+          if (!d?.ok) return { status: "FAIL", detail: JSON.stringify(d) };
+          return { status: "PASS", detail: `usb_auto_provision=OFF on ${d.updated_spokes} spoke(s)` };
+        }},
+      // Step 3 — clear pending command queue so no stale config_update commands interfere
+      { name: "Clear command queue", method: "DELETE", url: `/api/${T}/commands`,
+        jsonTest: d => {
+          if (!d) return { status: "FAIL", detail: "No response" };
+          return { status: "PASS", detail: `Cleared ${d.cleared ?? d.detail ?? "queue"}` };
+        }},
+      // Step 4 — tear down all sim VMs
+      { name: "Trigger VM teardown (all sim VMs)", method: "POST", url: `/api/${T}/qa/teardown-all-vms`,
+        jsonTest: d => {
+          if (!d) return { status: "FAIL", detail: "No response" };
+          if (!d.ok) return { status: "FAIL", detail: JSON.stringify(d) };
+          if (d.total_vms_queued === 0) return { status: "SKIP", detail: "No sim VMs found (vmid > 9000) — already clean" };
+          const spokeDetail = (d.spokes || []).map(s => `${s.spoke_name || s.spoke_id}: ${s.vms_queued} VM(s)`).join(", ");
+          return { status: "PASS", detail: `Queued delete_vm for ${d.total_vms_queued} VM(s) → ${spokeDetail}` };
+        }},
+      // Step 5 — wait for all VMs to be deleted
+      { name: "All sim VMs deleted", url: `/api/${T}/qa/teardown-status`,
+        poll: { intervalMs: 10000, timeoutMs: 300000 },
+        jsonTest: d => {
+          if (!d) return { status: "FAIL", detail: "No response" };
+          if (d.total_remaining === 0 && d.complete) {
+            const spokeNames = (d.spokes || []).map(s => s.spoke_name || s.spoke_id).join(", ");
+            return { status: "PASS", detail: `All VMs deleted — verified clean on: ${spokeNames || "all spokes"}` };
+          }
+          return null; // keep polling
+        }},
+      // Step 6 — enable auto-provisioning to kick off provisioning cycle
+      { name: "Enable Auto-Provisioning fleet-wide", method: "POST", url: `/api/${T}/qa/enable-autoprov`,
+        jsonTest: d => {
+          if (!d?.ok) return { status: "FAIL", detail: JSON.stringify(d) };
+          const spokeDetail = (d.spokes || []).map(s => `${s.spoke_name || s.spoke_id}: ${s.dongle_count} dongle(s)`).join(", ");
+          return { status: "PASS", detail: `usb_auto_provision=ON on ${d.updated_spokes} spoke(s) — expecting ${d.expected_clients} client(s): ${spokeDetail}` };
+        }},
+      // Step 7 — wait for all clients to come online
+      { name: "All clients online", url: `/api/${T}/qa/provisioning-check`,
+        poll: { intervalMs: 15000, timeoutMs: 600000 },
+        jsonTest: d => {
+          if (!d) return { status: "FAIL", detail: "No response" };
+          if (d.expected_clients === 0) return { status: "SKIP", detail: "expected_clients=0 — no dongles to provision" };
+          if (d.overall_pass && d.actual_clients >= d.expected_clients) {
+            const spokeDetail = (d.spokes || []).map(s =>
+              `${s.spoke_name || s.spoke_id}: ${s.reporting_clients}/${s.dongle_count}`).join(", ");
+            return { status: "PASS", detail: `${d.actual_clients}/${d.expected_clients} clients reporting — ${spokeDetail}` };
+          }
+          return null; // keep polling
+        }},
+      // Step 8 — verify provisioning limit enforcement (provision_halt per spoke)
+      { name: "Provisioning limit enforced (provision_halt)", url: `/api/aggregate/proxmox?tenant_id=${T}`,
+        jsonTest: d => {
+          if (!d?.hosts) return { status: "FAIL", detail: "No proxmox host data" };
+          const spokes = d.hosts.filter(h => (h.usb_count || 0) > 0 || h.proxmox?.provision_halt);
+          if (spokes.length === 0) return { status: "SKIP", detail: "No spokes with dongles found" };
+          const halted = spokes.filter(h => h.proxmox?.provision_halt);
+          const spokeDetail = spokes.map(h => {
+            const ph = h.proxmox?.provision_halt;
+            const name = h.spoke_name || h.spoke_id;
+            const vmCount = h.vm_count ?? "?";
+            const dongles = h.usb_count ?? "?";
+            return ph ? `${name}: HALTED (vms=${vmCount}, dongles=${dongles})` : `${name}: ok (vms=${vmCount}, dongles=${dongles})`;
+          }).join("; ");
+          if (halted.length > 0) return { status: "PASS", detail: `provision_halt set on ${halted.length}/${spokes.length} spoke(s) — ${spokeDetail}` };
+          return { status: "WARN", detail: `provision_halt not yet set on any spoke — ${spokeDetail}` };
+        }},
+      // Step 9 — report CPU stats (informational — teardown triggers at cpu_delete_threshold)
+      { name: "CPU delete threshold configured", url: `/api/aggregate/proxmox?tenant_id=${T}`,
+        jsonTest: d => {
+          if (!d?.hosts) return { status: "FAIL", detail: "No proxmox host data" };
+          const spokes = d.hosts.filter(h => h.spoke_online);
+          if (spokes.length === 0) return { status: "SKIP", detail: "No online spokes found" };
+          const lines = spokes.map(h => {
+            const name = h.spoke_name || h.spoke_id;
+            const cpuAvg = h.proxmox?.cpu_1h_avg != null ? `${Number(h.proxmox.cpu_1h_avg).toFixed(1)}%` : "n/a";
+            const delThr = h.spoke_config?.cpu_delete_threshold ?? "90";
+            return `${name}: cpu_1h_avg=${cpuAvg} (delete_thr=${delThr}%)`;
+          }).join("; ");
+          const aboveThreshold = spokes.filter(h => {
+            const cpu = h.proxmox?.cpu_1h_avg;
+            const thr = Number(h.spoke_config?.cpu_delete_threshold ?? 90);
+            return cpu != null && Number(cpu) >= thr;
+          });
+          if (aboveThreshold.length > 0) {
+            return { status: "PASS", detail: `CPU teardown triggered on ${aboveThreshold.length} spoke(s) — ${lines}` };
+          }
+          return { status: "WARN", detail: `CPU below delete threshold on all spokes (teardown not triggered) — ${lines}` };
+        }},
+    ],
+
     autoprov_e2e: [
       { name: "Dongles present", url: `/api/${T}/aggregate/usb-provisioning-status`,
         jsonTest: d => {
@@ -13218,7 +13322,7 @@ async function _runQaChecks(tenantId, module) {
 
   const allModules = _qaModuleChecks(tenantId);
   // Destructive / long-running modules are excluded from "all" — must be selected explicitly.
-  const DESTRUCTIVE_MODULES = ["teardown", "autoprov_e2e"];
+  const DESTRUCTIVE_MODULES = ["teardown", "autoprov_e2e", "sim_cycle"];
   const modulesToRun = module === "all"
     ? Object.keys(allModules).filter(m => !DESTRUCTIVE_MODULES.includes(m))
     : [module];
@@ -13304,6 +13408,7 @@ async function _runQaChecks(tenantId, module) {
       } else {
         const result = await _qaCheck(check.method || "GET", check.url, check.name, {
           jsonTest: check.jsonTest,
+          body: check.body,
         });
         status = result.status; detail = result.detail;
       }

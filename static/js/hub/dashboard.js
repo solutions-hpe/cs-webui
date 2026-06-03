@@ -13237,25 +13237,48 @@ function _qaModuleChecks(tenantId) {
           }
           return null; // keep polling
         }},
-      // Step 8 — verify provisioning limit enforcement (provision_halt per spoke)
-      { name: "Provisioning limit enforced (provision_halt)", url: `/api/aggregate/proxmox?tenant_id=${T}`,
+      // Step 8 — verify no over-provisioning (vm_count <= dongle_count per spoke)
+      { name: "No over-provisioning (vm_count ≤ dongle_count)", url: `/api/aggregate/proxmox?tenant_id=${T}`,
         jsonTest: d => {
           if (!d?.hosts) return { status: "FAIL", detail: "No proxmox host data" };
-          const spokes = d.hosts.filter(h => (h.usb_count || 0) > 0 || h.proxmox?.provision_halt);
+          const spokes = d.hosts.filter(h => (h.usb_count || 0) > 0);
           if (spokes.length === 0) return { status: "SKIP", detail: "No spokes with dongles found" };
-          const halted = spokes.filter(h => h.proxmox?.provision_halt);
-          const spokeDetail = spokes.map(h => {
-            const ph = h.proxmox?.provision_halt;
+          const overProvisioned = spokes.filter(h => (h.vm_count || 0) > (h.usb_count || 0));
+          const lines = spokes.map(h => {
             const name = h.spoke_name || h.spoke_id;
-            const vmCount = h.vm_count ?? "?";
-            const dongles = h.usb_count ?? "?";
-            return ph ? `${name}: HALTED (vms=${vmCount}, dongles=${dongles})` : `${name}: ok (vms=${vmCount}, dongles=${dongles})`;
+            const ph = h.proxmox?.provision_halt;
+            const pacing = ph?.halted && ph?.reason === "pacing" ? ` CPU-pacing(${ph.cpu_pct}%≥${ph.cpu_threshold}%)` : "";
+            return `${name}: vms=${h.vm_count ?? "?"}/${h.usb_count ?? "?"} dongles${pacing}`;
           }).join("; ");
-          if (halted.length > 0) return { status: "PASS", detail: `provision_halt set on ${halted.length}/${spokes.length} spoke(s) — ${spokeDetail}` };
-          return { status: "WARN", detail: `provision_halt not yet set on any spoke — ${spokeDetail}` };
+          if (overProvisioned.length > 0) {
+            return { status: "FAIL", detail: `Over-provisioned on ${overProvisioned.length} spoke(s) — ${lines}` };
+          }
+          return { status: "PASS", detail: `vm_count ≤ dongle_count on all spokes — ${lines}` };
         }},
-      // Step 9 — report CPU stats (informational — teardown triggers at cpu_delete_threshold)
-      { name: "CPU delete threshold configured", url: `/api/aggregate/proxmox?tenant_id=${T}`,
+      // Step 9 — verify CPU provisioning throttle (provision_halt.reason='pacing')
+      { name: "CPU provisioning throttle (provision_halt)", url: `/api/aggregate/proxmox?tenant_id=${T}`,
+        jsonTest: d => {
+          if (!d?.hosts) return { status: "FAIL", detail: "No proxmox host data" };
+          const spokes = d.hosts.filter(h => h.spoke_online);
+          if (spokes.length === 0) return { status: "SKIP", detail: "No online spokes found" };
+          const pacing = spokes.filter(h => h.proxmox?.provision_halt?.halted && h.proxmox?.provision_halt?.reason === "pacing");
+          const lines = spokes.map(h => {
+            const name = h.spoke_name || h.spoke_id;
+            const ph = h.proxmox?.provision_halt;
+            const cpuAvg = h.proxmox?.cpu_1h_avg != null ? `${Number(h.proxmox.cpu_1h_avg).toFixed(1)}%` : "n/a";
+            if (ph?.halted) {
+              const thr = ph.cpu_threshold ?? "?";
+              return `${name}: PACING cpu_pct=${ph.cpu_pct ?? "?"}% thr=${thr}% 1h_avg=${cpuAvg}`;
+            }
+            return `${name}: ok cpu_1h_avg=${cpuAvg}`;
+          }).join("; ");
+          if (pacing.length > 0) {
+            return { status: "PASS", detail: `CPU pacing active on ${pacing.length}/${spokes.length} spoke(s) — ${lines}` };
+          }
+          return { status: "WARN", detail: `No CPU pacing currently active (CPU below threshold) — ${lines}` };
+        }},
+      // Step 10 — report CPU 1h avg vs delete threshold (vm teardown fires above this)
+      { name: "CPU delete-threshold teardown check", url: `/api/aggregate/proxmox?tenant_id=${T}`,
         jsonTest: d => {
           if (!d?.hosts) return { status: "FAIL", detail: "No proxmox host data" };
           const spokes = d.hosts.filter(h => h.spoke_online);
@@ -13263,18 +13286,19 @@ function _qaModuleChecks(tenantId) {
           const lines = spokes.map(h => {
             const name = h.spoke_name || h.spoke_id;
             const cpuAvg = h.proxmox?.cpu_1h_avg != null ? `${Number(h.proxmox.cpu_1h_avg).toFixed(1)}%` : "n/a";
-            const delThr = h.spoke_config?.cpu_delete_threshold ?? "90";
+            // cpu_delete_threshold comes from provision_halt.cpu_threshold (same threshold the agent uses)
+            const delThr = h.proxmox?.provision_halt?.cpu_threshold ?? 90;
             return `${name}: cpu_1h_avg=${cpuAvg} (delete_thr=${delThr}%)`;
           }).join("; ");
           const aboveThreshold = spokes.filter(h => {
             const cpu = h.proxmox?.cpu_1h_avg;
-            const thr = Number(h.spoke_config?.cpu_delete_threshold ?? 90);
-            return cpu != null && Number(cpu) >= thr;
+            const thr = h.proxmox?.provision_halt?.cpu_threshold ?? 90;
+            return cpu != null && Number(cpu) >= Number(thr);
           });
           if (aboveThreshold.length > 0) {
-            return { status: "PASS", detail: `CPU teardown triggered on ${aboveThreshold.length} spoke(s) — ${lines}` };
+            return { status: "PASS", detail: `CPU delete-teardown active on ${aboveThreshold.length} spoke(s) — ${lines}` };
           }
-          return { status: "WARN", detail: `CPU below delete threshold on all spokes (teardown not triggered) — ${lines}` };
+          return { status: "WARN", detail: `cpu_1h_avg below delete threshold on all spokes (no teardown triggered) — ${lines}` };
         }},
     ],
 

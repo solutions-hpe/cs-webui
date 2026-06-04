@@ -11677,6 +11677,7 @@ const HUB_CONFIG_FIELDS = [
   "l1_vlan_start","l1_vlan_end","usb_vidpids","ignored_hostnames",
   "guest_agent_watchdog_enabled","guest_agent_grace_minutes","guest_agent_check_interval_minutes",
   "guest_agent_reboot_after_minutes","guest_agent_reclone_after_minutes",
+  "watchdog_reboot_enabled",
 ];
 
 async function loadHubConfig() {

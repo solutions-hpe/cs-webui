@@ -156,7 +156,8 @@ let currentSettings = {
   guest_agent_grace_minutes: '20',
   guest_agent_check_interval_minutes: '10',
   guest_agent_reboot_after_minutes: '10',
-  guest_agent_reclone_after_minutes: '30'
+  guest_agent_reclone_after_minutes: '30',
+  watchdog_reboot_enabled: 'on'
 };
 let configData = {};
 let configLoaded = false;
@@ -967,7 +968,8 @@ function mergeSettings(next = {}) {
     guest_agent_grace_minutes: next.guest_agent_grace_minutes ?? currentSettings.guest_agent_grace_minutes ?? '20',
     guest_agent_check_interval_minutes: next.guest_agent_check_interval_minutes ?? currentSettings.guest_agent_check_interval_minutes ?? '10',
     guest_agent_reboot_after_minutes: next.guest_agent_reboot_after_minutes ?? currentSettings.guest_agent_reboot_after_minutes ?? '10',
-    guest_agent_reclone_after_minutes: next.guest_agent_reclone_after_minutes ?? currentSettings.guest_agent_reclone_after_minutes ?? '30'
+    guest_agent_reclone_after_minutes: next.guest_agent_reclone_after_minutes ?? currentSettings.guest_agent_reclone_after_minutes ?? '30',
+    watchdog_reboot_enabled: next.watchdog_reboot_enabled ?? currentSettings.watchdog_reboot_enabled ?? 'on'
   };
   currentSettings = merged;
   return merged;
@@ -2040,6 +2042,8 @@ function applySettingsToUI(s) {
   if (l1VlanEndInput && !l1VlanEndInput.matches(':focus')) l1VlanEndInput.value = settings.l1_vlan_end ?? '199';
   const agentWatchdogEnabled = document.getElementById('guest-agent-watchdog-enabled');
   if (agentWatchdogEnabled) agentWatchdogEnabled.checked = (settings.guest_agent_watchdog_enabled ?? 'on') === 'on';
+  const watchdogRebootEnabled = document.getElementById('watchdog-reboot-enabled');
+  if (watchdogRebootEnabled) watchdogRebootEnabled.checked = (settings.watchdog_reboot_enabled ?? 'on') === 'on';
   const agentGrace = document.getElementById('guest-agent-grace-minutes');
   if (agentGrace && !agentGrace.matches(':focus')) agentGrace.value = settings.guest_agent_grace_minutes ?? '20';
   const agentInterval = document.getElementById('guest-agent-check-interval-minutes');
@@ -2991,6 +2995,7 @@ function collectUsbSettingsPayload() {
     guest_agent_check_interval_minutes: String(document.getElementById('guest-agent-check-interval-minutes')?.value ?? currentSettings.guest_agent_check_interval_minutes ?? '10'),
     guest_agent_reboot_after_minutes: String(document.getElementById('guest-agent-reboot-after-minutes')?.value ?? currentSettings.guest_agent_reboot_after_minutes ?? '10'),
     guest_agent_reclone_after_minutes: String(document.getElementById('guest-agent-reclone-after-minutes')?.value ?? currentSettings.guest_agent_reclone_after_minutes ?? '30'),
+    watchdog_reboot_enabled: document.getElementById('watchdog-reboot-enabled')?.checked ? 'on' : 'off',
   };
 }
 
@@ -7306,7 +7311,7 @@ if (usbAutoProvisionInput) usbAutoProvisionInput.addEventListener('change', () =
 });
 
 // VM Agent Watchdog — save on change/blur
-['guest-agent-watchdog-enabled'].forEach((id) => {
+['guest-agent-watchdog-enabled', 'watchdog-reboot-enabled'].forEach((id) => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('change', () => _autoSaveUsb(agentWatchdogMsg));
 });

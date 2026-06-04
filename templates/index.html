@@ -1370,6 +1370,7 @@
                 <label>L1 VLAN Start<input type="text" id="hc-l1_vlan_start" placeholder="100"></label>
                 <label>L1 VLAN End<input type="text" id="hc-l1_vlan_end" placeholder="199"></label>
                 <label>Agent Watchdog<select id="hc-guest_agent_watchdog_enabled"><option value="on">On</option><option value="off">Off</option></select></label>
+                <label>Watchdog Auto-Reboot<select id="hc-watchdog_reboot_enabled" title="When Off, faults are logged and reported but no automatic reboots are issued."><option value="on">On</option><option value="off">Off (report only)</option></select></label>
                 <label>Grace Period (min)<input type="number" id="hc-guest_agent_grace_minutes" placeholder="20"></label>
                 <label>Watchdog Interval (min)<input type="number" id="hc-guest_agent_check_interval_minutes" placeholder="10"></label>
                 <label>Reboot After (min)<input type="number" id="hc-guest_agent_reboot_after_minutes" placeholder="10"></label>
@@ -3019,6 +3020,11 @@
                 <div class="form-row" style="align-items:center;gap:12px;">
                   <label class="form-label" for="guest-agent-watchdog-enabled">Enable watchdog</label>
                   <input id="guest-agent-watchdog-enabled" type="checkbox" checked>
+                </div>
+                <div class="form-row" style="align-items:center;gap:12px;margin-top:6px;">
+                  <label class="form-label" for="watchdog-reboot-enabled">Auto-reboot on fault</label>
+                  <input id="watchdog-reboot-enabled" type="checkbox" checked
+                         title="When unchecked, hardware and guest-agent faults are logged and reported but no automatic reboots are issued.">
                 </div>
                 <div class="form-row" style="margin-top:10px;">
                   <div class="form-group">

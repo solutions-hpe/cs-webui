@@ -305,6 +305,16 @@ async function hydrateSetupSubtab(subtabId) {
     return;
   }
 
+  if (subtabId === 'setup-hub-overrides') {
+    loadSpokeConfOverrides().catch(() => {});
+    return;
+  }
+
+  if (subtabId === 'setup-sim-config' || subtabId === 'setup-addresses' || subtabId === 'setup-buckets') {
+    loadConfigEditor().catch(() => {});
+    return;
+  }
+
   const loadSetupSettings = async () => {
     try {
       await loadSettings();
@@ -347,18 +357,6 @@ function activateSetupSubtab(subtabId = 'setup-github') {
     panel.classList.toggle('hidden', !isActive);
   });
   void hydrateSetupSubtab(subtabId);
-}
-
-function activateConfigSubtab(subtabId = 'config-general') {
-  document.querySelectorAll('.config-subtab').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.subtab === subtabId);
-  });
-  document.querySelectorAll('.config-subpanel').forEach((panel) => {
-    const isActive = panel.id === subtabId;
-    panel.classList.toggle('active', isActive);
-    panel.classList.toggle('hidden', !isActive);
-  });
-  if (subtabId === 'config-hub-overrides-panel') loadSpokeConfOverrides().catch(() => {});
 }
 
 function activateServerSubtab(subtabId = 'server-vms') {
@@ -1115,7 +1113,6 @@ function applySpokeViewerMode() {
 
   // Restore tabs (no demo role on spoke)
   centralTabButtons.forEach((b) => b.classList.remove('hidden'));
-  configTabButtons.forEach((b) => b.classList.remove('hidden'));
   Array.from(spokeNavRoot?.querySelectorAll('.tab[data-tab="server"]') || []).forEach((b) => b.classList.remove('hidden'));
 
   topbarUpdateAllBtn?.classList.toggle('hidden', isViewer);
@@ -6888,12 +6885,6 @@ centralTabButtons.forEach((button) => {
   });
 });
 
-configTabButtons.forEach((button) => {
-  button.addEventListener('click', () => {
-    loadConfigEditor().catch(() => {});
-  });
-});
-
 // configSimulationSaveBtn removed — each section now has its own per-section Save button
 
 // ─── Hub-managed conf overrides (spoke side) ───────────────────────────────
@@ -7045,10 +7036,6 @@ async function clearSpokeConfOverride(type) {
   }
 }
 
-
-document.querySelectorAll('.config-subtab').forEach((btn) => {
-  btn.addEventListener('click', () => activateConfigSubtab(btn.dataset.subtab));
-});
 
 document.querySelectorAll('.server-subtab').forEach((btn) => {
   btn.addEventListener('click', () => activateServerSubtab(btn.dataset.subtab));
@@ -8555,7 +8542,6 @@ export {
   activateCentralSubtab,
   activateServerSubtab,
   activateSetupSubtab,
-  activateConfigSubtab,
   activateSimSubtab,
   connectWebSocket,
   handleMessage,

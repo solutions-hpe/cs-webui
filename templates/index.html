@@ -163,8 +163,7 @@
           <button class="tab" role="tab" aria-selected="false" data-tab="central" type="button">Central</button>
           <button class="tab tab-btn" id="tab-server-btn" role="tab" aria-selected="false" data-tab="server" style="display:none;" type="button">VM Server</button>
           <span class="tab-nav-sep" aria-hidden="true"></span>
-          <button class="tab tab-nav-right" role="tab" aria-selected="false" data-tab="config" type="button">⚙ Config</button>
-          <button class="tab" role="tab" aria-selected="false" data-tab="setup" type="button">⚙ Setup</button>
+          <button class="tab tab-nav-right" role="tab" aria-selected="false" data-tab="setup" type="button">⚙ Setup</button>
         </div>
       </div>
     </div>
@@ -2633,45 +2632,6 @@
       </main>
 
       <!-- ── Config tab ── -->
-      <main id="tab-config" class="page tab-content hidden">
-        <nav class="setup-subnav" role="tablist">
-          <button class="config-subtab active" data-subtab="config-general" role="tab">General</button>
-          <button class="config-subtab" data-subtab="config-addresses" role="tab">IP Addresses</button>
-          <button class="config-subtab" data-subtab="config-buckets-panel" role="tab">Buckets</button>
-          <button class="config-subtab" data-subtab="config-hub-overrides-panel" role="tab">Hub Overrides</button>
-        </nav>
-
-        <!-- General: [simulation] section -->
-        <div id="config-general" class="config-subpanel">
-          <div id="config-simulation-form"></div>
-          <div id="config-simulation-message" class="settings-message hidden" role="alert"></div>
-        </div>
-
-        <!-- Addresses: [server] + [address] sections -->
-        <div id="config-addresses" class="config-subpanel hidden">
-          <div id="config-addresses-form"></div>
-        </div>
-
-        <!-- Buckets: [s0]–[s9] -->
-        <div id="config-buckets-panel" class="config-subpanel hidden">
-          <div class="setup-card setup-section-gap">
-            <div class="setup-card-header">
-              <h2>Bucket Profiles</h2>
-              <p>Review and save individual simulation bucket sections (<strong>s0–s9</strong>).</p>
-            </div>
-            <div id="config-buckets-container"></div>
-            <div id="config-buckets-message" class="settings-message hidden" role="alert"></div>
-          </div>
-        </div>
-
-        <!-- Hub-managed conf overrides (standalone / read-only when hub connected) -->
-        <div id="config-hub-overrides-panel" class="config-subpanel hidden">
-          <div id="spoke-conf-overrides-content">
-            <div class="empty-state">Loading…</div>
-          </div>
-        </div>
-      </main>
-
       <!-- ── Setup tab ── -->
       <main id="tab-setup" class="page tab-content hidden" role="tabpanel">
         <div id="settings-form">
@@ -2687,6 +2647,10 @@
           <button class="setup-subtab" data-subtab="setup-central" role="tab">Central API</button>
           <button class="setup-subtab" data-subtab="setup-notifications" role="tab">Notifications</button>
           <button class="setup-subtab" data-subtab="setup-troubleshoot" role="tab">Troubleshooting</button>
+          <button class="setup-subtab" data-subtab="setup-sim-config" role="tab">Sim Config</button>
+          <button class="setup-subtab" data-subtab="setup-addresses" role="tab">IP Addresses</button>
+          <button class="setup-subtab" data-subtab="setup-buckets" role="tab">Buckets</button>
+          <button class="setup-subtab" data-subtab="setup-hub-overrides" role="tab">Hub Overrides</button>
         </nav>
 
         <div id="setup-github" class="setup-subpanel active">
@@ -3533,6 +3497,36 @@
               <div style="font-size:12px;color:var(--muted);">Removes git lock files, wipes and re-clones the repo from GitHub, clears all cached state files (client history, central history, state cache). <strong>The service will restart automatically.</strong></div>
             </div>
             <button id="setup-clear-cache-btn" class="btn btn-danger" style="flex-shrink:0;">Clear Cache</button>
+          </div>
+        </div>
+
+        <!-- Sim Config: [simulation] section -->
+        <div id="setup-sim-config" class="setup-subpanel hidden">
+          <div id="config-simulation-form"></div>
+          <div id="config-simulation-message" class="settings-message hidden" role="alert"></div>
+        </div>
+
+        <!-- Addresses: [server] + [address] sections -->
+        <div id="setup-addresses" class="setup-subpanel hidden">
+          <div id="config-addresses-form"></div>
+        </div>
+
+        <!-- Buckets: [s0]–[s9] -->
+        <div id="setup-buckets" class="setup-subpanel hidden">
+          <div class="setup-card setup-section-gap">
+            <div class="setup-card-header">
+              <h2>Bucket Profiles</h2>
+              <p>Review and save individual simulation bucket sections (<strong>s0–s9</strong>).</p>
+            </div>
+            <div id="config-buckets-container"></div>
+            <div id="config-buckets-message" class="settings-message hidden" role="alert"></div>
+          </div>
+        </div>
+
+        <!-- Hub-managed conf overrides -->
+        <div id="setup-hub-overrides" class="setup-subpanel hidden">
+          <div id="spoke-conf-overrides-content">
+            <div class="empty-state">Loading…</div>
           </div>
         </div>
         </div>

@@ -741,6 +741,7 @@ const recloneScheduleEnabledInput = document.getElementById('reclone-schedule-en
 const recloneScheduleDayInput = document.getElementById('reclone-schedule-day');
 const recloneScheduleTimeInput = document.getElementById('reclone-schedule-time');
 const recloneConcurrencyInput = document.getElementById('reclone-concurrency');
+const vmRecloneConcurrencyInput = document.getElementById('vm-reclone-concurrency');
 const l1VlanStartInput = document.getElementById('l1-vlan-start');
 const l1VlanEndInput = document.getElementById('l1-vlan-end');
 const l1VlanMsg = document.getElementById('l1-vlan-message');
@@ -1711,6 +1712,10 @@ function renderServerTab(data) {
         return `<button class="btn-icon vm-action-btn" data-action="${a.action}" data-vmid="${vm.vmid}" title="${a.title}">${a.label}</button>`;
       }).join(' ');
 
+      const consoleBtn = (vm.status === 'running' && !isDeleting)
+        ? `<button class="btn-icon vm-console-btn" data-vmid="${vm.vmid}" data-vmtype="${vm.type || 'qemu'}" title="Open VNC Console" style="color:#4fc3f7;">⎕</button>`
+        : `<button class="btn-icon" disabled title="${isDeleting ? 'VM is being deleted' : 'VM must be running to open console'}" style="opacity:0.3;">⎕</button>`;
+
       const tr = document.createElement('tr');
       tr.dataset.vmid = vm.vmid;
       tr.dataset.status = baseStatusText;
@@ -1726,7 +1731,7 @@ function renderServerTab(data) {
         <td>${escHtml(vm.name || '—')}${recoveryBadge}${webuiBadge}</td>
         <td>${cpuVal}</td>
         <td>${memUsed} / ${memTotal}</td>
-        <td>${actionBtns}</td>
+        <td>${actionBtns} ${consoleBtn}</td>
       `;
       tbody.appendChild(tr);
     });
@@ -1765,7 +1770,23 @@ function renderServerTab(data) {
       });
     });
 
-    // Per-category th-check handler
+    tbody.querySelectorAll('.vm-console-btn:not([disabled])').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const vmid = btn.dataset.vmid;
+        const vmtype = btn.dataset.vmtype || 'qemu';
+        btn.disabled = true;
+        btn.textContent = '…';
+        try {
+          const res = await requestJson(`/api/proxmox/console/${encodeURIComponent(vmid)}?vmtype=${encodeURIComponent(vmtype)}`, { method: 'POST' });
+          window.open(`/console?session_id=${encodeURIComponent(res.session_id)}`, '_blank');
+        } catch (err) {
+          showNotification(`Console error: ${err.message}`, 'error');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = '⎕';
+        }
+      });
+    });
     if (thChk && !thChk._vmBound) {
       thChk._vmBound = true;
       thChk.addEventListener('change', (e) => {
@@ -2036,6 +2057,7 @@ function applySettingsToUI(s) {
   const schedule = parseScheduleCron(settings.reclone_schedule_cron);
   if (recloneScheduleEnabledInput) recloneScheduleEnabledInput.checked = settings.reclone_schedule_enabled === 'on';
   if (recloneConcurrencyInput) recloneConcurrencyInput.value = settings.reclone_concurrency ?? '1';
+  if (vmRecloneConcurrencyInput && !vmRecloneConcurrencyInput.matches(':focus')) vmRecloneConcurrencyInput.value = settings.reclone_concurrency ?? '1';
   const protectedVmidsInput = document.getElementById('protected-vmids');
   if (protectedVmidsInput && !protectedVmidsInput.matches(':focus')) protectedVmidsInput.value = settings.protected_vmids ?? '';
   if (l1VlanStartInput && !l1VlanStartInput.matches(':focus')) l1VlanStartInput.value = settings.l1_vlan_start ?? '100';
@@ -7327,6 +7349,17 @@ if (recloneScheduleDayInput)     recloneScheduleDayInput.addEventListener('chang
 [vmSilentTimeoutInput, recloneScheduleTimeInput, recloneConcurrencyInput].forEach((el) => {
   if (el) el.addEventListener('blur', () => _autoSaveVmMaintenance(vmMaintenanceMsg));
 });
+// VM Server card concurrency — keep in sync with Settings panel input and auto-save
+if (vmRecloneConcurrencyInput) {
+  vmRecloneConcurrencyInput.addEventListener('change', () => {
+    if (recloneConcurrencyInput) recloneConcurrencyInput.value = vmRecloneConcurrencyInput.value;
+    _autoSaveVmMaintenance(vmMaintenanceMsg);
+  });
+  vmRecloneConcurrencyInput.addEventListener('blur', () => {
+    if (recloneConcurrencyInput) recloneConcurrencyInput.value = vmRecloneConcurrencyInput.value;
+    _autoSaveVmMaintenance(vmMaintenanceMsg);
+  });
+}
 
 if (centralRefreshBtn) {
   centralRefreshBtn.addEventListener('click', async () => {

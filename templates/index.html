@@ -1951,6 +1951,11 @@
                   <div id="reclone-status-badge" class="badge badge-grey">Idle</div>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+                  <label class="form-group" style="margin:0;display:flex;align-items:center;gap:6px;">
+                    <span class="form-label" style="white-space:nowrap;margin:0;">Concurrency</span>
+                    <input id="vm-reclone-concurrency" class="form-input" type="number" min="1" max="20" value="1"
+                           style="width:60px;" title="Max VMs recloned in parallel">
+                  </label>
                   <button id="reclone-now-btn" class="btn btn-primary btn-small" onclick="triggerRecloneAll()">⟳ Reclone All Now</button>
                   <button id="reclone-clear-btn" class="btn btn-secondary btn-small hidden" type="button">✕ Clear Errors</button>
                 </div>

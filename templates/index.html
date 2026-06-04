@@ -2141,6 +2141,18 @@
                   <tbody id="unknown-usb-tbody"></tbody>
                 </table>
             </div>
+            <div id="usb-quarantine-section" class="hidden" style="margin-top:16px;">
+              <div class="setup-card-header" style="padding:0 0 8px;">
+                <h3>🔒 Quarantined USB Buses</h3>
+                <p>These buses had repeated dongle-missing failures and are skipped during auto-provisioning.
+                   Clear the quarantine to allow reprovisioning when a (replacement) dongle is present.</p>
+              </div>
+              <table class="data-table" id="usb-quarantine-table">
+                <colgroup><col><col style="width:80px"><col style="width:160px"><col style="width:160px"></colgroup>
+                <thead><tr><th>Bus Path</th><th>Failures</th><th>Quarantined At</th><th>Action</th></tr></thead>
+                <tbody id="usb-quarantine-tbody"></tbody>
+              </table>
+            </div>
           </div>
         </div>
 

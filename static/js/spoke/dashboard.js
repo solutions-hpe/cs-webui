@@ -163,7 +163,7 @@ let configLoaded = false;
 let centralTokenValid = null;
 let centralLastSyncedTs = null;
 let centralStatusInitialized = false;
-let latestProxmoxData = { vms: [], usb_state: [], unknown_usb: [], reclone_state: null, vh_devices: null };  // physical_usb removed
+let latestProxmoxData = { vms: [], usb_state: [], usb_quarantine: [], unknown_usb: [], reclone_state: null, vh_devices: null };  // physical_usb removed
 let latestRecloneState = null;
 let usbCountdownTimer = null;
 let activeVmCat = 'sim';   // 'sim' | 'other' | 'containers' | 'templates'
@@ -751,6 +751,8 @@ const usbSummaryPanel = document.getElementById('usb-summary-panel');
 const usbSummaryTbody = document.getElementById('usb-summary-tbody');
 const unknownUsbSection = document.getElementById('unknown-usb-section');
 const unknownUsbTbody = document.getElementById('unknown-usb-tbody');
+const usbQuarantineSection = document.getElementById('usb-quarantine-section');
+const usbQuarantineTbody = document.getElementById('usb-quarantine-tbody');
 const recloneStatusBadge = document.getElementById('reclone-status-badge');
 const recloneProgressWrap = document.getElementById('reclone-progress-wrap');
 const recloneProgressBar = document.getElementById('reclone-progress-bar');
@@ -772,6 +774,27 @@ if (unknownUsbTbody) {
     const name = btn.dataset.name;
     if (action === 'certify') addUnknownToCertified(vidpid, name);
     else if (action === 'ignore') ignoreUsbDevice(vidpid);
+  });
+}
+
+if (usbQuarantineTbody) {
+  usbQuarantineTbody.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-usb-quarantine-clear]');
+    if (!btn) return;
+    const busPath = btn.dataset.usbQuarantineClear;
+    btn.disabled = true;
+    btn.textContent = 'Clearing…';
+    try {
+      await requestJson('/api/proxmox/command', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'clear_usb_quarantine', args: { bus_path: busPath } }),
+      });
+      showNotification(`Quarantine cleared for bus ${busPath}`, 'info');
+    } catch (err) {
+      showNotification(`Failed to clear quarantine: ${err.message}`, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Clear Quarantine';
+    }
   });
 }
 
@@ -3163,6 +3186,8 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
 
   const certified = parseJsonList(currentSettings.usb_vidpids);
   const usbState = Array.isArray(latestProxmoxData.usb_state) ? latestProxmoxData.usb_state : [];
+  const usbQuarantine = Array.isArray(latestProxmoxData.usb_quarantine) ? latestProxmoxData.usb_quarantine : [];
+  const USB_QUARANTINE_THRESHOLD = 3;
   const missingTimeoutSeconds = (parseInt(currentSettings.usb_missing_timeout, 10) || 60) * 60;
 
   // Compute present bus set first so the stat pill count is accurate
@@ -3213,7 +3238,14 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
       const vm = vmMap.get(Number(e.vmid));
       const name = escHtml(vm?.name || `VM ${e.vmid}`);
       const dot = vm?.status === 'running' ? '🟢' : '⚫';
-      return `<div style="white-space:nowrap">${dot} ${name}</div>`;
+      const failCount = Number(e.fail_count || 0);
+      const isQuarantined = !!e.quarantined_at;
+      const failBadge = isQuarantined
+        ? ` <span class="badge badge-red" title="Bus ${escHtml(e.bus_path||'')} quarantined — will not reprovision until cleared">🔒</span>`
+        : failCount > 0
+          ? ` <span class="badge badge-yellow" title="Bus ${escHtml(e.bus_path||'')} has ${failCount} failure(s) — quarantine at ${USB_QUARANTINE_THRESHOLD}">⚠️ ${failCount}</span>`
+          : '';
+      return `<div style="white-space:nowrap">${dot} ${name}${failBadge}</div>`;
     }).join('');
 
     // Look up hardware-detected name from usb_state or present_usb
@@ -3261,6 +3293,34 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
   unknownUsbTbody._delegated = true;
 
   unknownUsbSection.classList.toggle('hidden', unknownUsb.length === 0);
+
+  // ── Quarantined buses section ─────────────────────────────────────────────
+  // Show quarantined buses (no current VM) from usb_quarantine list.
+  // Buses quarantined but still with an active VM appear inline via fail_count badge above.
+  if (usbQuarantineSection && usbQuarantineTbody) {
+    const hasQuarantined = usbQuarantine.length > 0
+      || usbState.some(e => e.quarantined_at && !usbQuarantine.find(q => q.bus_path === e.bus_path));
+    if (usbQuarantine.length > 0) {
+      usbQuarantineTbody.innerHTML = usbQuarantine.map(q => {
+        const bus = escHtml(q.bus_path || '—');
+        const fc = Number(q.fail_count || 0);
+        const qa = q.quarantined_at ? new Date(q.quarantined_at * 1000).toLocaleString() : '—';
+        return `<tr>
+          <td><code>${bus}</code></td>
+          <td><span class="badge badge-red">${fc}</span></td>
+          <td class="muted">${escHtml(qa)}</td>
+          <td>
+            <button type="button" class="btn btn-secondary btn-small"
+                    data-usb-quarantine-clear="${bus}">Clear Quarantine</button>
+          </td>
+        </tr>`;
+      }).join('');
+      usbQuarantineSection.classList.remove('hidden');
+    } else {
+      usbQuarantineSection.classList.add('hidden');
+    }
+  }
+
   // Show the panel whenever Proxmox is connected; hide only before any data has arrived
   usbSummaryPanel.classList.toggle('hidden', !latestProxmoxData.connected && certified.length === 0 && unknownUsb.length === 0 && usbState.length === 0);
 

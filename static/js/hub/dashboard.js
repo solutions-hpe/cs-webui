@@ -5951,6 +5951,9 @@ function renderHubVmServerUsbPanel(host) {
   const certified = _parseList(cfg.usb_vidpids || "[]");
   // Raw USB state from the spoke — one entry per dongle↔VM assignment.
   const usbState = Array.isArray(px.usb_state) ? px.usb_state : [];
+  // Quarantined buses (no current VM) from the agent's quarantine cache.
+  const usbQuarantine = Array.isArray(px.usb_quarantine) ? px.usb_quarantine : [];
+  const USB_QUARANTINE_THRESHOLD = 3;
   // Physically-present dongles reported by the Proxmox agent.
   const presentUsb = Array.isArray(px.present_usb) ? px.present_usb : [];
   // Unknown (uncertified) devices detected on the spoke.
@@ -6004,7 +6007,14 @@ function renderHubVmServerUsbPanel(host) {
           const vm   = vmMap.get(Number(e.vmid));
           const name = escHtml(vm?.name || `VM ${e.vmid}`);
           const dot  = vm?.status === "running" ? "🟢" : "⚫";
-          return `<div style="white-space:nowrap">${dot} ${name}</div>`;
+          const failCount = Number(e.fail_count || 0);
+          const isQuarantined = !!e.quarantined_at;
+          const failBadge = isQuarantined
+            ? ` <span class="badge badge-red" title="Bus ${escHtml(e.bus_path||'')} quarantined — will not reprovision until cleared">🔒</span>`
+            : failCount > 0
+              ? ` <span class="badge badge-yellow" title="Bus ${escHtml(e.bus_path||'')} has ${failCount} failure(s) — quarantine at ${USB_QUARANTINE_THRESHOLD}">⚠️ ${failCount}</span>`
+              : '';
+          return `<div style="white-space:nowrap">${dot} ${name}${failBadge}</div>`;
         }).join("");
 
     // "Missing" cell: VMs whose dongle has been removed with a countdown to destruction.
@@ -6108,6 +6118,38 @@ function renderHubVmServerUsbPanel(host) {
       </table>
     </div>`;
  
+  // ── Quarantined buses section ──────────────────────────────────────────────
+  const quarantineSection = usbQuarantine.length === 0 ? "" : `
+    <div class="setup-card setup-section-gap" style="margin-top:12px;">
+      <div class="setup-card-header" style="padding:0 0 8px;">
+        <h3>🔒 Quarantined USB Buses</h3>
+        <p>These buses had repeated dongle-missing failures and are skipped during auto-provisioning.
+           Clear the quarantine to allow reprovisioning when a (replacement) dongle is present.</p>
+      </div>
+      <table class="data-table">
+        <colgroup><col><col style="width:80px"><col style="width:160px"><col style="width:160px"></colgroup>
+        <thead><tr><th>Bus Path</th><th>Failures</th><th>Quarantined At</th><th>Action</th></tr></thead>
+        <tbody id="hub-usb-quarantine-tbody">
+          ${usbQuarantine.map(q => {
+            const bus = escHtml(q.bus_path || "—");
+            const fc  = Number(q.fail_count || 0);
+            const qa  = q.quarantined_at ? new Date(q.quarantined_at * 1000).toLocaleString() : "—";
+            return `<tr>
+              <td><code>${bus}</code></td>
+              <td><span class="badge badge-red">${fc}</span></td>
+              <td class="muted">${escHtml(qa)}</td>
+              <td>
+                <button type="button" class="btn btn-secondary btn-small"
+                        data-hvmusb-action="clear_quarantine" data-bus-path="${bus}">
+                  Clear Quarantine
+                </button>
+              </td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>`;
+
   // ── Auto-provisioning settings ──────────────────────────────────────────────
   // The spoke's USB auto-provisioning config is displayed as an editable form.
   // Changes are pushed directly to the spoke via the hub config-push API
@@ -6243,6 +6285,7 @@ function renderHubVmServerUsbPanel(host) {
            </div>`}
     </div>
     ${unknownSection}
+    ${quarantineSection}
     ${ignoredSection}
     ${settingsSection}`;
 }
@@ -6486,6 +6529,22 @@ function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
           tbody.closest(".setup-card")?.remove();
         }
         return;
+      } else if (action === "clear_quarantine") {
+        const busPath = btn.dataset.busPath;
+        if (!busPath) return;
+        const res = await apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes/${encodeURIComponent(spokeId)}/command`, {
+          method: "POST",
+          body: { action: "clear_usb_quarantine", args: { bus_path: busPath } },
+        });
+        const data = await readJson(res);
+        if (!res?.ok) throw new Error(data?.detail || "Could not send clear_quarantine command");
+        showToast(`Quarantine clear queued for bus ${busPath}`, "ok");
+        btn.closest("tr")?.remove();
+        const qTbody = document.getElementById("hub-usb-quarantine-tbody");
+        if (qTbody && !qTbody.childElementCount) {
+          qTbody.closest(".setup-card")?.remove();
+        }
+        return;
       } else if (action === "decertify") {
         // Remove from tenant certified list — does NOT require superadmin.
         const encoded = encodeURIComponent(vidpid);
@@ -6496,7 +6555,6 @@ function wireHubVmServerUsbPanel(panel, tenantId, spokeId, host) {
         if (!res?.ok) throw new Error(data?.detail || "Could not remove from certified list");
         showToast(`${vidpid} removed from certified list and queued for all spokes`, "ok");
       }
-      // Remove the row from the DOM so the change is immediately visible.
       btn.closest("tr")?.remove();
       const tbody = document.getElementById("hub-usb-unknown-tbody");
       if (tbody && !tbody.childElementCount) {

@@ -9778,7 +9778,7 @@ async function initTsSpokesTab(tenantId) {
 
   const tbody = document.getElementById('ts-spokes-approved-tbody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Loading…</td></tr>';
   try {
     const [spokeRes, availableSites] = await Promise.all([
       apiFetch(`/api/${encodeURIComponent(tenantId)}/spokes`),
@@ -9787,7 +9787,7 @@ async function initTsSpokesTab(tenantId) {
     const spokes = spokeRes?.ok ? await spokeRes.json() : [];
     const approved = spokes.filter((spoke) => spoke.status === 'approved');
     if (!approved.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No approved spokes yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No approved spokes yet.</td></tr>';
       return;
     }
     const canManage = canManageTenant(tenantId);
@@ -9866,14 +9866,32 @@ async function initTsSpokesTab(tenantId) {
         <td>${(typeof spoke.online === 'boolean' ? spoke.online : isOnline(spoke.last_seen)) ? '<span class="status-dot online"></span> Online' : '<span class="status-dot offline"></span> Offline'}</td>
         <td>${escHtml(fmtDate(spoke.last_seen || spoke.updated_at || ''))}</td>
         <td id="spoke-sites-${escHtml(spoke.id)}"></td>
+        <td>${canManage ? `<button class="btn btn-danger btn-small ts-spoke-delete-btn" data-spoke-id="${escHtml(spoke.id)}" data-spoke-name="${escHtml(spoke.name || spoke.spoke_name || spoke.hostname || spoke.id)}" type="button" title="Remove this spoke from the tenant">✕ Delete</button>` : ''}</td>
       </tr>`).join('');
+
+    tbody.querySelectorAll('.ts-spoke-delete-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const spokeId = btn.dataset.spokeId;
+        const spokeName = btn.dataset.spokeName;
+        if (!confirm(`Delete spoke "${spokeName}"? It will be removed from the hub. The spoke itself is not affected.`)) return;
+        btn.disabled = true;
+        const res = await apiFetch(`/api/spokes/${encodeURIComponent(spokeId)}`, { method: 'DELETE' });
+        if (!res?.ok) {
+          showToast('Failed to delete spoke.', 'err');
+          btn.disabled = false;
+          return;
+        }
+        showToast(`Spoke "${spokeName}" deleted.`, 'ok');
+        await initTsSpokesTab(tenantId);
+      });
+    });
 
     for (const spoke of approved) {
       const cell = document.getElementById(`spoke-sites-${spoke.id}`);
       if (cell) renderSpokeRow(spoke, cell);
     }
   } catch (_) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Unable to load spokes.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Unable to load spokes.</td></tr>';
   }
 }
 

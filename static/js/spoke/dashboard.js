@@ -1545,6 +1545,39 @@ function renderServerTab(data) {
     }).join('');
   }
 
+  // Provision-halt badge on the header pills row
+  const provHaltBadge = document.getElementById('server-prov-halt-badge');
+  if (provHaltBadge) {
+    const ph = latestProxmoxData.provision_halt;
+    if (ph && ph.halted) {
+      const reason = ph.reason === 'cpu'
+        ? `CPU ${ph.cpu_pct ?? '?'}% >= ${ph.cpu_threshold ?? 80}%`
+        : `Mem ${ph.mem_pct ?? '?'}% >= ${ph.mem_threshold ?? 80}%`;
+      provHaltBadge.innerHTML = `<span class="server-stat-pill warn" title="Provisioning paused: ${escHtml(reason)}">⏸ prov paused</span>`;
+    } else {
+      provHaltBadge.innerHTML = '';
+    }
+  }
+
+  // Structured details table
+  const allVms = Array.isArray(latestProxmoxData.vms) ? latestProxmoxData.vms : [];
+  const runningCount = allVms.filter(v => v.status === 'running').length;
+  const connectedEl = document.getElementById('detail-connected');
+  if (connectedEl) connectedEl.innerHTML = latestProxmoxData.connected ? '🟢 Yes' : '⚫ No';
+  setEl('detail-agent-version', latestProxmoxData.agent_version || '—');
+  setEl('detail-spoke-version', latestProxmoxData.spoke_version || '—');
+  setEl('detail-pve-version', latestProxmoxData.pve_version || '—');
+  setEl('detail-vm-count', allVms.length > 0 ? `${allVms.length} total, ${runningCount} running` : '—');
+  const pendingCmds = latestProxmoxData.pending_command_count;
+  const pendingEl = document.getElementById('detail-pending-cmds');
+  if (pendingEl) {
+    pendingEl.innerHTML = pendingCmds != null
+      ? (pendingCmds > 0
+          ? `<span style="color:var(--accent-orange,#f39c12);font-weight:600;">${pendingCmds}</span>`
+          : `<span class="muted">0</span>`)
+      : `<span class="muted">—</span>`;
+  }
+
   renderUsbSummary(latestProxmoxData);
   renderRecloneStatus(latestRecloneState || latestProxmoxData.reclone_state || {});
   renderAutoProvisionStatus();
@@ -7925,6 +7958,46 @@ document.getElementById('server-clear-cache-btn')?.addEventListener('click', asy
     showToast(`Failed: ${err.message}`, 'error');
   }
 });
+
+// Proxmox API Token save (Details tab card)
+(async () => {
+  const tokenInput = document.getElementById('server-proxmox-api-token-input');
+  const tokenSaveBtn = document.getElementById('server-proxmox-api-token-save-btn');
+  const tokenStatus = document.getElementById('server-proxmox-token-status');
+
+  // Load current token status on page load
+  try {
+    const s = await requestJson('/api/settings');
+    if (tokenStatus) {
+      tokenStatus.textContent = s.proxmox_api_token_configured
+        ? '✅ API token is configured.'
+        : '⚠️ No API token saved — console sessions will fail.';
+    }
+  } catch (_) {}
+
+  if (tokenSaveBtn && tokenInput) {
+    tokenSaveBtn.addEventListener('click', async () => {
+      const token = tokenInput.value.trim();
+      if (!token) { if (tokenStatus) tokenStatus.textContent = 'Enter a token first.'; return; }
+      tokenSaveBtn.disabled = true;
+      tokenSaveBtn.textContent = 'Saving…';
+      try {
+        await requestJson('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ proxmox_api_token: token }),
+        });
+        if (tokenStatus) tokenStatus.textContent = '✅ API token saved.';
+        tokenInput.value = '';
+      } catch (err) {
+        if (tokenStatus) tokenStatus.textContent = `Error: ${err.message}`;
+      } finally {
+        tokenSaveBtn.disabled = false;
+        tokenSaveBtn.textContent = 'Save Token';
+      }
+    });
+  }
+})();
 
 document.getElementById('setup-clear-cache-btn')?.addEventListener('click', async () => {
   if (!confirm('Clear all cache and re-clone?\n\nThis will:\n• Remove git lock files\n• Wipe and re-clone the repo from GitHub\n• Delete client history, state cache, and central history files\n• Restart the WebUI service\n\nThe page will reload automatically once the service is back up.')) return;

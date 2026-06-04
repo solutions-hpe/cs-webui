@@ -2018,10 +2018,10 @@
           <!-- Bulk action bar — hidden when Templates tab is active -->
           <div class="server-bulk-bar" id="vm-bulk-bar">
             <label><input type="checkbox" id="server-select-all"> Select All</label>
-            <button class="btn btn-primary" id="server-bulk-start">▶ Start</button>
-            <button class="btn btn-primary" id="server-bulk-stop">■ Stop</button>
-            <button class="btn btn-warning" id="server-bulk-reclone">↺ Reclone</button>
-            <button class="btn btn-danger" id="server-bulk-delete">✕ Delete</button>
+            <button class="btn btn-primary btn-small" id="server-bulk-start">▶ Start</button>
+            <button class="btn btn-primary btn-small" id="server-bulk-stop">■ Stop</button>
+            <button class="btn btn-warning btn-small" id="server-bulk-reclone">↺ Reclone</button>
+            <button class="btn btn-danger btn-small" id="server-bulk-delete">✕ Delete</button>
           </div>
 
           <!-- Simulation Clients panel -->
@@ -2287,13 +2287,14 @@
                 <!-- Details sub-tab -->
         <div id="server-node" class="setup-subpanel">
           <div class="setup-card setup-section-gap">
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;">
               <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;">
                 <h2 id="server-node-name" style="margin:0;">—</h2>
                 <span class="server-stat-pill" title="CPU">⚡ CPU: <span id="server-cpu">—</span>%</span>
                 <span class="server-stat-pill" title="RAM">🧠 RAM: <span id="server-ram">—</span></span>
                 <span class="server-stat-pill" title="1-hour rolling average CPU" id="server-cpu-avg-pill">📊 CPU avg: <span id="server-cpu-avg">…</span>%</span>
                 <span class="server-stat-pill" title="1-hour rolling average memory" id="server-mem-avg-pill">📊 Mem avg: <span id="server-mem-avg">…</span>%</span>
+                <span id="server-prov-halt-badge"></span>
                 <span id="server-storage-pills"></span>
               </div>
               <div style="display:flex;flex-direction:column;align-items:stretch;gap:4px;flex-shrink:0;min-width:130px;">
@@ -2302,6 +2303,22 @@
                 <span class="server-last-seen" style="font-size:11px;">Last seen: <span id="server-last-seen">—</span></span>
               </div>
             </div>
+            <table class="data-table" id="server-detail-table">
+              <tbody>
+                <tr>
+                  <th>Proxmox Connected</th><td id="detail-connected">—</td>
+                  <th title="Version reported by the Proxmox agent running on the host">Agent Version</th><td id="detail-agent-version">—</td>
+                </tr>
+                <tr>
+                  <th title="CS-WebUI version running on this spoke server">Spoke Version</th><td id="detail-spoke-version">—</td>
+                  <th title="Proxmox VE version reported by the host">PVE Version</th><td id="detail-pve-version">—</td>
+                </tr>
+                <tr>
+                  <th>VMs</th><td id="detail-vm-count">—</td>
+                  <th title="Commands queued or delivered but not yet acknowledged by the agent">Pending Commands</th><td id="detail-pending-cmds">—</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
 
           <div id="proxmox-extra-pending" class="setup-card setup-section-gap hidden" style="padding:10px 16px;">
@@ -2314,6 +2331,19 @@
               <div style="font-size:12px;color:var(--muted);">Resets Proxmox state, VM list, command history, and reclone logs. No restart required.</div>
             </div>
             <button id="server-clear-cache-btn" class="btn btn-danger" style="flex-shrink:0;">Clear Cache</button>
+          </div>
+
+          <!-- Proxmox API Token -->
+          <div class="setup-card setup-section-gap" style="padding:14px 16px;">
+            <div style="font-weight:600;font-size:13px;margin-bottom:8px;">🔑 Proxmox API Token (for VM console)</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Required to open VNC console sessions. Format: <code>user@realm!tokenid=secret</code>. Stored locally on this spoke.</div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <input id="server-proxmox-api-token-input" type="password" autocomplete="new-password"
+                     placeholder="user@pam!tokenid=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                     style="flex:1;min-width:200px;font-family:monospace;font-size:12px;" />
+              <button id="server-proxmox-api-token-save-btn" class="btn btn-primary" style="flex-shrink:0;" type="button">Save Token</button>
+            </div>
+            <div id="server-proxmox-token-status" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
           </div>
 
           <!-- Combined Logs section -->

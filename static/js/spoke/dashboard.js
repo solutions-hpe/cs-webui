@@ -2031,12 +2031,14 @@ function renderSpokeVmServerView(approved) {
     const nameEl   = document.getElementById('server-detail-hostname');
     const statusEl = document.getElementById('server-detail-status-pill');
     const vmEl     = document.getElementById('server-detail-vm-pill');
+    const usbEl    = document.getElementById('server-detail-usb-pill');
     if (nameEl)   nameEl.textContent   = proxmoxServerSelected;
     if (statusEl) {
       statusEl.className   = `stat-pill ${agent?.connected ? 'online' : 'offline'}`;
       statusEl.textContent = agent?.connected ? 'Online' : 'Offline';
     }
     if (vmEl)     vmEl.textContent     = `${agent?.vm_count ?? 0} VMs`;
+    if (usbEl)    usbEl.textContent    = `${agent?.usb_count ?? 0} USB`;
 
     // Wire back button once
     const backBtn = document.getElementById('server-back-btn');
@@ -2090,6 +2092,7 @@ function renderSpokeServerList(approved) {
           <span class="server-node-name">${escHtml(srv.hostname || 'Unknown')}</span>
           <span class="stat-pill ${online ? 'online' : 'offline'}">${online ? 'Online' : 'Offline'}</span>
           <span class="stat-pill">${srv.vm_count ?? 0} VMs</span>
+          <span class="stat-pill">${srv.usb_count ?? 0} USB</span>
           ${cpuPill}${ramPill}
           <span class="stat-pill" style="margin-left:auto;">Click to open →</span>
         </div>

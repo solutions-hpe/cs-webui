@@ -405,14 +405,15 @@ function renderAgentLog() {
   if (!agentLogViewer) return;
   const filter = agentLogFilter ? agentLogFilter.value.toLowerCase() : '';
   const filtered = filter ? agentLogLines.filter((l) => l.toLowerCase().includes(filter)) : agentLogLines;
+  const toRender = [...filtered].reverse();
   agentLogViewer.textContent = '';
-  for (const line of filtered) {
+  for (const line of toRender) {
     const el = document.createElement('div');
     el.className = `agent-log-line ${classifyLogLine(line)}`;
     el.textContent = line;
     agentLogViewer.appendChild(el);
   }
-  if (agentLogAutoScroll) agentLogViewer.scrollTop = agentLogViewer.scrollHeight;
+  if (agentLogAutoScroll) agentLogViewer.scrollTop = 0;
 }
 
 async function loadAgentLogs() {
@@ -449,8 +450,8 @@ function appendAgentLogLines(lines) {
 if (agentLogFilter) agentLogFilter.addEventListener('input', renderAgentLog);
 if (agentLogViewer) {
   agentLogViewer.addEventListener('scroll', () => {
-    const atBottom = agentLogViewer.scrollHeight - agentLogViewer.scrollTop - agentLogViewer.clientHeight < 40;
-    agentLogAutoScroll = atBottom;
+    const atTop = agentLogViewer.scrollTop < 40;
+    agentLogAutoScroll = atTop;
   });
 }
 if (agentLogClear) {
@@ -7455,8 +7456,9 @@ async function loadSetupServiceLogs(lines = 50) {
       serviceLogsCountEl.title = `${returnedCount} ${returnedCount === 1 ? 'line' : 'lines'} returned`;
     }
     if (serviceLogsOutputEl) {
-      serviceLogsOutputEl.textContent = logLines.length ? logLines.join('\n') : '(no service logs available)';
-      serviceLogsOutputEl.scrollTop = serviceLogsOutputEl.scrollHeight;
+      const displayLines = logLines.length ? [...logLines].reverse() : [];
+      serviceLogsOutputEl.textContent = displayLines.length ? displayLines.join('\n') : '(no service logs available)';
+      serviceLogsOutputEl.scrollTop = 0;
     }
   } catch (err) {
     if (serviceLogsCountEl) serviceLogsCountEl.textContent = `Last ${requestedLines} ${requestedLines === 1 ? 'line' : 'lines'}`;
@@ -8834,10 +8836,10 @@ let loadServiceLogs = () => {};
     span._rawText = text;
     span.style.display = match ? '' : 'none';
     span.innerHTML = highlight(text, match ? filter : '') + '\n';
-    output.appendChild(span);
+    output.prepend(span);
 
-    while (output.children.length > MAX_LINES) output.removeChild(output.firstChild);
-    if (autoScroll.checked) output.scrollTop = output.scrollHeight;
+    while (output.children.length > MAX_LINES) output.removeChild(output.lastChild);
+    if (autoScroll.checked) output.scrollTop = 0;
   }
 
   function clearOutput() { output.innerHTML = ''; }
@@ -8849,7 +8851,8 @@ let loadServiceLogs = () => {};
     try {
       const resp = await fetch(`/api/logs/history?lines=${lines}&source=${source}`);
       const text = await resp.text();
-      text.split('\n').forEach(l => { if (l) appendLine(l); });
+      const allLines = text.split('\n').filter(l => l);
+      for (const l of [...allLines].reverse()) appendLine(l);
     } catch (e) {
       appendLine(`[ERROR] Could not load logs: ${e}`);
     }

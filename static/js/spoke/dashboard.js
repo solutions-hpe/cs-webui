@@ -2109,6 +2109,13 @@ function renderSpokeServerList(approved) {
     const ramPill  = ramUsed && ramTotal
       ? `<span class="server-stat-pill" title="RAM">📊 Mem: ${ramUsed} / ${ramTotal}</span>`
       : '';
+    const ph = srv.provision_halt;
+    const throttlePill = (ph && ph.halted) ? (() => {
+      const reason = ph.reason === 'cpu'
+        ? `CPU ${ph.cpu_pct ?? '?'}% ≥ ${ph.cpu_threshold ?? 80}% threshold`
+        : `Memory ${ph.mem_pct ?? '?'}% ≥ ${ph.mem_threshold ?? 80}% threshold`;
+      return `<span class="server-stat-pill" style="color:var(--warning,#f59e0b);font-weight:600;" title="Auto-provisioning throttled: ${escHtml(reason)}">⏸ Auto-Provisioning Throttled</span>`;
+    })() : '';
     return `
       <div class="setup-card hub-vmserver-spoke-card" role="button" tabindex="0"
            data-hostname="${escHtml(srv.hostname || '')}" style="cursor:pointer;">
@@ -2117,7 +2124,7 @@ function renderSpokeServerList(approved) {
           <span class="stat-pill ${online ? 'online' : 'offline'}">${online ? 'Online' : 'Offline'}</span>
           <span class="stat-pill">${srv.vm_count ?? 0} VMs</span>
           <span class="stat-pill">${srv.usb_count ?? 0} USB</span>
-          ${cpuPill}${ramPill}
+          ${cpuPill}${ramPill}${throttlePill}
           <span class="stat-pill" style="margin-left:auto;">Click to open →</span>
         </div>
         <div style="padding:8px 16px;font-size:0.82rem;color:var(--muted);">
@@ -2174,7 +2181,7 @@ function renderProxmoxServerCards(approved) {
       const reason = ph.reason === 'cpu'
         ? `CPU ${ph.cpu_pct ?? '?'}% ≥ ${ph.cpu_threshold ?? 80}% threshold`
         : `Memory ${ph.mem_pct ?? '?'}% ≥ ${ph.mem_threshold ?? 80}% threshold`;
-      return `<span class="server-stat-pill" style="color:var(--warning,#f59e0b);font-weight:600;border-color:var(--warning,#f59e0b);" title="Auto-provisioning throttled: ${escHtml(reason)}">⏸ Throttled</span>`;
+      return `<span class="server-stat-pill" style="color:var(--warning,#f59e0b);font-weight:600;border-color:var(--warning,#f59e0b);" title="Auto-provisioning throttled: ${escHtml(reason)}">⏸ Auto-Provisioning Throttled</span>`;
     })() : '';
 
     const vmCount = srv.vm_count != null ? `${srv.vm_count} total` : '—';
@@ -4032,7 +4039,7 @@ function renderAutoProvisionStatus() {
       if (textEl) {
         const text = [`VM Auto-Provisioning: Provisioning… ${completed}/${total}`];
         if (failed > 0) text.push(`${failed} failed`);
-        if (isThrottled) text.push('⏸ Throttled');
+        if (isThrottled) text.push('⏸ Auto-Provisioning Throttled');
         textEl.textContent = text.join(' · ');
       }
     } else {
@@ -4085,7 +4092,7 @@ function renderAutoProvisionStatus() {
       idleMsg = 'Idle — dongles inserted will trigger auto-provisioning.';
     }
     const throttleNote = throttledServers.length
-      ? `<div style="margin-top:6px;font-size:0.85rem;color:var(--warning,#f59e0b);">⏸ Throttled: <strong>${escHtml(throttledServers.join(', '))}</strong> — resource usage is above the provisioning threshold.</div>`
+      ? `<div style="margin-top:6px;font-size:0.85rem;color:var(--warning,#f59e0b);">⏸ Auto-Provisioning Throttled: <strong>${escHtml(throttledServers.join(', '))}</strong> — resource usage is above the provisioning threshold.</div>`
       : '';
     liveSummary.innerHTML = `<div class="muted" style="padding:12px 0 4px;">${idleMsg}</div>${throttleNote}`;
     logEl.innerHTML = '';

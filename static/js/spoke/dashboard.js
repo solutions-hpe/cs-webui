@@ -2049,8 +2049,6 @@ function renderSpokeVmServerView(approved) {
     }
     if (vmEl)     vmEl.textContent     = `${agent?.vm_count ?? 0} VMs`;
     if (usbEl)    usbEl.textContent    = `${agent?.usb_count ?? 0} USB`;
-    const deleteAllBtn = document.getElementById('server-delete-all-sim');
-    if (deleteAllBtn) deleteAllBtn.style.display = spokeCurrentUser?.role === 'viewer' ? 'none' : '';
 
     // Wire back button once
     const backBtn = document.getElementById('server-back-btn');
@@ -2069,6 +2067,9 @@ function renderSpokeVmServerView(approved) {
   } else {
     listView.style.display   = '';
     detailView.style.display = 'none';
+    // Button lives in the list-view toolbar — show/hide based on role
+    const deleteAllBtn = document.getElementById('server-delete-all-sim');
+    if (deleteAllBtn) deleteAllBtn.style.display = spokeCurrentUser?.role === 'viewer' ? 'none' : '';
     renderSpokeServerList(approved);
   }
 }

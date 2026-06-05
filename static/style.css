@@ -1725,7 +1725,7 @@ button.sim-toggle-btn.badge-sim-inactive:hover {
   border-radius: 999px;
   font-size: 0.82rem;
   font-weight: 600;
-  margin-left: auto;
+  flex-shrink: 0;
   white-space: nowrap;
   background: rgba(51, 65, 85, 0.58);
   border: 1px solid rgba(100, 116, 139, 0.28);

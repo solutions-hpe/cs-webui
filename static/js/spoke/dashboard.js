@@ -4037,19 +4037,19 @@ function renderAutoProvisionStatus() {
     if (!autoProv) {
       bar.classList.add('is-disabled');
       if (iconEl) iconEl.innerHTML = '<span class="autoprov-dot" aria-hidden="true"></span>';
-      if (textEl) textEl.textContent = 'VM Auto-Provisioning: Off';
+      if (textEl) textEl.textContent = 'Off';
     } else if (run.running && total > 0) {
       bar.classList.add('is-active');
       if (iconEl) iconEl.innerHTML = '<span class="autoprov-spinner" aria-hidden="true"></span>';
       if (textEl) {
-        const text = [`VM Auto-Provisioning: Provisioning… ${completed}/${total}`];
+        const text = [`Provisioning… ${completed}/${total}`];
         if (failed > 0) text.push(`${failed} failed`);
         textEl.textContent = text.join(' · ');
       }
     } else {
       bar.classList.add('is-idle');
       if (iconEl) iconEl.innerHTML = '<span class="autoprov-dot" aria-hidden="true"></span>';
-      if (textEl) textEl.textContent = 'VM Auto-Provisioning: Idle';
+      if (textEl) textEl.textContent = 'Idle';
     }
 
     // Make the status bar a clickable toggle (attach once)

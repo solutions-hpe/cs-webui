@@ -380,6 +380,7 @@ function activateServerSubtab(subtabId = 'server-vms') {
     panel.classList.toggle('hidden', !isActive);
   });
   if (subtabId === 'server-vh') renderVhDevices(latestProxmoxData);
+  if (subtabId === 'server-usb') renderIgnoredUsbList();
   updateRefreshPausedState();
 }
 
@@ -739,6 +740,7 @@ const newVidPidInput = document.getElementById('new-vidpid');
 const newVidPidTypeInput = document.getElementById('new-vidpid-type');
 const newVidPidLabelInput = document.getElementById('new-vidpid-label');
 const usbIgnoredList = document.getElementById('usb-ignored-list');
+const usbT2IgnoredList = document.getElementById('usb-t2-ignored-list');
 const ignoredHostnamesList = document.getElementById('ignored-hostnames-list');
 const newIgnoredHostnameInput = document.getElementById('new-ignored-hostname');
 const addIgnoredHostnameBtn = document.getElementById('add-ignored-hostname-btn');
@@ -3077,39 +3079,45 @@ function renderUsbVidPidTable() {
 }
 
 function renderIgnoredUsbList() {
-  if (!usbIgnoredList) return;
-  usbIgnoredList.innerHTML = '';
   const ignored = parseJsonList(currentSettings.usb_ignored_vidpids);
-  if (!ignored.length) {
-    usbIgnoredList.textContent = 'No ignored devices.';
-    return;
-  }
-  ignored.forEach((vidpid) => {
-    const badge = document.createElement('span');
-    badge.className = 'badge badge-grey';
-    badge.textContent = vidpid;
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = ' ✕';
-    button.addEventListener('click', async () => {
-      // Re-read from currentSettings each click to avoid stale closure
-      const current = parseJsonList(currentSettings.usb_ignored_vidpids);
-      currentSettings.usb_ignored_vidpids = serializeJsonList(current.filter((item) => item !== vidpid));
-      renderIgnoredUsbList();
-      renderUsbSummary(latestProxmoxData);
-      try {
-        await requestJson('/api/settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(collectUsbSettingsPayload()),
-        });
-        showNotification(`${vidpid} removed from ignored devices`, 'success');
-      } catch (err) {
-        showNotification(`Error saving: ${err.message}`, 'error');
-      }
+
+  // Render into every ignored-list container (settings panel + T2 USB tab).
+  const containers = [usbIgnoredList, usbT2IgnoredList].filter(Boolean);
+  containers.forEach((container) => {
+    container.innerHTML = '';
+    if (!ignored.length) {
+      container.textContent = 'No ignored devices.';
+      return;
+    }
+    ignored.forEach((vidpid) => {
+      const badge = document.createElement('span');
+      badge.className = 'badge badge-grey';
+      badge.textContent = vidpid;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = ' ✕';
+      button.title = `Un-ignore ${vidpid}`;
+      button.addEventListener('click', async () => {
+        const current = parseJsonList(currentSettings.usb_ignored_vidpids);
+        currentSettings.usb_ignored_vidpids = serializeJsonList(current.filter((item) => item !== vidpid));
+        // Reset unknown fingerprint so it re-renders with restored device
+        _lastUnknownUsbFp = '';
+        renderIgnoredUsbList();
+        renderUsbSummary(latestProxmoxData);
+        try {
+          await requestJson('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(collectUsbSettingsPayload()),
+          });
+          showNotification(`${vidpid} removed from ignored devices`, 'success');
+        } catch (err) {
+          showNotification(`Error saving: ${err.message}`, 'error');
+        }
+      });
+      badge.appendChild(button);
+      container.appendChild(badge);
     });
-    badge.appendChild(button);
-    usbIgnoredList.appendChild(badge);
   });
 }
 

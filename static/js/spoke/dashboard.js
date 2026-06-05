@@ -170,6 +170,8 @@ let proxmoxServerSelected = null; // hostname of currently selected Proxmox agen
 let usbCountdownTimer = null;
 let activeVmCat = 'sim';   // 'sim' | 'other' | 'containers' | 'templates'
 let webuiVmid = null;      // VMID of the LXC container running this service (protected from delete)
+let _lastUnknownUsbFp = ''; // Fingerprint to skip re-rendering unknown USB table when unchanged
+let _lastCertifiedUsbFp = ''; // Fingerprint to skip re-rendering certified USB table when unchanged
 const spokeRoot = document.getElementById('spoke-root');
 const spokeNavRoot = document.getElementById('spoke-nav');
 const spokeTabPanels = document.querySelectorAll('#spoke-root .tab-content');
@@ -3254,6 +3256,9 @@ async function addUnknownToCertified(vidpid, name) {
       (d) => String(d.vidpid || '').toLowerCase() !== String(vidpid || '').toLowerCase()
     );
   }
+  // Reset fingerprints so both tables re-render to reflect the change immediately
+  _lastCertifiedUsbFp = '';
+  _lastUnknownUsbFp = '';
   try {
     await requestJson('/api/settings', {
       method: 'POST',
@@ -3265,6 +3270,26 @@ async function addUnknownToCertified(vidpid, name) {
     showNotification(`${name || vidpid} added to certified devices`, 'success');
   } catch (error) {
     showNotification(`Error saving: ${error.message}`, 'error');
+  }
+}
+
+async function removeCertifiedDevice(vidpid) {
+  if (!vidpid) return;
+  const devices = parseJsonList(currentSettings.usb_vidpids).filter((item) => item?.vidpid !== vidpid);
+  currentSettings.usb_vidpids = serializeJsonList(devices);
+  // Reset fingerprints so the certified table re-renders immediately
+  _lastCertifiedUsbFp = '';
+  try {
+    await requestJson('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(collectUsbSettingsPayload())
+    });
+    renderUsbVidPidTable();
+    renderUsbSummary(latestProxmoxData);
+    showNotification(`${vidpid} removed from certified devices`, 'success');
+  } catch (error) {
+    showNotification(`Error removing device: ${error.message}`, 'error');
   }
 }
 
@@ -3444,8 +3469,16 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
       return v && !certifiedSet.has(v) && !ignoredSet.has(v);
     });
 
-  usbSummaryTbody.innerHTML = '';
-  certified.forEach((device) => {
+  // ── Certified devices table ────────────────────────────────────────────────
+  // Only re-render if the certified list or active-VM/available data changed.
+  const certifiedFp = certified.map(d => `${d.vidpid}|${d.label}|${d.type}`).join(',')
+    + '|' + usbState.map(e => `${e.vidpid}:${e.vmid}:${e.missing_since||''}`).join(',')
+    + '|' + presentUsb.map(p => p.vidpid).join(',');
+
+  if (certifiedFp !== _lastCertifiedUsbFp) {
+    _lastCertifiedUsbFp = certifiedFp;
+    usbSummaryTbody.innerHTML = '';
+    certified.forEach((device) => {
     const entries = usbState.filter((item) => (item.vidpid || '').toLowerCase() === String(device.vidpid || '').toLowerCase());
     const missingEntries = entries.filter((item) => item.missing_since && !presentBusSet.has(String(item?.bus_path || '').trim()));
     const activeEntries = entries.filter((item) => !missingEntries.includes(item));
@@ -3493,24 +3526,45 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
       <td>${missingHtml}</td>
       <td>${available > 0 ? `<span class="badge badge-green">${available}</span>` : '<span class="muted">—</span>'}</td>
       <td>${total}</td>
+      <td><button type="button" class="btn btn-danger btn-small" data-action="remove-certified" data-vidpid="${escHtml(device.vidpid || '')}">✕ Remove</button></td>
     `;
     usbSummaryTbody.appendChild(tr);
-  });
+    });
 
-  unknownUsbTbody.innerHTML = unknownUsb.map((device) => {
-    const vid = escHtml(device.vidpid || '');
-    const nameLabel = escHtml(device.name || device.bus_path || 'Unknown device');
-    return `<tr>
-      <td>${nameLabel}</td>
-      <td>${vid || '—'}</td>
-      <td class="usb-actions">
-        <button type="button" class="btn btn-primary btn-small" data-action="certify" data-vidpid="${vid}" data-name="${nameLabel}">Add to certified</button>
-        <button type="button" class="btn btn-primary btn-small" data-action="ignore" data-vidpid="${vid}">Ignore</button>
-      </td>
-    </tr>`;
-  }).join('');
-  // Use event delegation — one listener on the static tbody handles all button clicks
-  unknownUsbTbody._delegated = true;
+    // Event delegation for Remove buttons
+    usbSummaryTbody.onclick = (e) => {
+      const btn = e.target.closest('[data-action="remove-certified"]');
+      if (!btn) return;
+      const vidpid = btn.dataset.vidpid;
+      if (vidpid) removeCertifiedDevice(vidpid);
+    };
+  }
+
+  // ── Unknown USB table ──────────────────────────────────────────────────────
+  // Skip re-render if the set of unknown devices hasn't changed — prevents
+  // buttons from being destroyed mid-click on every telemetry update.
+
+  // ── Unknown USB table ──────────────────────────────────────────────────────
+  // Skip re-render if the set of unknown devices hasn't changed — prevents
+  // buttons from being destroyed mid-click on every telemetry update.
+  const unknownFp = unknownUsb.map(d => `${d.vidpid}|${d.name||''}`).sort().join(',');
+  if (unknownFp !== _lastUnknownUsbFp) {
+    _lastUnknownUsbFp = unknownFp;
+    unknownUsbTbody.innerHTML = unknownUsb.map((device) => {
+      const vid = escHtml(device.vidpid || '');
+      const nameLabel = escHtml(device.name || device.bus_path || 'Unknown device');
+      return `<tr>
+        <td>${nameLabel}</td>
+        <td>${vid || '—'}</td>
+        <td class="usb-actions">
+          <button type="button" class="btn btn-primary btn-small" data-action="certify" data-vidpid="${vid}" data-name="${nameLabel}">Add to certified</button>
+          <button type="button" class="btn btn-secondary btn-small" data-action="ignore" data-vidpid="${vid}">Ignore</button>
+        </td>
+      </tr>`;
+    }).join('');
+    // Use event delegation — one listener on the static tbody handles all button clicks
+    unknownUsbTbody._delegated = true;
+  }
 
   unknownUsbSection.classList.toggle('hidden', unknownUsb.length === 0);
 

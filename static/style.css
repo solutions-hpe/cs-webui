@@ -375,11 +375,11 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
 
 /* Danger — red outline */
 .btn-danger {
-  background: transparent;
-  border-color: var(--hpe-red);
-  color: var(--hpe-red);
+  background: #ef4444;
+  border-color: #dc2626;
+  color: #fff;
 }
-.btn-danger:hover { background: var(--hpe-red-bg); }
+.btn-danger:hover { background: #dc2626; }
 
 .btn-small { padding: 4px 10px; font-size: 0.78rem; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }

@@ -4022,20 +4022,6 @@ function renderAutoProvisionStatus() {
   const completed = Math.min(run.completed || 0, total);
   const failed = Math.min(run.failed || 0, Math.max(0, total - completed));
 
-  // Resource averages and throttle state
-  const ph = latestProxmoxData?.provision_halt;
-  const isThrottled = !!(ph && ph.halted);
-  const cpuProv = parseInt(currentSettings.cpu_provision_threshold ?? '80', 10);
-  const memProv = parseInt(currentSettings.mem_provision_threshold ?? '80', 10);
-  const throttleTitle = isThrottled
-    ? `Throttled: ${ph.reason === 'cpu' ? `CPU ${ph.cpu_pct ?? '?'}% ≥ ${ph.cpu_threshold ?? cpuProv}% threshold` : `Memory ${ph.mem_pct ?? '?'}% ≥ ${ph.mem_threshold ?? memProv}% threshold`}`
-    : '';
-  // Identify which servers are throttled by name (from per-agent approved_proxmox list)
-  const throttledServers = (latestProxmoxData?.approved_proxmox || [])
-    .filter(s => s.provision_halt && s.provision_halt.halted)
-    .map(s => s.hostname);
-  const throttleServerDesc = throttledServers.length ? throttledServers.join(', ') : '';
-
   // ── VM page status bar (right side of tab nav) ─────────────────────────────
   const bar = document.getElementById('autoprov-status-bar');
   if (bar) {
@@ -4049,22 +4035,17 @@ function renderAutoProvisionStatus() {
       if (iconEl) iconEl.innerHTML = '<span class="autoprov-dot" aria-hidden="true"></span>';
       if (textEl) textEl.textContent = 'VM Auto-Provisioning: Off';
     } else if (run.running && total > 0) {
-      bar.classList.add(isThrottled ? 'is-throttled' : 'is-active');
-      if (iconEl) iconEl.innerHTML = isThrottled
-        ? '<span class="autoprov-dot" style="background:var(--warning,#f59e0b)" aria-hidden="true"></span>'
-        : '<span class="autoprov-spinner" aria-hidden="true"></span>';
+      bar.classList.add('is-active');
+      if (iconEl) iconEl.innerHTML = '<span class="autoprov-spinner" aria-hidden="true"></span>';
       if (textEl) {
         const text = [`VM Auto-Provisioning: Provisioning… ${completed}/${total}`];
         if (failed > 0) text.push(`${failed} failed`);
-        if (isThrottled) text.push('⏸ Auto-Provisioning Throttled');
         textEl.textContent = text.join(' · ');
       }
     } else {
-      bar.classList.add(isThrottled ? 'is-throttled' : 'is-idle');
-      if (iconEl) iconEl.innerHTML = isThrottled
-        ? '<span class="autoprov-dot" style="background:var(--warning,#f59e0b)" aria-hidden="true"></span>'
-        : '<span class="autoprov-dot" aria-hidden="true"></span>';
-      if (textEl) textEl.textContent = isThrottled ? 'VM Auto-Provisioning: Throttled' : 'VM Auto-Provisioning: Idle';
+      bar.classList.add('is-idle');
+      if (iconEl) iconEl.innerHTML = '<span class="autoprov-dot" aria-hidden="true"></span>';
+      if (textEl) textEl.textContent = 'VM Auto-Provisioning: Idle';
     }
 
     // Make the status bar a clickable toggle (attach once)
@@ -4102,16 +4083,10 @@ function renderAutoProvisionStatus() {
   const resetBtn = document.getElementById('autoprov-reset-btn');
   if (resetBtn) resetBtn.style.display = run.running ? '' : 'none';
   if (!showPanel) {
-    let idleMsg;
-    if (!autoProv) {
-      idleMsg = 'Auto-provisioning is disabled. Enable it in the USB settings below.';
-    } else {
-      idleMsg = 'Idle — dongles inserted will trigger auto-provisioning.';
-    }
-    const throttleNote = throttledServers.length
-      ? `<div style="margin-top:6px;font-size:0.85rem;color:var(--warning,#f59e0b);">⏸ Auto-Provisioning Throttled: <strong>${escHtml(throttledServers.join(', '))}</strong> — resource usage is above the provisioning threshold.</div>`
-      : '';
-    liveSummary.innerHTML = `<div class="muted" style="padding:12px 0 4px;">${idleMsg}</div>${throttleNote}`;
+    const idleMsg = autoProv
+      ? 'Idle — dongles inserted will trigger auto-provisioning.'
+      : 'Auto-provisioning is disabled. Enable it in the USB settings below.';
+    liveSummary.innerHTML = `<div class="muted" style="padding:12px 0 4px;">${idleMsg}</div>`;
     logEl.innerHTML = '';
     return;
   }

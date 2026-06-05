@@ -3467,8 +3467,9 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
   if (usbStatPills) {
     const simRunning = runningVms.filter((v) => v.name && v.name.startsWith('client-sim-')).length;
     const totalRunning = runningVms.length;
-    usbStatPills.innerHTML = `<span class="server-stat-pill" title="Running VMs with dongles present">🟢 ${totalRunning} running VM${totalRunning !== 1 ? 's' : ''}</span>`
+    const pillHtml = `<span class="server-stat-pill" title="Running VMs with dongles present">🟢 ${totalRunning} running VM${totalRunning !== 1 ? 's' : ''}</span>`
       + (simRunning > 0 ? `<span class="server-stat-pill" title="client-sim-* VMs running">${simRunning} sim client${simRunning !== 1 ? 's' : ''}</span>` : '');
+    if (usbStatPills.innerHTML !== pillHtml) usbStatPills.innerHTML = pillHtml;
   }
 
   // Client-side filter: remove devices that are now certified or ignored, and skip empty vidpids.
@@ -3483,9 +3484,11 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
 
   // ── Certified devices table ────────────────────────────────────────────────
   // Only re-render if the certified list or active-VM/available data changed.
+  // Sort all arrays so fingerprint is order-independent (server may reorder between ticks).
   const certifiedFp = certified.map(d => `${d.vidpid}|${d.label}|${d.type}`).join(',')
-    + '|' + usbState.map(e => `${e.vidpid}:${e.vmid}:${e.missing_since||''}`).join(',')
-    + '|' + presentUsb.map(p => p.vidpid).join(',');
+    + '|' + [...usbState].sort((a, b) => `${a.vidpid}:${a.vmid}`.localeCompare(`${b.vidpid}:${b.vmid}`))
+        .map(e => `${e.vidpid}:${e.vmid}:${e.missing_since||''}:${e.fail_count||0}:${e.quarantined_at||''}`).join(',')
+    + '|' + [...presentUsb].map(p => p.vidpid).sort().join(',');
 
   if (certifiedFp !== _lastCertifiedUsbFp) {
     _lastCertifiedUsbFp = certifiedFp;

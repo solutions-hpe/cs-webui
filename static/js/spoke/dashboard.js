@@ -2112,7 +2112,7 @@ function renderSpokeServerList(approved) {
       ? `<span class="server-stat-pill" title="RAM">📊 Mem: ${ramUsed} / ${ramTotal}</span>`
       : '';
     const ph = srv.provision_halt;
-    const throttlePill = (ph && ph.halted) ? (() => {
+    const throttlePill = (currentSettings.usb_auto_provision === 'on' && ph && ph.halted) ? (() => {
       const reason = ph.reason === 'cpu'
         ? `CPU ${ph.cpu_pct ?? '?'}% ≥ ${ph.cpu_threshold ?? 80}% threshold`
         : `Memory ${ph.mem_pct ?? '?'}% ≥ ${ph.mem_threshold ?? 80}% threshold`;
@@ -2179,7 +2179,7 @@ function renderProxmoxServerCards(approved) {
     }).join('') : '';
 
     const ph = srv.provision_halt;
-    const throttlePill = (ph && ph.halted) ? (() => {
+    const throttlePill = (currentSettings.usb_auto_provision === 'on' && ph && ph.halted) ? (() => {
       const reason = ph.reason === 'cpu'
         ? `CPU ${ph.cpu_pct ?? '?'}% ≥ ${ph.cpu_threshold ?? 80}% threshold`
         : `Memory ${ph.mem_pct ?? '?'}% ≥ ${ph.mem_threshold ?? 80}% threshold`;

@@ -1879,6 +1879,8 @@ button.sim-toggle-btn.badge-sim-inactive:hover {
 
 #autoprov-live-panel .autoprov-live-summary {
   margin-bottom: 10px;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .autoprov-live-summary-main {
@@ -1911,8 +1913,8 @@ button.sim-toggle-btn.badge-sim-inactive:hover {
   align-items: flex-start;
 }
 .autoprov-left {
-  flex: 0 0 auto;
-  min-width: 140px;
+  flex: 1 1 0;
+  min-width: 0;
 }
 .autoprov-right {
   flex: 1 1 0;

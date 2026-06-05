@@ -344,6 +344,7 @@ async function hydrateSetupSubtab(subtabId) {
   // so the admin can certify them directly from the hub without logging into each spoke.
   if (subtabId === 'setup-proxmox') {
     loadAndRenderSpokeUnknownUsb().catch(() => {});
+    loadPxServersList().catch(() => {});
   }
 }
 
@@ -2011,6 +2012,79 @@ async function revokeProxmoxAgent(hostname) {
 async function loadProxmoxApproved() {
   const approved = await requestJson('/api/proxmox/approved');
   renderProxmoxApproved(Array.isArray(approved) ? approved : []);
+}
+
+// ── Proxmox Servers list (Setup → Proxmox) ────────────────────────────────────
+
+async function loadPxServersList() {
+  try {
+    const [approved, pending] = await Promise.all([
+      requestJson('/api/proxmox/approved'),
+      requestJson('/api/proxmox/pending'),
+    ]);
+    renderPxServersList(
+      Array.isArray(approved) ? approved : [],
+      Array.isArray(pending) ? pending : []
+    );
+  } catch (_) { /* non-fatal */ }
+}
+
+function _fmtRelTime(ts) {
+  if (!ts) return '—';
+  const diff = Math.floor(Date.now() / 1000 - ts);
+  if (diff < 5) return 'just now';
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function renderPxServersList(approved, pending) {
+  const tbody = document.getElementById('px-servers-tbody');
+  const pendingTbody = document.getElementById('px-pending-tbody');
+  if (!tbody || !pendingTbody) return;
+
+  // Approved servers table
+  if (approved.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No approved servers yet.</td></tr>';
+  } else {
+    tbody.innerHTML = approved.map((s) => {
+      const connected = s.connected;
+      const dot = connected
+        ? '<span class="status-dot online" title="Connected"></span>'
+        : '<span class="status-dot offline" title="Offline"></span>';
+      const enc = encodeURIComponent(String(s.hostname || ''));
+      return `<tr>
+        <td style="text-align:center;">${dot}</td>
+        <td><strong>${escHtml(s.hostname)}</strong></td>
+        <td>${escHtml(s.pve_version || '—')}</td>
+        <td>${escHtml(s.agent_version || '—')}</td>
+        <td>${s.vm_count ?? '—'}</td>
+        <td>${_fmtRelTime(s.last_seen)}</td>
+        <td>
+          <button class="btn btn-danger btn-small" onclick="revokeProxmoxAgent(decodeURIComponent('${enc}'))">Remove</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Pending agents table
+  if (pending.length === 0) {
+    pendingTbody.innerHTML = '<tr><td colspan="4" class="empty-state">No pending agents.</td></tr>';
+  } else {
+    pendingTbody.innerHTML = pending.map((p) => {
+      const enc = encodeURIComponent(String(p.hostname || ''));
+      return `<tr>
+        <td><strong>${escHtml(p.hostname)}</strong></td>
+        <td>${escHtml(p.ip || '—')}</td>
+        <td>${_fmtRelTime(p.first_seen)}</td>
+        <td style="display:flex;gap:6px;">
+          <button class="btn btn-primary btn-small" onclick="approveProxmoxAgent(decodeURIComponent('${enc}')).then(()=>loadPxServersList())">Approve</button>
+          <button class="btn btn-danger btn-small" onclick="rejectProxmoxAgent(decodeURIComponent('${enc}')).then(()=>loadPxServersList())">Reject</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }
 }
 
 function applySettingsToUI(s) {
@@ -5666,11 +5740,19 @@ function handleMessage(message) {
     if (message.pending_proxmox !== undefined) renderProxmoxPending(message.pending_proxmox || []);
     if (message.approved_proxmox !== undefined) renderProxmoxApproved(message.approved_proxmox || []);
     renderServerTab(message);
+    // Refresh the Proxmox Servers list if the Setup → Proxmox tab is visible
+    if (document.getElementById('px-servers-tbody') && !document.getElementById('setup-proxmox')?.classList.contains('hidden')) {
+      loadPxServersList().catch(() => {});
+    }
     return;
   }
 
   if (message.type === 'proxmox_pending_update') {
     renderProxmoxPending(message.pending || []);
+    // Refresh the Proxmox Servers list if the Setup → Proxmox tab is visible
+    if (document.getElementById('px-servers-tbody') && !document.getElementById('setup-proxmox')?.classList.contains('hidden')) {
+      loadPxServersList().catch(() => {});
+    }
     return;
   }
 

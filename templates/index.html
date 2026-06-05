@@ -2842,6 +2842,35 @@
         </div>
 
         <div id="setup-proxmox" class="setup-subpanel hidden">
+          <!-- Proxmox Servers card -->
+          <div class="setup-card setup-section-gap">
+            <div class="setup-card-header">
+              <h2>Proxmox Servers</h2>
+              <p>Proxmox host agents registered to this spoke. Approve new agents before they can report VM telemetry.</p>
+            </div>
+            <div class="table-scroll">
+              <table class="data-table" id="px-servers-table">
+                <thead>
+                  <tr><th>Status</th><th>Hostname</th><th>PVE</th><th>Agent</th><th>VMs</th><th>Last Seen</th><th></th></tr>
+                </thead>
+                <tbody id="px-servers-tbody">
+                  <tr><td colspan="7" class="empty-state">No approved servers yet.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="settings-section" id="px-pending-section" style="margin-top:14px;">
+              <div class="settings-section-title">Pending Approval</div>
+              <div class="table-scroll">
+                <table class="data-table" id="px-pending-table">
+                  <thead><tr><th>Hostname</th><th>IP</th><th>First Seen</th><th></th></tr></thead>
+                  <tbody id="px-pending-tbody">
+                    <tr><td colspan="4" class="empty-state">No pending agents.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
           <!-- VM Auto-Provisioning card -->
           <div class="setup-card setup-section-gap">
             <div class="setup-card-header">

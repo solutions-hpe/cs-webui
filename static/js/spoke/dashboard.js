@@ -2184,6 +2184,21 @@ function renderProxmoxServerCards(approved) {
       return `<span class="server-stat-pill" style="color:var(--warning,#f59e0b);font-weight:600;border-color:var(--warning,#f59e0b);" title="Auto-provisioning throttled: ${escHtml(reason)}">⏸ Auto-Provisioning Throttled</span>`;
     })() : '';
 
+    const cpuProv = parseInt(currentSettings.cpu_provision_threshold ?? '80', 10);
+    const memProv = parseInt(currentSettings.mem_provision_threshold ?? '80', 10);
+    const metricColor = (v, thr) => {
+      if (v == null) return '';
+      if (v >= thr) return 'color:var(--danger,#ef4444);font-weight:600;';
+      if (v >= thr * 0.9) return 'color:var(--warning,#f59e0b);font-weight:600;';
+      return '';
+    };
+    const cpuAvgPill = srv.cpu_1h_avg != null
+      ? `<span class="server-stat-pill" title="1-hour average CPU usage" style="${metricColor(srv.cpu_1h_avg, cpuProv)}">📊 CPU avg: ${Number(srv.cpu_1h_avg).toFixed(1)}%</span>`
+      : '';
+    const memAvgPill = srv.mem_1h_avg != null
+      ? `<span class="server-stat-pill" title="1-hour average memory usage" style="${metricColor(srv.mem_1h_avg, memProv)}">📊 Mem avg: ${Number(srv.mem_1h_avg).toFixed(1)}%</span>`
+      : '';
+
     const vmCount = srv.vm_count != null ? `${srv.vm_count} total` : '—';
     const lastSeen = _fmtRelTime(srv.last_seen);
 
@@ -2192,7 +2207,7 @@ function renderProxmoxServerCards(approved) {
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
           ${dot}
           <h2 style="margin:0;">${escHtml(srv.hostname || 'Unknown')}</h2>
-          ${cpuPill}${ramPill}${storagePills}${throttlePill}
+          ${cpuPill}${ramPill}${cpuAvgPill}${memAvgPill}${storagePills}${throttlePill}
         </div>
         <div style="display:flex;flex-direction:column;align-items:stretch;gap:4px;flex-shrink:0;min-width:130px;">
           <button class="btn btn-danger btn-small" onclick="revokeProxmoxAgent(decodeURIComponent('${enc}'))">✕ Revoke Agent</button>

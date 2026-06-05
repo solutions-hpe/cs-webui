@@ -8381,6 +8381,14 @@ document.getElementById('server-delete-all-sim')?.addEventListener('click', asyn
     String(currentSettings.vm_image_1_template_id || '100'),
     String(currentSettings.vm_image_2_template_id || '200'),
   ]);
+  // Parse user-configured protected VMIDs from settings (comma-separated)
+  const protectedVmids = new Set(
+    String(currentSettings.protected_vmids || '').split(',')
+      .map(s => s.trim()).filter(Boolean).map(Number).filter(n => !isNaN(n))
+  );
+  // Always protect the webui container VMID
+  if (webuiVmid != null) protectedVmids.add(Number(webuiVmid));
+
   const allVms = Array.isArray(latestProxmoxData?.vms) ? latestProxmoxData.vms : [];
   const scopedVms = proxmoxServerSelected
     ? allVms.filter(v => !v._agent_hostname || v._agent_hostname === proxmoxServerSelected)
@@ -8390,19 +8398,27 @@ document.getElementById('server-delete-all-sim')?.addEventListener('click', asyn
     v.type !== 'lxc' &&
     !v.is_template &&
     !configuredTemplateIds.has(String(v.vmid)) &&
+    !protectedVmids.has(Number(v.vmid)) &&
     v.status !== 'deleting'
   );
+  const skippedProtected = scopedVms.filter(v =>
+    Number(v.vmid) > 90000 && v.type !== 'lxc' && !v.is_template &&
+    protectedVmids.has(Number(v.vmid))
+  );
   if (!simVms.length) {
-    showNotification('No simulation client VMs to delete.', 'warning');
+    showNotification(skippedProtected.length
+      ? `No simulation VMs to delete (${skippedProtected.length} protected).`
+      : 'No simulation client VMs to delete.', 'warning');
     return;
   }
   const serverLabel = proxmoxServerSelected ? ` on ${proxmoxServerSelected}` : '';
-  if (!confirm(`Delete all ${simVms.length} simulation client VM(s)${serverLabel}?\n\nThis cannot be undone. Disable auto-provisioning first if you do not want them re-created.`)) return;
+  const protectedNote = skippedProtected.length ? `\n\n${skippedProtected.length} protected VM(s) will be skipped.` : '';
+  if (!confirm(`Delete all ${simVms.length} simulation client VM(s)${serverLabel}?${protectedNote}\n\nThis cannot be undone. Disable auto-provisioning first if you do not want them re-created.`)) return;
   try {
     const results = await Promise.allSettled(simVms.map(v => deleteProxmoxVm(v.vmid)));
     const failed = results.filter(r => r.status === 'rejected');
     const ok = results.length - failed.length;
-    if (ok) { showNotification(`Delete queued for ${ok} simulation VM(s).`, 'info'); scheduleProxmoxRefresh(); }
+    if (ok) { showNotification(`Delete queued for ${ok} simulation VM(s)${skippedProtected.length ? ` (${skippedProtected.length} protected, skipped)` : ''}.`, 'info'); scheduleProxmoxRefresh(); }
     if (failed.length) throw new Error(failed[0].reason?.message || 'One or more deletes failed');
   } catch (err) {
     showNotification(`Error: ${err.message}`, 'error');

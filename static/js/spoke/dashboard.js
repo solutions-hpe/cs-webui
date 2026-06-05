@@ -4108,13 +4108,11 @@ function renderAutoProvisionStatus() {
     <div class="autoprov-live-summary-sub">${escHtml(startedText)}</div>
   `;
 
-  // Show only actively in-progress items (cloning / configuring / waiting / failed)
-  // Done items drop off the list. Cap in-progress items to the configured concurrency
-  // limit so we never display more simultaneous slots than the setting allows.
-  const concurrency = Math.max(1, parseInt(currentSettings.reclone_concurrency, 10) || 1);
+  // Show all in-progress and failed items. Done items drop off.
+  // (reclone_concurrency governs fleet reclone, not USB auto-provisioning which is parallel per-dongle)
   const failedItems = run.items.filter(item => item.status === 'failed');
   const inProgressItems = run.items.filter(item => !['done', 'failed'].includes(item.status));
-  const activeItems = [...inProgressItems.slice(0, concurrency), ...failedItems];
+  const activeItems = [...inProgressItems, ...failedItems];
   logEl.innerHTML = activeItems.map((item) => {
     const meta = autoProvisionStatusMeta(item.status);
     // vm_name is the Proxmox VM name which equals the assigned hostname (e.g. amoran-90014).

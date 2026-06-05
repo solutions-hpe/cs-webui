@@ -3990,30 +3990,63 @@ function renderAutoProvisionStatus() {
   const completed = Math.min(run.completed || 0, total);
   const failed = Math.min(run.failed || 0, Math.max(0, total - completed));
 
+  // Resource averages and throttle state
+  const ph = latestProxmoxData?.provision_halt;
+  const isThrottled = !!(ph && ph.halted);
+  const cpuAvg = latestProxmoxData?.cpu_1h_avg ?? latestProxmoxData?.cpu_est_avg;
+  const memAvg = latestProxmoxData?.mem_1h_avg ?? latestProxmoxData?.mem_est_avg;
+  const cpuEst = latestProxmoxData?.cpu_1h_avg == null && latestProxmoxData?.cpu_est_avg != null;
+  const memEst = latestProxmoxData?.mem_1h_avg == null && latestProxmoxData?.mem_est_avg != null;
+  const cpuProv = parseInt(currentSettings.cpu_provision_threshold ?? '80', 10);
+  const memProv = parseInt(currentSettings.mem_provision_threshold ?? '80', 10);
+  const fmtAvg = (v, est) => v != null ? `${est ? '~' : ''}${Number(v).toFixed(1)}%` : null;
+  const cpuStr = fmtAvg(cpuAvg, cpuEst);
+  const memStr = fmtAvg(memAvg, memEst);
+  const metricColor = (v, thr) => {
+    if (v == null) return '';
+    if (v >= thr) return 'color:var(--danger,#ef4444);font-weight:600;';
+    if (v >= thr * 0.9) return 'color:var(--warning,#f59e0b);font-weight:600;';
+    return 'color:var(--success,#22c55e);';
+  };
+  const throttleTitle = isThrottled
+    ? `Throttled: ${ph.reason === 'cpu' ? `CPU ${ph.cpu_pct ?? '?'}% ≥ ${ph.cpu_threshold ?? cpuProv}% threshold` : `Memory ${ph.mem_pct ?? '?'}% ≥ ${ph.mem_threshold ?? memProv}% threshold`}`
+    : '';
+  const resourcePills = (cpuStr || memStr) ? `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+      ${cpuStr ? `<span class="server-stat-pill${cpuEst ? ' muted' : ''}" title="${cpuEst ? '~Estimated (warming up)' : '1-hour avg CPU'}" style="${metricColor(cpuAvg, cpuProv)}">📊 CPU avg: ${escHtml(cpuStr)}</span>` : ''}
+      ${memStr ? `<span class="server-stat-pill${memEst ? ' muted' : ''}" title="${memEst ? '~Estimated (warming up)' : '1-hour avg memory'}" style="${metricColor(memAvg, memProv)}">📊 Mem avg: ${escHtml(memStr)}</span>` : ''}
+      ${isThrottled ? `<span class="server-stat-pill warn" title="${escHtml(throttleTitle)}">⏸ Throttled</span>` : ''}
+    </div>` : (isThrottled ? `<div style="margin-top:8px;"><span class="server-stat-pill warn" title="${escHtml(throttleTitle)}">⏸ Throttled</span></div>` : '');
+
   // ── VM page status bar (right side of tab nav) ─────────────────────────────
   const bar = document.getElementById('autoprov-status-bar');
   if (bar) {
     const iconEl = document.getElementById('autoprov-status-icon');
     const textEl = document.getElementById('autoprov-status-text');
     if (iconEl) iconEl.className = 'autoprov-status-icon';
-    bar.classList.remove('is-active', 'is-idle', 'is-disabled');
+    bar.classList.remove('is-active', 'is-idle', 'is-disabled', 'is-throttled');
 
     if (!autoProv) {
       bar.classList.add('is-disabled');
       if (iconEl) iconEl.innerHTML = '<span class="autoprov-dot" aria-hidden="true"></span>';
       if (textEl) textEl.textContent = 'VM Auto-Provisioning: Off';
     } else if (run.running && total > 0) {
-      bar.classList.add('is-active');
-      if (iconEl) iconEl.innerHTML = '<span class="autoprov-spinner" aria-hidden="true"></span>';
+      bar.classList.add(isThrottled ? 'is-throttled' : 'is-active');
+      if (iconEl) iconEl.innerHTML = isThrottled
+        ? '<span class="autoprov-dot" style="background:var(--warning,#f59e0b)" aria-hidden="true"></span>'
+        : '<span class="autoprov-spinner" aria-hidden="true"></span>';
       if (textEl) {
         const text = [`VM Auto-Provisioning: Provisioning… ${completed}/${total}`];
         if (failed > 0) text.push(`${failed} failed`);
+        if (isThrottled) text.push('⏸ Throttled');
         textEl.textContent = text.join(' · ');
       }
     } else {
-      bar.classList.add('is-idle');
-      if (iconEl) iconEl.innerHTML = '<span class="autoprov-dot" aria-hidden="true"></span>';
-      if (textEl) textEl.textContent = 'VM Auto-Provisioning: Idle';
+      bar.classList.add(isThrottled ? 'is-throttled' : 'is-idle');
+      if (iconEl) iconEl.innerHTML = isThrottled
+        ? '<span class="autoprov-dot" style="background:var(--warning,#f59e0b)" aria-hidden="true"></span>'
+        : '<span class="autoprov-dot" aria-hidden="true"></span>';
+      if (textEl) textEl.textContent = isThrottled ? 'VM Auto-Provisioning: Throttled' : 'VM Auto-Provisioning: Idle';
     }
 
     // Make the status bar a clickable toggle (attach once)
@@ -4053,9 +4086,9 @@ function renderAutoProvisionStatus() {
   if (!showPanel) {
     liveSummary.innerHTML = `<div class="muted" style="padding:12px 0 4px;">${
       autoProv
-        ? 'Idle — dongles inserted will trigger auto-provisioning.'
+        ? (isThrottled ? '⏸ Auto-provisioning throttled — resource usage is above the provisioning threshold.' : 'Idle — dongles inserted will trigger auto-provisioning.')
         : 'Auto-provisioning is disabled. Enable it in the USB settings below.'
-    }</div>`;
+    }</div>${resourcePills}`;
     logEl.innerHTML = '';
     return;
   }
@@ -4071,6 +4104,7 @@ function renderAutoProvisionStatus() {
     </div>
     <div class="progress-bar-wrap autoprov-progress-wrap"><div class="progress-bar" style="width:${completedPct}%;"></div></div>
     <div class="autoprov-live-summary-sub">${escHtml(startedText)}</div>
+    ${resourcePills}
   `;
 
   // Show only actively in-progress items (cloning / configuring / waiting / failed)

@@ -5319,9 +5319,15 @@ function renderHubVmServer() {
                   const px = host.proxmox || {};
                   const cpuAvg = px.cpu_1h_avg != null ? `${Number(px.cpu_1h_avg).toFixed(1)}%` : px.cpu_est_avg != null ? `~${Number(px.cpu_est_avg).toFixed(1)}%` : null;
                   const memAvg = px.mem_1h_avg != null ? `${Number(px.mem_1h_avg).toFixed(1)}%` : px.mem_est_avg != null ? `~${Number(px.mem_est_avg).toFixed(1)}%` : null;
+                  const ph = px.provision_halt;
+                  const throttled = ph && ph.halted;
+                  const throttleTitle = throttled
+                    ? `Auto-provisioning throttled: ${ph.reason === 'cpu' ? `CPU ${ph.cpu_pct ?? '?'}% ≥ ${ph.cpu_threshold ?? 80}% threshold` : `Memory ${ph.mem_pct ?? '?'}% ≥ ${ph.mem_threshold ?? 80}% threshold`}`
+                    : '';
                   return [
                     cpuAvg ? `<span class="server-stat-pill" title="1-hour average CPU usage">📊 CPU: ${cpuAvg}</span>` : "",
                     memAvg ? `<span class="server-stat-pill" title="1-hour average memory usage">📊 Mem: ${memAvg}</span>` : "",
+                    throttled ? `<span class="server-stat-pill warn" title="${escHtml(throttleTitle)}">⏸ Throttled</span>` : "",
                   ].join("");
                 })()}
                 <span class="stat-pill" style="margin-left:auto;">Click to open →</span>

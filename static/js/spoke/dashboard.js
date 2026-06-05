@@ -281,6 +281,10 @@ spokeNavTabs.forEach((tab) => {
 // Reset any open drill-down panels back to the overview when the top-level
 // tab is clicked — so you never land in a stale detail view.
 function resetTabDrilldowns(tabName) {
+  if (tabName === 'server') {
+    // Always return to the server list when re-entering the VM Server tab.
+    proxmoxServerSelected = null;
+  }
   if (tabName === 'central' || tabName === 'simulations') {
     // Central site detail
     if (typeof closeSiteDetail === 'function') closeSiteDetail();

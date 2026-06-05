@@ -1132,8 +1132,6 @@ function applySpokeViewerMode() {
   document.getElementById('reclone-clear-btn')?.classList.toggle('hidden', isViewer);
   document.getElementById('autoprov-reset-btn')?.classList.toggle('hidden', isViewer);
   document.getElementById('vm-bulk-bar')?.classList.toggle('hidden', isViewer || activeVmCat === 'templates');
-  const _deleteAllSimBtn = document.getElementById('server-delete-all-sim');
-  if (_deleteAllSimBtn) _deleteAllSimBtn.style.display = (activeVmCat === 'sim' && !isViewer) ? '' : 'none';
   document.querySelectorAll('.vm-action-btn').forEach((button) => {
     button.classList.toggle('hidden', isViewer);
     if (isViewer) button.disabled = true;
@@ -2051,6 +2049,8 @@ function renderSpokeVmServerView(approved) {
     }
     if (vmEl)     vmEl.textContent     = `${agent?.vm_count ?? 0} VMs`;
     if (usbEl)    usbEl.textContent    = `${agent?.usb_count ?? 0} USB`;
+    const deleteAllBtn = document.getElementById('server-delete-all-sim');
+    if (deleteAllBtn) deleteAllBtn.style.display = spokeCurrentUser?.role === 'viewer' ? 'none' : '';
 
     // Wire back button once
     const backBtn = document.getElementById('server-back-btn');
@@ -8288,9 +8288,6 @@ vmCatTabs.forEach((btn) => {
     // Bulk bar hidden for templates (read-only) and viewer sessions
     const bulkBar = document.getElementById('vm-bulk-bar');
     if (bulkBar) bulkBar.classList.toggle('hidden', activeVmCat === 'templates' || spokeCurrentUser?.role === 'viewer');
-    // Delete All Sim VMs button only visible on the Sim tab
-    const deleteAllSimBtn = document.getElementById('server-delete-all-sim');
-    if (deleteAllSimBtn) deleteAllSimBtn.style.display = (activeVmCat === 'sim' && spokeCurrentUser?.role !== 'viewer') ? '' : 'none';
     // Reset select-all
     const sa = document.getElementById('server-select-all');
     if (sa) sa.checked = false;

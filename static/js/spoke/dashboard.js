@@ -1132,6 +1132,8 @@ function applySpokeViewerMode() {
   document.getElementById('reclone-clear-btn')?.classList.toggle('hidden', isViewer);
   document.getElementById('autoprov-reset-btn')?.classList.toggle('hidden', isViewer);
   document.getElementById('vm-bulk-bar')?.classList.toggle('hidden', isViewer || activeVmCat === 'templates');
+  const _deleteAllSimBtn = document.getElementById('server-delete-all-sim');
+  if (_deleteAllSimBtn) _deleteAllSimBtn.style.display = (activeVmCat === 'sim' && !isViewer) ? '' : 'none';
   document.querySelectorAll('.vm-action-btn').forEach((button) => {
     button.classList.toggle('hidden', isViewer);
     if (isViewer) button.disabled = true;
@@ -8311,6 +8313,9 @@ vmCatTabs.forEach((btn) => {
     // Bulk bar hidden for templates (read-only) and viewer sessions
     const bulkBar = document.getElementById('vm-bulk-bar');
     if (bulkBar) bulkBar.classList.toggle('hidden', activeVmCat === 'templates' || spokeCurrentUser?.role === 'viewer');
+    // Delete All Sim VMs button only visible on the Sim tab
+    const deleteAllSimBtn = document.getElementById('server-delete-all-sim');
+    if (deleteAllSimBtn) deleteAllSimBtn.style.display = (activeVmCat === 'sim' && spokeCurrentUser?.role !== 'viewer') ? '' : 'none';
     // Reset select-all
     const sa = document.getElementById('server-select-all');
     if (sa) sa.checked = false;
@@ -8397,6 +8402,39 @@ document.getElementById('server-select-all')?.addEventListener('change', (e) => 
       showNotification(`Error: ${err.message}`, 'error');
     }
   });
+});
+
+document.getElementById('server-delete-all-sim')?.addEventListener('click', async () => {
+  const configuredTemplateIds = new Set([
+    String(currentSettings.vm_image_1_template_id || '100'),
+    String(currentSettings.vm_image_2_template_id || '200'),
+  ]);
+  const allVms = Array.isArray(latestProxmoxData?.vms) ? latestProxmoxData.vms : [];
+  const scopedVms = proxmoxServerSelected
+    ? allVms.filter(v => !v._agent_hostname || v._agent_hostname === proxmoxServerSelected)
+    : allVms;
+  const simVms = scopedVms.filter(v =>
+    Number(v.vmid) > 90000 &&
+    v.type !== 'lxc' &&
+    !v.is_template &&
+    !configuredTemplateIds.has(String(v.vmid)) &&
+    v.status !== 'deleting'
+  );
+  if (!simVms.length) {
+    showNotification('No simulation client VMs to delete.', 'warning');
+    return;
+  }
+  const serverLabel = proxmoxServerSelected ? ` on ${proxmoxServerSelected}` : '';
+  if (!confirm(`Delete all ${simVms.length} simulation client VM(s)${serverLabel}?\n\nThis cannot be undone. Disable auto-provisioning first if you do not want them re-created.`)) return;
+  try {
+    const results = await Promise.allSettled(simVms.map(v => deleteProxmoxVm(v.vmid)));
+    const failed = results.filter(r => r.status === 'rejected');
+    const ok = results.length - failed.length;
+    if (ok) { showNotification(`Delete queued for ${ok} simulation VM(s).`, 'info'); scheduleProxmoxRefresh(); }
+    if (failed.length) throw new Error(failed[0].reason?.message || 'One or more deletes failed');
+  } catch (err) {
+    showNotification(`Error: ${err.message}`, 'error');
+  }
 });
 
 updateCentralToolbar();

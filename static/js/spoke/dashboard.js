@@ -4081,14 +4081,13 @@ function renderAutoProvisionStatus() {
     let idleMsg;
     if (!autoProv) {
       idleMsg = 'Auto-provisioning is disabled. Enable it in the USB settings below.';
-    } else if (isThrottled) {
-      idleMsg = throttleServerDesc
-        ? `⏸ Auto-provisioning throttled by <strong>${escHtml(throttleServerDesc)}</strong> — resource usage is above the provisioning threshold.`
-        : `⏸ Auto-provisioning throttled — resource usage is above the provisioning threshold.`;
     } else {
       idleMsg = 'Idle — dongles inserted will trigger auto-provisioning.';
     }
-    liveSummary.innerHTML = `<div class="muted" style="padding:12px 0 4px;">${idleMsg}</div>`;
+    const throttleNote = throttledServers.length
+      ? `<div style="margin-top:6px;font-size:0.85rem;color:var(--warning,#f59e0b);">⏸ Throttled: <strong>${escHtml(throttledServers.join(', '))}</strong> — resource usage is above the provisioning threshold.</div>`
+      : '';
+    liveSummary.innerHTML = `<div class="muted" style="padding:12px 0 4px;">${idleMsg}</div>${throttleNote}`;
     logEl.innerHTML = '';
     return;
   }

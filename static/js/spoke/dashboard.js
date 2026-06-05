@@ -2458,31 +2458,6 @@ function applyVersionStatus(data) {
     }
   }
 
-  if (!updateMsg) return;
-
-  const legacyLogDetails = document.getElementById('update-log-details');
-  const legacyLogOutput  = document.getElementById('update-log-output');
-
-  if (data.update_error) {
-    updateMsg.textContent = `Update failed: ${data.update_error}`;
-    updateMsg.className = 'settings-message error';
-    updateMsg.classList.remove('hidden');
-    if (legacyLogDetails && legacyLogOutput && data.update_log?.length) {
-      legacyLogOutput.textContent = data.update_log.join('\n');
-      legacyLogDetails.classList.remove('hidden');
-      legacyLogDetails.open = true;
-    }
-  } else if (inProgress) {
-    const lastLine = data.update_log?.length ? ` — ${data.update_log[data.update_log.length - 1]}` : '';
-    updateMsg.textContent = `Installing v${data.available_version}… service will restart.${lastLine}`;
-    updateMsg.className = 'settings-message success';
-    updateMsg.classList.remove('hidden');
-    if (legacyLogDetails && legacyLogOutput && data.update_log?.length) {
-      legacyLogOutput.textContent = data.update_log.join('\n');
-      legacyLogDetails.classList.remove('hidden');
-      legacyLogOutput.scrollTop = legacyLogOutput.scrollHeight;
-    }
-  }
 }
 
 if (refreshWebuiBtn) {

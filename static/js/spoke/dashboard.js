@@ -7622,6 +7622,9 @@ if (usbAutoProvisionInput) usbAutoProvisionInput.addEventListener('change', () =
 [usbMissingTimeoutInput, usbMaxSlotsInput, vmImage1TemplateIdInput, vmImage2TemplateIdInput, vmImage1PctInput].forEach((el) => {
   if (el) el.addEventListener('blur', () => _autoSaveUsb(usbSettingsMsg));
 });
+// Protected VMIDs — save on blur (was missing, causing value to not persist)
+const protectedVmidsInput = document.getElementById('protected-vmids');
+if (protectedVmidsInput) protectedVmidsInput.addEventListener('blur', () => _autoSaveUsb(usbSettingsMsg));
 
 // Layer 1 VLAN — save on blur
 [l1VlanStartInput, l1VlanEndInput].forEach((el) => {

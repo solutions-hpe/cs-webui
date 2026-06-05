@@ -972,7 +972,7 @@
         <div class="page-toolbar">
           <span class="server-node-name">Troubleshooting</span>
           <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-            <button id="ts-troubleshoot-delete-vms-btn" class="btn btn-danger btn-small" type="button">🗑 Delete All Sim VMs</button>
+            <button id="ts-troubleshoot-delete-vms-btn" class="btn btn-danger btn-small" type="button">✕ Delete All Sim VMs</button>
             <button id="ts-troubleshoot-clear-queue-btn" class="btn btn-warning btn-small" type="button">🧹 Clear All Queues</button>
             <button id="ts-troubleshoot-update-btn" class="btn btn-primary btn-small" type="button">🔄 Update All Spokes</button>
           </div>
@@ -1008,7 +1008,7 @@
                   <strong style="display:block;margin-bottom:4px;">Delete All Simulation VMs</strong>
                   <p style="margin:0;font-size:13px;color:var(--muted);">Queues deletion of every auto-provisioned simulation VM (VMID &gt; 9000) across all spokes. Disable auto-provisioning first to prevent immediate re-creation.</p>
                 </div>
-                <button id="ts-trbl-delete-vms-btn" class="btn btn-danger btn-small" style="align-self:flex-start;white-space:nowrap;" type="button">🗑 Delete All Sim VMs</button>
+                <button id="ts-trbl-delete-vms-btn" class="btn btn-danger btn-small" style="align-self:flex-start;white-space:nowrap;" type="button">✕ Delete All Sim VMs</button>
               </div>
             </div>
             <div id="ts-trbl-maintenance-msg" class="settings-message hidden" style="margin-top:8px;"></div>
@@ -1937,7 +1937,7 @@
               <span class="stat-pill" id="spoke-vm-usb-pill">— USB</span>
               <span class="stat-pill" id="spoke-vm-clients-pill">— clients</span>
             </div>
-            <button class="btn btn-danger btn-small" id="server-delete-all-sim" style="margin-left:auto;" title="Delete all simulation client VMs (VMID &gt; 90000). Does not affect templates, containers, or non-sim guests.">🗑 Delete All Sim VMs</button>
+            <button class="btn btn-danger btn-small" id="server-delete-all-sim" style="margin-left:auto;" title="Delete all simulation client VMs (VMID &gt; 90000). Does not affect templates, containers, or non-sim guests.">✕ Delete All Sim VMs</button>
           </div>
 
           <!-- Fleet Reclone + Auto-Provisioning: shown in list view, like the hub -->

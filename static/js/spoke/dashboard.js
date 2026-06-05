@@ -1428,6 +1428,7 @@ async function triggerAgentUpdateForHost(hostname) {
     showToast('Failed to queue agent update: ' + e.message, 'error');
   }
 }
+window.triggerAgentUpdateForHost = triggerAgentUpdateForHost;
 
 function handleUpdateAllProgress(state) {
   const btn = document.getElementById('update-all-btn');
@@ -1912,16 +1913,19 @@ function renderProxmoxApproved(approved) {
 async function approveProxmoxAgent(hostname) {
   await requestJson(`/api/proxmox/approve/${encodeURIComponent(hostname)}`, { method: 'POST' });
 }
+window.approveProxmoxAgent = approveProxmoxAgent;
 
 async function rejectProxmoxAgent(hostname) {
   await requestJson(`/api/proxmox/reject/${encodeURIComponent(hostname)}`, { method: 'POST' });
 }
+window.rejectProxmoxAgent = rejectProxmoxAgent;
 
 async function revokeProxmoxAgent(hostname) {
   if (!confirm(`Revoke key for ${hostname}?`)) return;
   await requestJson(`/api/proxmox/approved/${encodeURIComponent(hostname)}`, { method: 'DELETE' });
   loadProxmoxApproved().catch(() => {});
 }
+window.revokeProxmoxAgent = revokeProxmoxAgent;
 
 async function loadProxmoxApproved() {
   const approved = await requestJson('/api/proxmox/approved');
@@ -1942,6 +1946,7 @@ async function loadPxServersList() {
     );
   } catch (_) { /* non-fatal */ }
 }
+window.loadPxServersList = loadPxServersList;
 
 function _fmtRelTime(ts) {
   if (!ts) return '—';

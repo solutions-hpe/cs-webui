@@ -3905,17 +3905,17 @@ function updateVmRecloneIcons() {
 function getAutoProvisionRunState(proxmoxData = latestProxmoxData) {
   const run = proxmoxData?.prov_run;
   if (run && Array.isArray(run.items)) {
-    const concurrency = Math.max(1, parseInt(currentSettings.reclone_concurrency, 10) || 1);
     const allItems = run.items
       .filter((item) => item && item.vmid != null)
       .map((item) => ({
         ...item,
         status: String(item.status || 'pending').toLowerCase(),
       }));
-    // Cap active (non-terminal) items to the concurrency limit; always keep failed/done
+    // Show all active items — reclone_concurrency governs fleet reclone only,
+    // not USB auto-provisioning which fires one clone per dongle in parallel.
     const terminalItems = allItems.filter(i => ['done', 'failed'].includes(i.status));
     const activeItems = allItems.filter(i => !['done', 'failed'].includes(i.status));
-    const items = [...activeItems.slice(0, concurrency), ...terminalItems];
+    const items = [...activeItems, ...terminalItems];
     return {
       running: Boolean(run.running),
       total: Number.isFinite(Number(run.total)) ? Number(run.total) : allItems.length,
@@ -3931,10 +3931,8 @@ function getAutoProvisionRunState(proxmoxData = latestProxmoxData) {
   const usbState = Array.isArray(proxmoxData?.usb_state) ? proxmoxData.usb_state : [];
   const vms = Array.isArray(proxmoxData?.vms) ? proxmoxData.vms : [];
   const vmByVmid = new Map(vms.map((vm) => [String(vm?.vmid), vm || {}]));
-  // Respect the configured concurrency limit — only show VMs that are actively
-  // being worked on (up to reclone_concurrency at a time). Prefer running VMs
-  // first (configuring) so they're not displaced by queued clones.
-  const concurrency = Math.max(1, parseInt(currentSettings.reclone_concurrency, 10) || 1);
+  // Show all provisioning entries — USB auto-provisioning fires one clone per dongle in parallel,
+  // so reclone_concurrency (which governs fleet reclone) must not limit this list.
   const allProvisioningEntries = usbState
     .filter((entry) => entry && entry.vmid != null && entry.prov_status === 'provisioning')
     .map((entry) => {
@@ -3948,14 +3946,13 @@ function getAutoProvisionRunState(proxmoxData = latestProxmoxData) {
         status: vm.status === 'running' ? 'configuring' : 'cloning',
       };
     });
-  // Sort: configuring (VM running) first, then cloning — then cap to concurrency
+  // Sort: configuring (VM running) first, then cloning
   allProvisioningEntries.sort((a, b) => (a.status === 'configuring' ? -1 : b.status === 'configuring' ? 1 : 0));
-  const provisioningItems = allProvisioningEntries.slice(0, concurrency);
 
   // Also include VMs that finished cloning but haven't checked into the API yet.
   // This keeps the live panel and "provisioning" badge visible through the
   // boot-up gap between clone-complete and first API check-in.
-  const provisioningVmids = new Set(provisioningItems.map((i) => String(i.vmid)));
+  const provisioningVmids = new Set(allProvisioningEntries.map((i) => String(i.vmid)));
   const pendingCheckinItems = vms
     .filter((vm) => vm && vm.pending_checkin === true && !provisioningVmids.has(String(vm.vmid)))
     .map((vm) => ({
@@ -3967,7 +3964,7 @@ function getAutoProvisionRunState(proxmoxData = latestProxmoxData) {
       status: 'pending_checkin',
     }));
 
-  const items = [...provisioningItems, ...pendingCheckinItems];
+  const items = [...allProvisioningEntries, ...pendingCheckinItems];
 
   return {
     running: items.length > 0,

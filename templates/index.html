@@ -1925,6 +1925,21 @@
       </main>
 
       <main id="tab-server" class="page tab-content hidden tab-panel" style="display:none;">
+
+        <!-- Server list view: shown when no agent is selected -->
+        <div id="server-list-view">
+          <div id="pxagent-server-cards" class="hub-vmserver-list"></div>
+        </div>
+
+        <!-- Server detail view: shown after clicking an agent card -->
+        <div id="server-detail-view" style="display:none;">
+          <div id="server-detail-breadcrumb" style="display:flex;align-items:center;gap:12px;padding:10px 0 12px;flex-wrap:wrap;">
+            <button id="server-back-btn" class="btn btn-secondary btn-small" type="button">← Back</button>
+            <strong id="server-detail-hostname" style="font-size:1rem;"></strong>
+            <span id="server-detail-status-pill" class="stat-pill"></span>
+            <span id="server-detail-vm-pill" class="stat-pill"></span>
+          </div>
+
         <nav class="setup-subnav" role="tablist">
           <button class="setup-subtab server-subtab active" data-subtab="server-vms" role="tab">VMs</button>
           <button class="setup-subtab server-subtab" data-subtab="server-usb" role="tab">USB (T2)</button>
@@ -2375,7 +2390,7 @@
           </div>
         </div>
 
-        <!-- Agent Log sub-tab -->
+        </div><!-- /server-detail-view -->
       </main>
 
       <!-- ── Simulations tab ── -->

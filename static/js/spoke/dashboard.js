@@ -166,6 +166,7 @@ let centralLastSyncedTs = null;
 let centralStatusInitialized = false;
 let latestProxmoxData = { vms: [], usb_state: [], usb_quarantine: [], unknown_usb: [], reclone_state: null, vh_devices: null };  // physical_usb removed
 let latestRecloneState = null;
+let proxmoxServerSelected = null; // hostname of currently selected Proxmox agent (null = show server list)
 let usbCountdownTimer = null;
 let activeVmCat = 'sim';   // 'sim' | 'other' | 'containers' | 'templates'
 let webuiVmid = null;      // VMID of the LXC container running this service (protected from delete)
@@ -1520,11 +1521,11 @@ function renderServerTab(data) {
   updateCmdTargetDropdown();
   if (Array.isArray(window._lastCommands)) renderCommandTable(window._lastCommands);
 
-  // Render per-server cards in the Details tab
+  // Render two-level server navigation (list view or detail view)
   const approved = Array.isArray(latestProxmoxData.approved_proxmox) ? latestProxmoxData.approved_proxmox : [];
-  renderProxmoxServerCards(approved);
+  renderSpokeVmServerView(approved);
 
-  // Spoke-level global stats
+  // Spoke-level global stats (shown in Details sub-tab)
   setEl('detail-spoke-version', latestProxmoxData.spoke_version || '—');
   const pendingCmds = latestProxmoxData.pending_command_count;
   const pendingEl = document.getElementById('detail-pending-cmds');
@@ -1547,7 +1548,11 @@ function renderServerTab(data) {
   renderAutoProvisionStatus();
   renderVhDevices(latestProxmoxData);
 
-  const vms = Array.isArray(latestProxmoxData.vms) ? latestProxmoxData.vms : [];
+  // Filter VMs to the selected agent when in detail view; show all when on server list.
+  const allVms = Array.isArray(latestProxmoxData.vms) ? latestProxmoxData.vms : [];
+  const vms = proxmoxServerSelected
+    ? allVms.filter(v => v._agent_hostname === proxmoxServerSelected)
+    : allVms;
   const autoRecoveryPending = new Set(
     Array.isArray(latestProxmoxData.auto_recovery_pending) ? latestProxmoxData.auto_recovery_pending : []
   );
@@ -2004,6 +2009,106 @@ function renderPxServersList(approved, pending) {
       </tr>`;
     }).join('');
   }
+}
+
+// ── Spoke VM Server two-level navigation ──────────────────────────────────────
+
+/**
+ * Top-level router: shows the server card list or the per-agent detail view
+ * depending on whether an agent has been selected.
+ */
+function renderSpokeVmServerView(approved) {
+  const listView   = document.getElementById('server-list-view');
+  const detailView = document.getElementById('server-detail-view');
+  if (!listView || !detailView) return;
+
+  if (proxmoxServerSelected) {
+    listView.style.display   = 'none';
+    detailView.style.display = '';
+
+    // Update breadcrumb header for the selected agent
+    const agent = (approved || []).find(a => a.hostname === proxmoxServerSelected);
+    const nameEl   = document.getElementById('server-detail-hostname');
+    const statusEl = document.getElementById('server-detail-status-pill');
+    const vmEl     = document.getElementById('server-detail-vm-pill');
+    if (nameEl)   nameEl.textContent   = proxmoxServerSelected;
+    if (statusEl) {
+      statusEl.className   = `stat-pill ${agent?.connected ? 'online' : 'offline'}`;
+      statusEl.textContent = agent?.connected ? 'Online' : 'Offline';
+    }
+    if (vmEl)     vmEl.textContent     = `${agent?.vm_count ?? 0} VMs`;
+
+    // Wire back button once
+    const backBtn = document.getElementById('server-back-btn');
+    if (backBtn && !backBtn._bound) {
+      backBtn.addEventListener('click', () => {
+        proxmoxServerSelected = null;
+        renderSpokeVmServerView(
+          Array.isArray(latestProxmoxData.approved_proxmox) ? latestProxmoxData.approved_proxmox : []
+        );
+      });
+      backBtn._bound = true;
+    }
+
+    // Show only this agent's card in the Details sub-tab
+    renderProxmoxServerCards(agent ? [agent] : []);
+  } else {
+    listView.style.display   = '';
+    detailView.style.display = 'none';
+    renderSpokeServerList(approved);
+  }
+}
+
+/**
+ * Renders the server selection cards in the list view.
+ * Mirrors the hub's renderHubVmServer spoke-card grid.
+ */
+function renderSpokeServerList(approved) {
+  const container = document.getElementById('pxagent-server-cards');
+  if (!container) return;
+
+  if (!approved || approved.length === 0) {
+    container.innerHTML = '<div class="empty-state">No Proxmox agents approved. Go to Setup → Proxmox to approve an agent.</div>';
+    return;
+  }
+
+  container.innerHTML = approved.map(srv => {
+    const node    = srv.node || {};
+    const online  = srv.connected;
+    const cpuPill = node.cpu_percent != null
+      ? `<span class="server-stat-pill" title="Current CPU">📊 CPU: ${Number(node.cpu_percent).toFixed(1)}%</span>`
+      : '';
+    const ramUsed  = node.mem_used_kb  ? fmtSizeKB(node.mem_used_kb)  : null;
+    const ramTotal = node.mem_total_kb ? fmtSizeKB(node.mem_total_kb) : null;
+    const ramPill  = ramUsed && ramTotal
+      ? `<span class="server-stat-pill" title="RAM">📊 Mem: ${ramUsed} / ${ramTotal}</span>`
+      : '';
+    return `
+      <div class="setup-card hub-vmserver-spoke-card" role="button" tabindex="0"
+           data-hostname="${escHtml(srv.hostname || '')}" style="cursor:pointer;">
+        <div class="panel-header">
+          <span class="server-node-name">${escHtml(srv.hostname || 'Unknown')}</span>
+          <span class="stat-pill ${online ? 'online' : 'offline'}">${online ? 'Online' : 'Offline'}</span>
+          <span class="stat-pill">${srv.vm_count ?? 0} VMs</span>
+          ${cpuPill}${ramPill}
+          <span class="stat-pill" style="margin-left:auto;">Click to open →</span>
+        </div>
+        <div style="padding:8px 16px;font-size:0.82rem;color:var(--muted);">
+          Agent ${escHtml(srv.agent_version || '—')} &nbsp;·&nbsp;
+          PVE ${escHtml(srv.pve_version || '—')} &nbsp;·&nbsp;
+          ${online ? '🟢 Proxmox connected' : '⚫ Agent not reporting'}
+        </div>
+      </div>`;
+  }).join('');
+
+  container.querySelectorAll('.hub-vmserver-spoke-card').forEach(card => {
+    const openCard = () => {
+      proxmoxServerSelected = card.dataset.hostname;
+      renderSpokeVmServerView(approved);
+    };
+    card.addEventListener('click', openCard);
+    card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') openCard(); });
+  });
 }
 
 function renderProxmoxServerCards(approved) {

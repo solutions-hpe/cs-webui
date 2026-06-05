@@ -1929,6 +1929,16 @@
         <!-- Server list view: shown when no agent is selected -->
         <div id="server-list-view">
 
+          <!-- Summary toolbar: aggregate counts across all Proxmox hosts -->
+          <div class="page-toolbar" style="margin-bottom:12px;">
+            <div class="toolbar-stats">
+              <span class="stat-pill" id="spoke-vm-hosts-pill">— hosts</span>
+              <span class="stat-pill" id="spoke-vm-vms-pill">— VMs</span>
+              <span class="stat-pill" id="spoke-vm-usb-pill">— USB</span>
+              <span class="stat-pill" id="spoke-vm-clients-pill">— clients</span>
+            </div>
+          </div>
+
           <!-- Fleet Reclone + Auto-Provisioning: shown in list view, like the hub -->
           <div class="reclone-autoprov-grid setup-section-gap">
 

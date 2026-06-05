@@ -2069,6 +2069,20 @@ function renderSpokeServerList(approved) {
   const container = document.getElementById('pxagent-server-cards');
   if (!container) return;
 
+  // Update summary pills
+  const hostCount  = approved ? approved.length : 0;
+  const totalVMs   = (approved || []).reduce((s, h) => s + Number(h.vm_count  || 0), 0);
+  const totalUSB   = (approved || []).reduce((s, h) => s + Number(h.usb_count || 0), 0);
+  const clientCnt  = clients.size;
+  const hostsPill   = document.getElementById('spoke-vm-hosts-pill');
+  const vmsPill     = document.getElementById('spoke-vm-vms-pill');
+  const usbPill     = document.getElementById('spoke-vm-usb-pill');
+  const clientsPill = document.getElementById('spoke-vm-clients-pill');
+  if (hostsPill)   hostsPill.textContent   = `${hostCount} host${hostCount === 1 ? '' : 's'}`;
+  if (vmsPill)     vmsPill.textContent     = `${totalVMs} VM${totalVMs === 1 ? '' : 's'}`;
+  if (usbPill)     usbPill.textContent     = `${totalUSB} USB`;
+  if (clientsPill) clientsPill.textContent = `${clientCnt} client${clientCnt === 1 ? '' : 's'}`;
+
   if (!approved || approved.length === 0) {
     container.innerHTML = '<div class="empty-state">No Proxmox agents approved. Go to Setup → Proxmox to approve an agent.</div>';
     return;
@@ -2795,6 +2809,12 @@ function updateClientCount(visibleCount = clients.size, totalCount = clients.siz
     clientCount.textContent = visible !== total
       ? `${visible} / ${total} clients`
       : `${visible} client${visible === 1 ? '' : 's'}`;
+  }
+  // Keep the VM Server summary clients pill in sync
+  const clientsPill = document.getElementById('spoke-vm-clients-pill');
+  if (clientsPill) {
+    const cnt = clients.size;
+    clientsPill.textContent = `${cnt} client${cnt === 1 ? '' : 's'}`;
   }
   if (!emptyRow) return;
   const visible = Number.isFinite(visibleCount) ? visibleCount : clients.size;

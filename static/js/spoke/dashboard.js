@@ -2206,10 +2206,14 @@ function renderProxmoxServerCards(approved) {
 
     return `<div class="setup-card setup-section-gap">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px;">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          ${dot}
-          <h2 style="margin:0;">${escHtml(srv.hostname || 'Unknown')}</h2>
-          ${cpuPill}${ramPill}${cpuAvgPill}${memAvgPill}${storagePills}${throttlePill}
+        <div style="display:flex;align-items:flex-start;gap:10px;min-width:0;flex:1;">
+          <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;padding-top:2px;">
+            ${dot}
+            <h2 style="margin:0;white-space:nowrap;">${escHtml(srv.hostname || 'Unknown')}</h2>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;">
+            ${cpuPill}${ramPill}${cpuAvgPill}${memAvgPill}${storagePills}${throttlePill}
+          </div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:stretch;gap:4px;flex-shrink:0;min-width:130px;">
           <button class="btn btn-danger btn-small" onclick="revokeProxmoxAgent(decodeURIComponent('${enc}'))">✕ Revoke Agent</button>

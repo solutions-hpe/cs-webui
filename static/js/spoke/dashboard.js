@@ -2169,6 +2169,14 @@ function renderProxmoxServerCards(approved) {
       return `<span class="server-stat-pill" title="${escHtml(s.name)} (${escHtml(s.type)})">${icon} ${escHtml(s.name)}: ${fmtSizeKB(s.used)} / ${fmtSizeKB(s.total)}</span>`;
     }).join('') : '';
 
+    const ph = srv.provision_halt;
+    const throttlePill = (ph && ph.halted) ? (() => {
+      const reason = ph.reason === 'cpu'
+        ? `CPU ${ph.cpu_pct ?? '?'}% ≥ ${ph.cpu_threshold ?? 80}% threshold`
+        : `Memory ${ph.mem_pct ?? '?'}% ≥ ${ph.mem_threshold ?? 80}% threshold`;
+      return `<span class="server-stat-pill" style="color:var(--warning,#f59e0b);font-weight:600;border-color:var(--warning,#f59e0b);" title="Auto-provisioning throttled: ${escHtml(reason)}">⏸ Throttled</span>`;
+    })() : '';
+
     const vmCount = srv.vm_count != null ? `${srv.vm_count} total` : '—';
     const lastSeen = _fmtRelTime(srv.last_seen);
 
@@ -2177,7 +2185,7 @@ function renderProxmoxServerCards(approved) {
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
           ${dot}
           <h2 style="margin:0;">${escHtml(srv.hostname || 'Unknown')}</h2>
-          ${cpuPill}${ramPill}${storagePills}
+          ${cpuPill}${ramPill}${storagePills}${throttlePill}
         </div>
         <div style="display:flex;flex-direction:column;align-items:stretch;gap:4px;flex-shrink:0;min-width:130px;">
           <button class="btn btn-danger btn-small" onclick="revokeProxmoxAgent(decodeURIComponent('${enc}'))">✕ Revoke Agent</button>
@@ -3993,30 +4001,16 @@ function renderAutoProvisionStatus() {
   // Resource averages and throttle state
   const ph = latestProxmoxData?.provision_halt;
   const isThrottled = !!(ph && ph.halted);
-  const cpuAvg = latestProxmoxData?.cpu_1h_avg ?? latestProxmoxData?.cpu_est_avg;
-  const memAvg = latestProxmoxData?.mem_1h_avg ?? latestProxmoxData?.mem_est_avg;
-  const cpuEst = latestProxmoxData?.cpu_1h_avg == null && latestProxmoxData?.cpu_est_avg != null;
-  const memEst = latestProxmoxData?.mem_1h_avg == null && latestProxmoxData?.mem_est_avg != null;
   const cpuProv = parseInt(currentSettings.cpu_provision_threshold ?? '80', 10);
   const memProv = parseInt(currentSettings.mem_provision_threshold ?? '80', 10);
-  const fmtAvg = (v, est) => v != null ? `${est ? '~' : ''}${Number(v).toFixed(1)}%` : null;
-  const cpuStr = fmtAvg(cpuAvg, cpuEst);
-  const memStr = fmtAvg(memAvg, memEst);
-  const metricColor = (v, thr) => {
-    if (v == null) return '';
-    if (v >= thr) return 'color:var(--danger,#ef4444);font-weight:600;';
-    if (v >= thr * 0.9) return 'color:var(--warning,#f59e0b);font-weight:600;';
-    return 'color:var(--success,#22c55e);';
-  };
   const throttleTitle = isThrottled
     ? `Throttled: ${ph.reason === 'cpu' ? `CPU ${ph.cpu_pct ?? '?'}% ≥ ${ph.cpu_threshold ?? cpuProv}% threshold` : `Memory ${ph.mem_pct ?? '?'}% ≥ ${ph.mem_threshold ?? memProv}% threshold`}`
     : '';
-  const resourcePills = (cpuStr || memStr) ? `
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
-      ${cpuStr ? `<span class="server-stat-pill${cpuEst ? ' muted' : ''}" title="${cpuEst ? '~Estimated (warming up)' : '1-hour avg CPU'}" style="${metricColor(cpuAvg, cpuProv)}">📊 CPU avg: ${escHtml(cpuStr)}</span>` : ''}
-      ${memStr ? `<span class="server-stat-pill${memEst ? ' muted' : ''}" title="${memEst ? '~Estimated (warming up)' : '1-hour avg memory'}" style="${metricColor(memAvg, memProv)}">📊 Mem avg: ${escHtml(memStr)}</span>` : ''}
-      ${isThrottled ? `<span class="server-stat-pill warn" title="${escHtml(throttleTitle)}">⏸ Throttled</span>` : ''}
-    </div>` : (isThrottled ? `<div style="margin-top:8px;"><span class="server-stat-pill warn" title="${escHtml(throttleTitle)}">⏸ Throttled</span></div>` : '');
+  // Identify which servers are throttled by name (from per-agent approved_proxmox list)
+  const throttledServers = (latestProxmoxData?.approved_proxmox || [])
+    .filter(s => s.provision_halt && s.provision_halt.halted)
+    .map(s => s.hostname);
+  const throttleServerDesc = throttledServers.length ? throttledServers.join(', ') : '';
 
   // ── VM page status bar (right side of tab nav) ─────────────────────────────
   const bar = document.getElementById('autoprov-status-bar');
@@ -4084,11 +4078,17 @@ function renderAutoProvisionStatus() {
   const resetBtn = document.getElementById('autoprov-reset-btn');
   if (resetBtn) resetBtn.style.display = run.running ? '' : 'none';
   if (!showPanel) {
-    liveSummary.innerHTML = `<div class="muted" style="padding:12px 0 4px;">${
-      autoProv
-        ? (isThrottled ? '⏸ Auto-provisioning throttled — resource usage is above the provisioning threshold.' : 'Idle — dongles inserted will trigger auto-provisioning.')
-        : 'Auto-provisioning is disabled. Enable it in the USB settings below.'
-    }</div>${resourcePills}`;
+    let idleMsg;
+    if (!autoProv) {
+      idleMsg = 'Auto-provisioning is disabled. Enable it in the USB settings below.';
+    } else if (isThrottled) {
+      idleMsg = throttleServerDesc
+        ? `⏸ Auto-provisioning throttled by <strong>${escHtml(throttleServerDesc)}</strong> — resource usage is above the provisioning threshold.`
+        : `⏸ Auto-provisioning throttled — resource usage is above the provisioning threshold.`;
+    } else {
+      idleMsg = 'Idle — dongles inserted will trigger auto-provisioning.';
+    }
+    liveSummary.innerHTML = `<div class="muted" style="padding:12px 0 4px;">${idleMsg}</div>`;
     logEl.innerHTML = '';
     return;
   }
@@ -4104,7 +4104,6 @@ function renderAutoProvisionStatus() {
     </div>
     <div class="progress-bar-wrap autoprov-progress-wrap"><div class="progress-bar" style="width:${completedPct}%;"></div></div>
     <div class="autoprov-live-summary-sub">${escHtml(startedText)}</div>
-    ${resourcePills}
   `;
 
   // Show only actively in-progress items (cloning / configuring / waiting / failed)

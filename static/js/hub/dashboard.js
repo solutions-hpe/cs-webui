@@ -251,6 +251,38 @@ function updateApiStatus(online, text) {
   if (label) label.textContent = text;
 }
 
+// Hub WS message rate tracking
+const _hubMsgTs = [];
+let _hubMsgRateTimer = null;
+const _hubMsgRateBadge = document.getElementById('hub-msg-rate');
+
+function _recordHubWsMsg() {
+  const now = Date.now();
+  _hubMsgTs.push(now);
+  const cutoff = now - 10000;
+  let i = 0;
+  while (i < _hubMsgTs.length && _hubMsgTs[i] < cutoff) i++;
+  if (i > 0) _hubMsgTs.splice(0, i);
+}
+
+function _updateHubMsgRate() {
+  if (!_hubMsgRateBadge) return;
+  const now = Date.now();
+  const cutoff = now - 10000;
+  let i = 0;
+  while (i < _hubMsgTs.length && _hubMsgTs[i] < cutoff) i++;
+  if (i > 0) _hubMsgTs.splice(0, i);
+  const rate = (_hubMsgTs.length / 10).toFixed(1);
+  if (parseFloat(rate) < 0.1) {
+    _hubMsgRateBadge.style.display = 'none';
+    return;
+  }
+  const high = parseFloat(rate) > 10;
+  _hubMsgRateBadge.textContent = `${rate} msg/s`;
+  _hubMsgRateBadge.className = `msg-rate-badge hub-only${high ? ' rate-high' : ''}`;
+  _hubMsgRateBadge.style.display = '';
+}
+
 function setFormMessage(id, message, ok = true) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -12225,8 +12257,12 @@ function connectHubWebSocket() {
   ws.onopen = () => {
     if (wsOfflineTimer) { clearTimeout(wsOfflineTimer); wsOfflineTimer = null; }
     updateApiStatus(true, "Connected");
+    // Start msg/s refresh timer
+    if (_hubMsgRateTimer) clearInterval(_hubMsgRateTimer);
+    _hubMsgRateTimer = setInterval(_updateHubMsgRate, 2000);
   };
   ws.onmessage = event => {
+    _recordHubWsMsg();
     const data = JSON.parse(event.data);
     if (data.type === "telemetry") {
       // Active tab: re-render only if user has no active form interaction or selections
@@ -12297,6 +12333,8 @@ function connectHubWebSocket() {
   };
   ws.onclose = () => {
     ws = null;
+    if (_hubMsgRateTimer) { clearInterval(_hubMsgRateTimer); _hubMsgRateTimer = null; }
+    if (_hubMsgRateBadge) _hubMsgRateBadge.style.display = 'none';
     if (!authToken) {
       updateApiStatus(false, "Disconnected");
       return;

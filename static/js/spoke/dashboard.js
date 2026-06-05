@@ -540,25 +540,59 @@ function applyGkillSwitch(value) {
 
 const serverPressureIndicator = document.getElementById('server-pressure-indicator');
 
-function applyServerPressure(msg) {
+// Message rate tracking (rolling 10-second window)
+const _msgTimestamps = [];
+let _pressureState = { active: false, level: 'normal', throttle_interval: 15, reason: '' };
+let _msgRateTimer = null;
+
+function _recordWsMsg() {
+  const now = Date.now();
+  _msgTimestamps.push(now);
+  // Trim to 10-second window
+  const cutoff = now - 10000;
+  let i = 0;
+  while (i < _msgTimestamps.length && _msgTimestamps[i] < cutoff) i++;
+  if (i > 0) _msgTimestamps.splice(0, i);
+}
+
+function _getWsMsgRate() {
+  const now = Date.now();
+  const cutoff = now - 10000;
+  let i = 0;
+  while (i < _msgTimestamps.length && _msgTimestamps[i] < cutoff) i++;
+  if (i > 0) _msgTimestamps.splice(0, i);
+  return (_msgTimestamps.length / 10);
+}
+
+function _updatePressureBadge() {
   if (!serverPressureIndicator) return;
-  const active = msg.active;
-  const level = msg.level || 'normal';
-  const interval = msg.throttle_interval || 15;
-  const reason = msg.reason || '';
-  if (!active || level === 'normal') {
+  const rate = _getWsMsgRate();
+  const { active, level, throttle_interval } = _pressureState;
+  const showBadge = active || rate >= 1;
+  if (!showBadge) {
     serverPressureIndicator.style.display = 'none';
-    serverPressureIndicator.textContent = '';
-    serverPressureIndicator.className = 'spoke-only';
     return;
   }
-  const icon = level === 'high' ? '⚠️' : '⏳';
-  serverPressureIndicator.textContent = `${icon} API Load (${interval}s)`;
-  serverPressureIndicator.title = reason
-    ? `Server under load — client reporting slowed to ${interval}s intervals\n${reason}`
-    : `Server under load — client reporting slowed to ${interval}s intervals`;
-  serverPressureIndicator.className = `spoke-only server-pressure-badge level-${level}`;
+  const rateFmt = rate.toFixed(1);
+  const icon = level === 'high' ? '⚠️' : level === 'medium' ? '⏳' : '📊';
+  const throttleText = active ? ` → ${throttle_interval}s` : '';
+  serverPressureIndicator.textContent = `${icon} ${rateFmt} msg/s${throttleText}`;
+  serverPressureIndicator.title = active
+    ? `Server under load — client reporting slowed to ${throttle_interval}s intervals`
+    : `WebSocket receive rate`;
+  const badgeLevel = active ? level : 'idle';
+  serverPressureIndicator.className = `spoke-only server-pressure-badge level-${badgeLevel}`;
   serverPressureIndicator.style.display = '';
+}
+
+function applyServerPressure(msg) {
+  _pressureState = {
+    active: !!msg.active,
+    level: msg.level || 'normal',
+    throttle_interval: msg.throttle_interval || 15,
+    reason: msg.reason || '',
+  };
+  _updatePressureBadge();
 }
 
 function setRelayStatus(data = {}) {
@@ -6089,6 +6123,9 @@ function connectWebSocket() {
       reconnectTimer = null;
     }
     setWsStatus(true, 'Connected');
+    // Start msg/s refresh timer
+    if (_msgRateTimer) clearInterval(_msgRateTimer);
+    _msgRateTimer = setInterval(_updatePressureBadge, 2000);
     // Refresh all data on reconnect so stale state doesn't linger after a disconnect
     if (_spokeBooted) refreshAll().catch(() => {});
     // Fetch initial repo status via HTTP in case WS message races or was missed
@@ -6106,6 +6143,7 @@ function connectWebSocket() {
   });
 
   socket.addEventListener('message', (event) => {
+    _recordWsMsg();
     try {
       handleMessage(JSON.parse(event.data));
     } catch (error) {
@@ -6114,6 +6152,8 @@ function connectWebSocket() {
   });
 
   socket.addEventListener('close', () => {
+    if (_msgRateTimer) { clearInterval(_msgRateTimer); _msgRateTimer = null; }
+    if (serverPressureIndicator) serverPressureIndicator.style.display = 'none';
     setWsStatus(false, 'Disconnected');
     // If an update was running, the service is restarting — don't show an error
     if (updateWasInProgress && updateMsg) {
@@ -8482,9 +8522,7 @@ async function bootSpokeRuntime() {
     const init = consumeInitPayload() || await requestJson('/api/init');
     if (init.proxmox) {
       if (init.proxmox.webui_vmid != null) webuiVmid = init.proxmox.webui_vmid;
-      if (init.proxmox.connected || (init.proxmox.vms || []).length || (init.proxmox.usb_state || []).length || (init.proxmox.unknown_usb || []).length || (init.proxmox.pending_proxmox || []).length || (init.proxmox.approved_proxmox || []).length) {
-        renderServerTab(init.proxmox);
-      }
+      renderServerTab(init.proxmox);  // always show tab if proxmox block present
     }
     if (init.reclone) renderRecloneStatus(init.reclone);
     if (init.update_all) handleUpdateAllProgress(init.update_all);
@@ -8637,9 +8675,7 @@ async function refreshAll() {
     const init = await requestJson('/api/init');
     if (init.proxmox) {
       if (init.proxmox.webui_vmid != null) webuiVmid = init.proxmox.webui_vmid;
-      if (init.proxmox.connected || (init.proxmox.vms || []).length || (init.proxmox.usb_state || []).length || (init.proxmox.unknown_usb || []).length || (init.proxmox.pending_proxmox || []).length || (init.proxmox.approved_proxmox || []).length) {
-        renderServerTab(init.proxmox);
-      }
+      renderServerTab(init.proxmox);  // always show tab if proxmox block present
     }
     if (init.reclone) renderRecloneStatus(init.reclone);
     if (init.update_all) handleUpdateAllProgress(init.update_all);

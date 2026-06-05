@@ -626,6 +626,10 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   border-radius: 4px;
   cursor: default;
 }
+.server-pressure-badge.level-idle {
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.8);
+}
 .server-pressure-badge.level-medium {
   background: #d97706;
   color: #fff;
@@ -634,6 +638,22 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   background: #c0392b;
   color: #fff;
   animation: gkill-pulse 1.8s ease-in-out infinite;
+}
+.msg-rate-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.8);
+  margin-left: 4px;
+}
+.msg-rate-badge.rate-high {
+  background: #d97706;
+  color: #fff;
 }
 
 /* ── Footer ─────────────────────────────────────────────────────── */

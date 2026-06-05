@@ -4036,40 +4036,11 @@ function renderAutoProvisionStatus() {
   const resetBtn = document.getElementById('autoprov-reset-btn');
   if (resetBtn) resetBtn.style.display = run.running ? '' : 'none';
   if (!showPanel) {
-    const cpuAvg = latestProxmoxData?.cpu_1h_avg;
-    const memAvg = latestProxmoxData?.mem_1h_avg;
-    const cpuProv = parseInt(currentSettings.cpu_provision_threshold ?? '80', 10);
-    const cpuDel  = parseInt(currentSettings.cpu_delete_threshold ?? '90', 10);
-    const memProv = parseInt(currentSettings.mem_provision_threshold ?? '80', 10);
-    const memDel  = parseInt(currentSettings.mem_delete_threshold ?? '90', 10);
-    const fmtAvg = (v) => v != null ? `${Number(v).toFixed(1)}%` : '<span class="muted">warming up…</span>';
-    const thresholdColor = (avg, prov, del) => {
-      if (avg == null) return '';
-      if (avg >= del)  return 'color:var(--danger,#ef4444);font-weight:600;';
-      if (avg >= prov) return 'color:var(--warning,#f59e0b);font-weight:600;';
-      return 'color:var(--success,#22c55e);';
-    };
-    const resourceRows = autoProv ? `
-      <table class="autoprov-resource-table" style="font-size:12px;margin-top:10px;border-collapse:collapse;width:100%;">
-        <thead><tr><th style="text-align:left;padding:2px 8px 2px 0;color:var(--muted);">Resource</th><th style="text-align:right;padding:2px 0;color:var(--muted);">1h avg</th><th style="text-align:right;padding:2px 0 2px 12px;color:var(--muted);">Prov / Del threshold</th></tr></thead>
-        <tbody>
-          <tr>
-            <td style="padding:3px 8px 3px 0;">⚡ CPU</td>
-            <td style="text-align:right;${thresholdColor(cpuAvg, cpuProv, cpuDel)}">${fmtAvg(cpuAvg)}</td>
-            <td style="text-align:right;padding-left:12px;color:var(--muted);">${cpuProv}% / ${cpuDel}%</td>
-          </tr>
-          <tr>
-            <td style="padding:3px 8px 3px 0;">🧠 Memory</td>
-            <td style="text-align:right;${thresholdColor(memAvg, memProv, memDel)}">${fmtAvg(memAvg)}</td>
-            <td style="text-align:right;padding-left:12px;color:var(--muted);">${memProv}% / ${memDel}%</td>
-          </tr>
-        </tbody>
-      </table>` : '';
     liveSummary.innerHTML = `<div class="muted" style="padding:12px 0 4px;">${
       autoProv
-        ? 'No provisioning in progress. Dongles inserted will trigger auto-provisioning.'
+        ? 'Idle — dongles inserted will trigger auto-provisioning.'
         : 'Auto-provisioning is disabled. Enable it in the USB settings below.'
-    }</div>${resourceRows}`;
+    }</div>`;
     logEl.innerHTML = '';
     return;
   }

@@ -2285,40 +2285,23 @@
 
                 <!-- Details sub-tab -->
         <div id="server-node" class="setup-subpanel">
-          <div class="setup-card setup-section-gap">
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;">
-              <div style="display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;">
-                <h2 id="server-node-name" style="margin:0;">—</h2>
-                <span class="server-stat-pill" title="CPU">⚡ CPU: <span id="server-cpu">—</span>%</span>
-                <span class="server-stat-pill" title="RAM">🧠 RAM: <span id="server-ram">—</span></span>
-                <span class="server-stat-pill" title="1-hour rolling average CPU" id="server-cpu-avg-pill">📊 CPU avg: <span id="server-cpu-avg">…</span>%</span>
-                <span class="server-stat-pill" title="1-hour rolling average memory" id="server-mem-avg-pill">📊 Mem avg: <span id="server-mem-avg">…</span>%</span>
-                <span id="server-prov-halt-badge"></span>
-                <span id="server-storage-pills"></span>
-              </div>
-              <div style="display:flex;flex-direction:column;align-items:stretch;gap:4px;flex-shrink:0;min-width:130px;">
-                <button id="agent-approve-btn" class="btn btn-primary" style="display:none;"></button>
-                <button id="agent-update-btn" class="btn btn-primary" type="button" title="Reinstall the Proxmox host agent from GitHub and restart it">⬆ Update Agent</button>
-                <span class="server-last-seen" style="font-size:11px;">Last seen: <span id="server-last-seen">—</span></span>
-              </div>
-            </div>
-            <table class="data-table" id="server-detail-table">
+
+          <!-- Spoke-level global stats -->
+          <div class="setup-card setup-section-gap" id="spoke-global-stats" style="padding:10px 16px;">
+            <table class="data-table" style="width:auto;">
               <tbody>
                 <tr>
-                  <th>Proxmox Connected</th><td id="detail-connected">—</td>
-                  <th title="Version reported by the Proxmox agent running on the host">Agent Version</th><td id="detail-agent-version">—</td>
-                </tr>
-                <tr>
-                  <th title="CS-WebUI version running on this spoke server">Spoke Version</th><td id="detail-spoke-version">—</td>
-                  <th title="Proxmox VE version reported by the host">PVE Version</th><td id="detail-pve-version">—</td>
-                </tr>
-                <tr>
-                  <th>VMs</th><td id="detail-vm-count">—</td>
-                  <th title="Commands queued or delivered but not yet acknowledged by the agent">Pending Commands</th><td id="detail-pending-cmds">—</td>
+                  <th style="white-space:nowrap;">Spoke Version</th>
+                  <td id="detail-spoke-version" style="padding-right:32px;">—</td>
+                  <th style="white-space:nowrap;">Pending Commands</th>
+                  <td id="detail-pending-cmds">—</td>
                 </tr>
               </tbody>
             </table>
           </div>
+
+          <!-- Per-agent server cards (dynamically rendered by renderProxmoxServerCards) -->
+          <div id="proxmox-server-cards"></div>
 
           <div id="proxmox-extra-pending" class="setup-card setup-section-gap hidden" style="padding:10px 16px;">
             <span style="font-size:13px;font-weight:600;">⚠ Pending agents <span id="proxmox-extra-pending-count" class="badge-count">0</span>: </span><span id="proxmox-extra-pending-list" style="font-size:13px;"></span>

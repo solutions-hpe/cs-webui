@@ -1419,6 +1419,16 @@ async function triggerAgentUpdate() {
   }, 5000);
 }
 
+async function triggerAgentUpdateForHost(hostname) {
+  try {
+    const url = '/api/proxmox/update-agent' + (hostname ? `?hostname=${encodeURIComponent(hostname)}` : '');
+    const result = await requestJson(url, { method: 'POST' });
+    showToast(`Queued agent update for ${result.target || hostname} (${result.branch || 'current branch'})`, 'info');
+  } catch (e) {
+    showToast('Failed to queue agent update: ' + e.message, 'error');
+  }
+}
+
 function handleUpdateAllProgress(state) {
   const btn = document.getElementById('update-all-btn');
   if (!btn) return;
@@ -1501,71 +1511,20 @@ function renderServerTab(data) {
   syncAgentUpdateButtonState(latestProxmoxData);
   syncSpokeClientTypeFilter();
 
-  const node = latestProxmoxData.node || {};
   const setEl = (id, value) => {
     const el = document.getElementById(id);
     if (el) el.textContent = value;
   };
 
-  setEl('server-node-name', node.hostname || 'Proxmox');
   updateCmdTargetDropdown();
   if (Array.isArray(window._lastCommands)) renderCommandTable(window._lastCommands);
-  setEl('server-cpu', node.cpu_percent != null && !Number.isNaN(Number(node.cpu_percent)) ? Number(node.cpu_percent).toFixed(1) : '—');
-  const ramUsed  = node.mem_used_kb  ? fmtSizeKB(node.mem_used_kb)  : '—';
-  const ramTotal = node.mem_total_kb ? fmtSizeKB(node.mem_total_kb) : '—';
-  setEl('server-ram', `${ramUsed} / ${ramTotal}`);
-  // 1-hour averages — show always; display "warming up…" until a full hour of data exists
-  const cpuAvgPill = document.getElementById('server-cpu-avg-pill');
-  const memAvgPill = document.getElementById('server-mem-avg-pill');
-  if (cpuAvgPill) {
-    cpuAvgPill.style.display = '';
-    setEl('server-cpu-avg', data.cpu_1h_avg != null ? Number(data.cpu_1h_avg).toFixed(1) : '…');
-  }
-  if (memAvgPill) {
-    memAvgPill.style.display = '';
-    setEl('server-mem-avg', data.mem_1h_avg != null ? Number(data.mem_1h_avg).toFixed(1) : '…');
-  }
-  // Cache last_seen to localStorage so we can show accurate "X ago" after restarts
-  const PROXMOX_LS_KEY = 'proxmox_last_seen';
-  if (latestProxmoxData.last_seen) {
-    try { localStorage.setItem(PROXMOX_LS_KEY, String(latestProxmoxData.last_seen)); } catch (_) {}
-  }
-  const displayLastSeen = latestProxmoxData.last_seen
-    || (() => { try { return parseFloat(localStorage.getItem(PROXMOX_LS_KEY) || ''); } catch (_) { return null; } })();
-  setEl('server-last-seen', formatRelativeTime(displayLastSeen || null));
 
-  const storagePills = document.getElementById('server-storage-pills');
-  if (storagePills && Array.isArray(node.storage)) {
-    const networkTypes = new Set(['nfs', 'cifs', 'glusterfs', 'cephfs', 'rbd', 'iscsi', 'pbs']);
-    storagePills.innerHTML = node.storage.map((s) => {
-      const icon = networkTypes.has(s.type) ? '🌐' : '🗄️';
-      return `<span class="server-stat-pill" title="${escHtml(s.name)} (${escHtml(s.type)})">${icon} ${escHtml(s.name)}: ${fmtSizeKB(s.used)} / ${fmtSizeKB(s.total)}</span>`;
-    }).join('');
-  }
+  // Render per-server cards in the Details tab
+  const approved = Array.isArray(latestProxmoxData.approved_proxmox) ? latestProxmoxData.approved_proxmox : [];
+  renderProxmoxServerCards(approved);
 
-  // Provision-halt badge on the header pills row
-  const provHaltBadge = document.getElementById('server-prov-halt-badge');
-  if (provHaltBadge) {
-    const ph = latestProxmoxData.provision_halt;
-    if (ph && ph.halted) {
-      const reason = ph.reason === 'cpu'
-        ? `CPU ${ph.cpu_pct ?? '?'}% >= ${ph.cpu_threshold ?? 80}%`
-        : `Mem ${ph.mem_pct ?? '?'}% >= ${ph.mem_threshold ?? 80}%`;
-      provHaltBadge.innerHTML = `<span class="server-stat-pill warn" title="Provisioning paused: ${escHtml(reason)}">⏸ prov paused</span>`;
-    } else {
-      provHaltBadge.innerHTML = '';
-    }
-  }
-
-  // Structured details table
-  const allVms = Array.isArray(latestProxmoxData.vms) ? latestProxmoxData.vms : [];
-  const runningCount = allVms.filter(v => v.status === 'running').length;
-  const connectedEl = document.getElementById('detail-connected');
-  if (connectedEl) connectedEl.innerHTML = latestProxmoxData.connected ? '🟢 Yes' : '⚫ No';
-  setEl('detail-agent-version', latestProxmoxData.agent_version || '—');
+  // Spoke-level global stats
   setEl('detail-spoke-version', latestProxmoxData.spoke_version || '—');
-  setEl('detail-pve-version', latestProxmoxData.pve_version || '—');
-  setEl('detail-vm-count', allVms.length > 0 ? `${allVms.length} total, ${runningCount} running` : '—');
   const pendingCmds = latestProxmoxData.pending_command_count;
   const pendingEl = document.getElementById('detail-pending-cmds');
   if (pendingEl) {
@@ -1574,6 +1533,12 @@ function renderServerTab(data) {
           ? `<span style="color:var(--accent-orange,#f39c12);font-weight:600;">${pendingCmds}</span>`
           : `<span class="muted">0</span>`)
       : `<span class="muted">—</span>`;
+  }
+
+  // Cache last_seen to localStorage so we can show accurate "X ago" after restarts
+  const PROXMOX_LS_KEY = 'proxmox_last_seen';
+  if (latestProxmoxData.last_seen) {
+    try { localStorage.setItem(PROXMOX_LS_KEY, String(latestProxmoxData.last_seen)); } catch (_) {}
   }
 
   renderUsbSummary(latestProxmoxData);
@@ -1909,73 +1874,22 @@ function renderServerTab(data) {
 }
 
 function renderProxmoxApproveState(pending, approved) {
-  const btn = document.getElementById('agent-approve-btn');
   const extraCard = document.getElementById('proxmox-extra-pending');
   const extraList = document.getElementById('proxmox-extra-pending-list');
   const extraCount = document.getElementById('proxmox-extra-pending-count');
-  if (!btn) return;
+  if (!extraCard || !extraList) return;
 
-  const currentHostname = (document.getElementById('server-node-name') || {}).textContent || '';
-
-  // Determine if current tile host is pending or approved
-  const isPending = pending.some((a) => proxmoxHostnameMatches(a.hostname, currentHostname));
-  const isApproved = approved.some((a) => proxmoxHostnameMatches(a.hostname, currentHostname));
-
-  // Other pending agents (not the one shown in the tile)
-  const otherPending = pending.filter((a) => !proxmoxHostnameMatches(a.hostname, currentHostname));
-
-  btn._approveHostname = null;
-
-  if (isPending) {
-    const match = pending.find((a) => proxmoxHostnameMatches(a.hostname, currentHostname));
-    btn.textContent = '✓ Approve Agent';
-    btn.style.display = '';
-    btn._approveHostname = match?.hostname || currentHostname;
-    btn._action = 'approve';
-  } else if (isApproved) {
-    const match = approved.find((a) => proxmoxHostnameMatches(a.hostname, currentHostname));
-    btn.textContent = '✕ Revoke Agent';
-    btn.style.display = '';
-    btn._approveHostname = match?.hostname || currentHostname;
-    btn._action = 'revoke';
-  } else if (pending.length > 0) {
-    // No connected agent yet — show Approve for the first pending
-    const first = pending[0];
-    btn.textContent = `✓ Approve ${first.hostname}`;
-    btn.style.display = '';
-    btn._approveHostname = first.hostname;
-    btn._action = 'approve';
-    otherPending.shift(); // already showing first one inline
-  } else {
-    btn.style.display = 'none';
-  }
-
-  if (!btn._bound) {
-    btn.addEventListener('click', async () => {
-      if (!btn._approveHostname) return;
-      if (btn._action === 'approve') {
-        await approveProxmoxAgent(btn._approveHostname);
-      } else {
-        await revokeProxmoxAgent(btn._approveHostname);
-      }
-    });
-    btn._bound = true;
-  }
-
-  // Show strip for any other pending agents
   if (extraCount) extraCount.textContent = String(pending.length);
-  if (extraCard && extraList) {
-    if (otherPending.length) {
-      extraCard.classList.remove('hidden');
-      extraList.innerHTML = otherPending.map((a) => {
-        const enc = encodeURIComponent(String(a.hostname || ''));
-        return `<strong>${escHtml(a.hostname)}</strong> `
-          + `<button class="btn btn-primary" style="font-size:11px;padding:2px 8px;" onclick="approveProxmoxAgent(decodeURIComponent('${enc}'))">Approve</button> `;
-      }).join(' &nbsp; ');
-    } else {
-      extraCard.classList.toggle('hidden', pending.length === 0);
-      extraList.innerHTML = pending.length ? '<span class="muted">Waiting for the connected host to be approved.</span>' : '';
-    }
+  if (pending.length) {
+    extraCard.classList.remove('hidden');
+    extraList.innerHTML = pending.map((a) => {
+      const enc = encodeURIComponent(String(a.hostname || ''));
+      return `<strong>${escHtml(a.hostname)}</strong> `
+        + `<button class="btn btn-primary" style="font-size:11px;padding:2px 8px;" onclick="approveProxmoxAgent(decodeURIComponent('${enc}')).then(()=>loadPxServersList())">Approve</button> `;
+    }).join(' &nbsp; ');
+  } else {
+    extraCard.classList.add('hidden');
+    extraList.innerHTML = '';
   }
 }
 
@@ -2085,6 +1999,73 @@ function renderPxServersList(approved, pending) {
       </tr>`;
     }).join('');
   }
+}
+
+function renderProxmoxServerCards(approved) {
+  const container = document.getElementById('proxmox-server-cards');
+  if (!container) return;
+
+  if (!approved || approved.length === 0) {
+    container.innerHTML = '<div class="setup-card setup-section-gap" style="text-align:center;color:var(--muted);padding:32px;">No Proxmox agents approved. Go to Setup → Proxmox to approve an agent.</div>';
+    return;
+  }
+
+  const networkTypes = new Set(['nfs', 'cifs', 'glusterfs', 'cephfs', 'rbd', 'iscsi', 'pbs']);
+
+  container.innerHTML = approved.map((srv) => {
+    const node = srv.node || {};
+    const enc = encodeURIComponent(String(srv.hostname || ''));
+    const dot = srv.connected
+      ? '<span class="status-dot online" title="Connected" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--green,#22c55e);flex-shrink:0;"></span>'
+      : '<span class="status-dot offline" title="Offline" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--danger,#ef4444);flex-shrink:0;"></span>';
+
+    const cpuPill = node.cpu_percent != null
+      ? `<span class="server-stat-pill" title="Current CPU">⚡ CPU: ${Number(node.cpu_percent).toFixed(1)}%</span>`
+      : '';
+    const ramUsed  = node.mem_used_kb  ? fmtSizeKB(node.mem_used_kb)  : null;
+    const ramTotal = node.mem_total_kb ? fmtSizeKB(node.mem_total_kb) : null;
+    const ramPill  = ramUsed && ramTotal
+      ? `<span class="server-stat-pill" title="RAM">🧠 RAM: ${ramUsed} / ${ramTotal}</span>`
+      : '';
+    const storagePills = Array.isArray(node.storage) ? node.storage.map((s) => {
+      const icon = networkTypes.has(s.type) ? '🌐' : '🗄️';
+      return `<span class="server-stat-pill" title="${escHtml(s.name)} (${escHtml(s.type)})">${icon} ${escHtml(s.name)}: ${fmtSizeKB(s.used)} / ${fmtSizeKB(s.total)}</span>`;
+    }).join('') : '';
+
+    const vmCount = srv.vm_count != null ? `${srv.vm_count} total` : '—';
+    const lastSeen = _fmtRelTime(srv.last_seen);
+
+    return `<div class="setup-card setup-section-gap">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          ${dot}
+          <h2 style="margin:0;">${escHtml(srv.hostname || 'Unknown')}</h2>
+          ${cpuPill}${ramPill}${storagePills}
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:stretch;gap:4px;flex-shrink:0;min-width:130px;">
+          <button class="btn btn-danger btn-small" onclick="revokeProxmoxAgent(decodeURIComponent('${enc}'))">✕ Revoke Agent</button>
+          <button class="btn btn-primary btn-small" onclick="triggerAgentUpdateForHost(decodeURIComponent('${enc}'))">⬆ Update Agent</button>
+          <span style="font-size:11px;color:var(--muted);text-align:right;">Last seen: ${lastSeen}</span>
+        </div>
+      </div>
+      <table class="data-table">
+        <tbody>
+          <tr>
+            <th>Proxmox Connected</th>
+            <td>${srv.connected ? '🟢 Yes' : '⚫ No'}</td>
+            <th title="Version reported by the Proxmox host agent">Agent Version</th>
+            <td>${escHtml(srv.agent_version || '—')}</td>
+          </tr>
+          <tr>
+            <th title="Proxmox VE version reported by the host">PVE Version</th>
+            <td>${escHtml(srv.pve_version || '—')}</td>
+            <th>VMs</th>
+            <td>${vmCount}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>`;
+  }).join('');
 }
 
 function applySettingsToUI(s) {

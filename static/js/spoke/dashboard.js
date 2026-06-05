@@ -3442,13 +3442,29 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
   if (!usbSummaryPanel || !usbSummaryTbody || !unknownUsbSection || !unknownUsbTbody) return;
 
   const certified = parseJsonList(currentSettings.usb_vidpids);
-  const usbState = Array.isArray(latestProxmoxData.usb_state) ? latestProxmoxData.usb_state : [];
-  const usbQuarantine = Array.isArray(latestProxmoxData.usb_quarantine) ? latestProxmoxData.usb_quarantine : [];
+  const allUsbState = Array.isArray(latestProxmoxData.usb_state) ? latestProxmoxData.usb_state : [];
+  const allUsbQuarantine = Array.isArray(latestProxmoxData.usb_quarantine) ? latestProxmoxData.usb_quarantine : [];
+  const allPresentUsb = Array.isArray(latestProxmoxData.present_usb) ? latestProxmoxData.present_usb : [];
+  const allUnknownUsb = Array.isArray(latestProxmoxData.unknown_usb) ? latestProxmoxData.unknown_usb : [];
+
+  // When viewing a specific Proxmox server, show only that server's USB data.
+  const usbState = proxmoxServerSelected
+    ? allUsbState.filter(e => !e._agent_hostname || e._agent_hostname === proxmoxServerSelected)
+    : allUsbState;
+  const usbQuarantine = proxmoxServerSelected
+    ? allUsbQuarantine.filter(e => !e._agent_hostname || e._agent_hostname === proxmoxServerSelected)
+    : allUsbQuarantine;
+  const presentUsb = proxmoxServerSelected
+    ? allPresentUsb.filter(e => !e._agent_hostname || e._agent_hostname === proxmoxServerSelected)
+    : allPresentUsb;
+  const filteredUnknownUsb = proxmoxServerSelected
+    ? allUnknownUsb.filter(e => !e._agent_hostname || e._agent_hostname === proxmoxServerSelected)
+    : allUnknownUsb;
+
   const USB_QUARANTINE_THRESHOLD = 3;
   const missingTimeoutSeconds = (parseInt(currentSettings.usb_missing_timeout, 10) || 60) * 60;
 
   // Compute present bus set first so the stat pill count is accurate
-  const presentUsb = Array.isArray(latestProxmoxData.present_usb) ? latestProxmoxData.present_usb : [];
   const presentBusSet = new Set(presentUsb.map((item) => String(item?.bus_path || '').trim()).filter(Boolean));
 
   // VMs whose dongles are missing (removed) — exclude from running count since they
@@ -3462,7 +3478,10 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
 
   // Running VM stats pill — only count provisioned VMs with their dongles still present
   const allVms = Array.isArray(latestProxmoxData.vms) ? latestProxmoxData.vms : [];
-  const runningVms = allVms.filter((v) => v.status === 'running' && !v.is_template && !missingVmids.has(Number(v.vmid)));
+  const agentVms = proxmoxServerSelected
+    ? allVms.filter(v => !v._agent_hostname || v._agent_hostname === proxmoxServerSelected)
+    : allVms;
+  const runningVms = agentVms.filter((v) => v.status === 'running' && !v.is_template && !missingVmids.has(Number(v.vmid)));
   const usbStatPills = document.getElementById('usb-vm-stat-pills');
   if (usbStatPills) {
     const simRunning = runningVms.filter((v) => v.name && v.name.startsWith('client-sim-')).length;
@@ -3476,7 +3495,7 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
   // This prevents stale server broadcasts from restoring a device the user just acted on.
   const certifiedSet = new Set(certified.map((d) => String(d?.vidpid || '').toLowerCase()).filter(Boolean));
   const ignoredSet = new Set(parseJsonList(currentSettings.usb_ignored_vidpids).map((v) => String(v || '').toLowerCase()).filter(Boolean));
-  const unknownUsb = (Array.isArray(latestProxmoxData.unknown_usb) ? latestProxmoxData.unknown_usb : [])
+  const unknownUsb = filteredUnknownUsb
     .filter((d) => {
       const v = String(d.vidpid || '').toLowerCase().trim();
       return v && !certifiedSet.has(v) && !ignoredSet.has(v);
@@ -3501,7 +3520,7 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
     const total = presentUsb.filter((item) => (item.vidpid || '').toLowerCase() === String(device.vidpid || '').toLowerCase()).length;
 
     // Build VM name list for active entries
-    const vmMap = new Map(allVms.map((v) => [Number(v.vmid), v]));
+    const vmMap = new Map(agentVms.map((v) => [Number(v.vmid), v]));
     const activeVmHtml = activeEntries.length === 0 ? '—' : activeEntries.map((e) => {
       const vm = vmMap.get(Number(e.vmid));
       const name = escHtml(vm?.name || `VM ${e.vmid}`);

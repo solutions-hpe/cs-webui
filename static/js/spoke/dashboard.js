@@ -172,6 +172,8 @@ let activeVmCat = 'sim';   // 'sim' | 'other' | 'containers' | 'templates'
 let webuiVmid = null;      // VMID of the LXC container running this service (protected from delete)
 let _lastUnknownUsbFp = ''; // Fingerprint to skip re-rendering unknown USB table when unchanged
 let _lastCertifiedUsbFp = ''; // Fingerprint to skip re-rendering certified USB table when unchanged
+let _lastQuarantineFp = ''; // Fingerprint to skip re-rendering quarantine table when unchanged
+let _lastMissingFp = '';    // Fingerprint for missing-dongle set — only restart countdown when it changes
 const spokeRoot = document.getElementById('spoke-root');
 const spokeNavRoot = document.getElementById('spoke-nav');
 const spokeTabPanels = document.querySelectorAll('#spoke-root .tab-content');
@@ -3447,9 +3449,21 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
   const allPresentUsb = Array.isArray(latestProxmoxData.present_usb) ? latestProxmoxData.present_usb : [];
   const allUnknownUsb = Array.isArray(latestProxmoxData.unknown_usb) ? latestProxmoxData.unknown_usb : [];
 
+  // Compute agentVms first — VMs are always tagged with _agent_hostname so this works without server restart.
+  const allVms = Array.isArray(latestProxmoxData.vms) ? latestProxmoxData.vms : [];
+  const agentVms = proxmoxServerSelected
+    ? allVms.filter(v => !v._agent_hostname || v._agent_hostname === proxmoxServerSelected)
+    : allVms;
+  const agentVmids = new Set(agentVms.map(v => String(v.vmid)));
+
   // When viewing a specific Proxmox server, show only that server's USB data.
+  // Primary filter: _agent_hostname (available after server restart with latest server.py).
+  // Fallback: match by vmid against the agent's VMs (works immediately without restart).
   const usbState = proxmoxServerSelected
-    ? allUsbState.filter(e => !e._agent_hostname || e._agent_hostname === proxmoxServerSelected)
+    ? allUsbState.filter(e => {
+        if (e._agent_hostname) return e._agent_hostname === proxmoxServerSelected;
+        return e.vmid != null && agentVmids.has(String(e.vmid));
+      })
     : allUsbState;
   const usbQuarantine = proxmoxServerSelected
     ? allUsbQuarantine.filter(e => !e._agent_hostname || e._agent_hostname === proxmoxServerSelected)
@@ -3477,10 +3491,6 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
   );
 
   // Running VM stats pill — only count provisioned VMs with their dongles still present
-  const allVms = Array.isArray(latestProxmoxData.vms) ? latestProxmoxData.vms : [];
-  const agentVms = proxmoxServerSelected
-    ? allVms.filter(v => !v._agent_hostname || v._agent_hostname === proxmoxServerSelected)
-    : allVms;
   const runningVms = agentVms.filter((v) => v.status === 'running' && !v.is_template && !missingVmids.has(Number(v.vmid)));
   const usbStatPills = document.getElementById('usb-vm-stat-pills');
   if (usbStatPills) {
@@ -3603,39 +3613,44 @@ function renderUsbSummary(proxmoxData = latestProxmoxData) {
   unknownUsbSection.classList.toggle('hidden', unknownUsb.length === 0);
 
   // ── Quarantined buses section ─────────────────────────────────────────────
-  // Show quarantined buses (no current VM) from usb_quarantine list.
-  // Buses quarantined but still with an active VM appear inline via fail_count badge above.
   if (usbQuarantineSection && usbQuarantineTbody) {
-    const hasQuarantined = usbQuarantine.length > 0
-      || usbState.some(e => e.quarantined_at && !usbQuarantine.find(q => q.bus_path === e.bus_path));
-    if (usbQuarantine.length > 0) {
-      usbQuarantineTbody.innerHTML = usbQuarantine.map(q => {
-        const bus = escHtml(q.bus_path || '—');
-        const fc = Number(q.fail_count || 0);
-        const qa = q.quarantined_at ? new Date(q.quarantined_at * 1000).toLocaleString() : '—';
-        return `<tr>
-          <td><code>${bus}</code></td>
-          <td><span class="badge badge-red">${fc}</span></td>
-          <td class="muted">${escHtml(qa)}</td>
-          <td>
-            <button type="button" class="btn btn-secondary btn-small"
-                    data-usb-quarantine-clear="${bus}">Clear Quarantine</button>
-          </td>
-        </tr>`;
-      }).join('');
-      usbQuarantineSection.classList.remove('hidden');
-    } else {
-      usbQuarantineSection.classList.add('hidden');
+    const quarantineFp = usbQuarantine.map(q => `${q.bus_path}:${q.fail_count}:${q.quarantined_at||''}`).sort().join(',');
+    if (quarantineFp !== _lastQuarantineFp) {
+      _lastQuarantineFp = quarantineFp;
+      if (usbQuarantine.length > 0) {
+        usbQuarantineTbody.innerHTML = usbQuarantine.map(q => {
+          const bus = escHtml(q.bus_path || '—');
+          const fc = Number(q.fail_count || 0);
+          const qa = q.quarantined_at ? new Date(q.quarantined_at * 1000).toLocaleString() : '—';
+          return `<tr>
+            <td><code>${bus}</code></td>
+            <td><span class="badge badge-red">${fc}</span></td>
+            <td class="muted">${escHtml(qa)}</td>
+            <td>
+              <button type="button" class="btn btn-secondary btn-small"
+                      data-usb-quarantine-clear="${bus}">Clear Quarantine</button>
+            </td>
+          </tr>`;
+        }).join('');
+      }
+      usbQuarantineSection.classList.toggle('hidden', usbQuarantine.length === 0);
     }
   }
 
   // Show the panel whenever Proxmox is connected; hide only before any data has arrived
   usbSummaryPanel.classList.toggle('hidden', !latestProxmoxData.connected && certified.length === 0 && unknownUsb.length === 0 && usbState.length === 0);
 
-  if (usbCountdownTimer) window.clearInterval(usbCountdownTimer);
-  updateUsbCountdowns();
-  if (usbState.some((item) => item.missing_since && !presentBusSet.has(String(item?.bus_path || '').trim()))) {
-    usbCountdownTimer = window.setInterval(updateUsbCountdowns, 1000);
+  // Restart countdown timer only when the set of missing entries changes
+  const missingFp = usbState
+    .filter(item => item.missing_since && !presentBusSet.has(String(item?.bus_path || '').trim()))
+    .map(item => `${item.vmid}:${item.missing_since}`)
+    .sort().join(',');
+  if (missingFp !== _lastMissingFp) {
+    _lastMissingFp = missingFp;
+    if (usbCountdownTimer) window.clearInterval(usbCountdownTimer);
+    usbCountdownTimer = null;
+    updateUsbCountdowns();
+    if (missingFp) usbCountdownTimer = window.setInterval(updateUsbCountdowns, 1000);
   }
 }
 

@@ -538,6 +538,29 @@ function applyGkillSwitch(value) {
   renderSimDisabledBanner();
 }
 
+const serverPressureIndicator = document.getElementById('server-pressure-indicator');
+
+function applyServerPressure(msg) {
+  if (!serverPressureIndicator) return;
+  const active = msg.active;
+  const level = msg.level || 'normal';
+  const interval = msg.throttle_interval || 15;
+  const reason = msg.reason || '';
+  if (!active || level === 'normal') {
+    serverPressureIndicator.style.display = 'none';
+    serverPressureIndicator.textContent = '';
+    serverPressureIndicator.className = 'spoke-only';
+    return;
+  }
+  const icon = level === 'high' ? '⚠️' : '⏳';
+  serverPressureIndicator.textContent = `${icon} API Load (${interval}s)`;
+  serverPressureIndicator.title = reason
+    ? `Server under load — client reporting slowed to ${interval}s intervals\n${reason}`
+    : `Server under load — client reporting slowed to ${interval}s intervals`;
+  serverPressureIndicator.className = `spoke-only server-pressure-badge level-${level}`;
+  serverPressureIndicator.style.display = '';
+}
+
 function setRelayStatus(data = {}) {
   updateRelayIndicatorVisibility();
   const stateText = document.getElementById('relay-state-text');
@@ -6029,6 +6052,11 @@ function handleMessage(message) {
 
   if (message.type === 'gkill_switch_update') {
     applyGkillSwitch(message.value);
+    return;
+  }
+
+  if (message.type === 'server_pressure') {
+    applyServerPressure(message);
     return;
   }
 

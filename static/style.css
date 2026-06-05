@@ -614,6 +614,28 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   50%       { opacity: 0.65; }
 }
 
+/* ── Server pressure indicator ──────────────────────────────────── */
+.server-pressure-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: default;
+}
+.server-pressure-badge.level-medium {
+  background: #d97706;
+  color: #fff;
+}
+.server-pressure-badge.level-high {
+  background: #c0392b;
+  color: #fff;
+  animation: gkill-pulse 1.8s ease-in-out infinite;
+}
+
 /* ── Footer ─────────────────────────────────────────────────────── */
 .page-footer {
   background: var(--hpe-navy-dark);

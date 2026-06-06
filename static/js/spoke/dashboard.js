@@ -76,6 +76,7 @@ let availableChecks = { alerts: [], insights: [] };
 let spokeCentralBrowseData = null;
 let spokeCaMonitoredItems = [];
 let spokeCaBrowseActiveTab = 'central-browse-panel';
+let spokeCaBrowseRefreshTimer = null;
 // Demo scenario state: hostname → {scenario, minutes_remaining, expires_at}
 let _demoActiveMap = {};
 let _demoRefreshTimer = null;
@@ -4525,16 +4526,110 @@ function renderAvailableChecks() {
   });
 }
 
-async function fetchSpokeCentralBrowse(force = false) {
+// ── Spoke Central browse cache helpers (localStorage + stale-while-revalidate) ─
+
+function spokeCaBrowseCacheKey() { return 'spoke_ca_browse'; }
+
+function normalizeSpokeCaBrowseData(data) {
+  if (!data || typeof data !== 'object') return data;
+  const normalized = { ...data };
+  const clients = Array.isArray(data.clients) ? data.clients : [];
+  // Detect legacy client summary rows (total/wired/wireless but no mac/hostname/ip)
+  const hasIndividual = clients.some((c) => c && (c.mac || c.hostname || c.ip));
+  const hasLegacySummary = clients.some((c) => c && !c.mac && !c.hostname && !c.ip && (c.total !== undefined || c.wired !== undefined));
+  if (hasLegacySummary && !hasIndividual) {
+    normalized.clients = [];
+    if (!normalized.clients_by_site || typeof normalized.clients_by_site !== 'object') {
+      normalized.clients_by_site = Object.fromEntries(clients.map((c) => {
+        const site = String(c?.site || '—').trim() || '—';
+        return [site, { total: Number(c?.total) || 0, wired: Number(c?.wired) || 0, wireless: Number(c?.wireless) || 0 }];
+      }));
+    }
+  } else if (!Array.isArray(normalized.clients)) {
+    normalized.clients = [];
+  }
+  return normalized;
+}
+
+function saveSpokeCaBrowseCache(data) {
+  try { localStorage.setItem(spokeCaBrowseCacheKey(), JSON.stringify(normalizeSpokeCaBrowseData(data))); } catch (_) {}
+}
+
+function loadSpokeCaBrowseCache() {
   try {
-    const data = await requestJson(`/api/central/browse${force ? '?force=true' : ''}`);
+    const raw = localStorage.getItem(spokeCaBrowseCacheKey());
+    if (!raw) return null;
+    return normalizeSpokeCaBrowseData(JSON.parse(raw));
+  } catch (_) { return null; }
+}
+
+function updateSpokeCaBrowsePills(data) {
+  if (centralModePill) centralModePill.textContent = `${data?.mode || '—'} mode`;
+  if (centralSitesPill) centralSitesPill.textContent = `${(data?.sites || []).length} sites`;
+  if (centralUpdatedPill) {
+    centralUpdatedPill.textContent = data?.cached_at
+      ? `Updated ${new Date(data.cached_at * 1000).toLocaleTimeString()}`
+      : '—';
+  }
+}
+
+function resetSpokeCaBrowsePills() {
+  if (centralModePill) centralModePill.textContent = '— mode';
+  if (centralSitesPill) centralSitesPill.textContent = '— sites';
+  if (centralUpdatedPill) centralUpdatedPill.textContent = '—';
+}
+
+function scheduleSpokeCaBrowseRefresh() {
+  clearTimeout(spokeCaBrowseRefreshTimer);
+  spokeCaBrowseRefreshTimer = setTimeout(() => {
+    // Only auto-refresh if the Central tab is actually visible
+    const centralPanel = document.getElementById('tab-central');
+    if (centralPanel && !centralPanel.classList.contains('hidden')) {
+      fetchSpokeCentralBrowse(true).catch(() => {});
+    }
+  }, 5 * 60 * 1000);
+}
+
+async function fetchSpokeCentralBrowse(force = false) {
+  const content = document.getElementById('central-browse-content');
+
+  // Show localStorage cache immediately while fetching (stale-while-revalidate)
+  if (!force) {
+    const cached = loadSpokeCaBrowseCache();
+    const cachedHasSites = cached && (cached.sites || []).length > 0;
+    if (cachedHasSites) {
+      spokeCentralBrowseData = cached;
+      updateSpokeCaBrowsePills(cached);
+      spokeCaMonitoredItems = currentSettings.spoke_monitored_items || [];
+      renderSpokeCaBrowseTab();
+      scheduleSpokeCaBrowseRefresh();
+      // Revalidate in the background so data stays fresh
+      fetchSpokeCentralBrowse(true).catch(() => {});
+      return;
+    }
+  }
+
+  // No cache, or forced refresh — fetch fresh data
+  if (!spokeCentralBrowseData && content) {
+    content.innerHTML = '<div class="empty-state">Loading Central data…</div>';
+  }
+  if (force) resetSpokeCaBrowsePills();
+
+  try {
+    const raw = await requestJson(`/api/central/browse${force ? '?force=true' : ''}`);
+    const data = normalizeSpokeCaBrowseData(raw);
     spokeCentralBrowseData = data;
+    saveSpokeCaBrowseCache(data);
+    updateSpokeCaBrowsePills(data);
     spokeCaMonitoredItems = currentSettings.spoke_monitored_items || [];
     updateCentralToolbar();
     renderSpokeCaBrowseTab();
   } catch (err) {
-    const content = document.getElementById('central-browse-content');
-    if (content) content.innerHTML = `<div class="empty-state" style="color:#c0392b;">Failed to load Central data: ${escHtml(err.message)}</div>`;
+    if (content && !spokeCentralBrowseData) {
+      content.innerHTML = `<div class="empty-state" style="color:#c0392b;">Failed to load Central data: ${escHtml(err.message)}</div>`;
+    }
+  } finally {
+    scheduleSpokeCaBrowseRefresh();
   }
 }
 

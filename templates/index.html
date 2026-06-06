@@ -3487,9 +3487,12 @@
           </div>
 
           <div id="msg-stats-card" class="setup-card setup-section-gap">
-            <div class="setup-card-header">
-              <h2>Message Statistics</h2>
-              <p>Live WebSocket telemetry for troubleshooting spoke messaging and server load.</p>
+            <div class="setup-card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+              <div>
+                <h2>Message Statistics</h2>
+                <p>Live WebSocket telemetry for troubleshooting spoke messaging and server load.</p>
+              </div>
+              <button id="trbl-clear-queue-btn" class="btn btn-warning btn-small" type="button" style="white-space:nowrap;">🧹 Clear Message Queue</button>
             </div>
             <div class="msg-stats-grid">
               <div class="msg-stat-item">

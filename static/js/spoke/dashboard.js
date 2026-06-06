@@ -6051,6 +6051,24 @@ if (cmdCancelAllBtn) {
   });
 }
 
+const trblClearQueueBtn = document.getElementById('trbl-clear-queue-btn');
+if (trblClearQueueBtn) {
+  trblClearQueueBtn.addEventListener('click', async () => {
+    trblClearQueueBtn.disabled = true;
+    trblClearQueueBtn.textContent = 'Clearing…';
+    try {
+      const res = await fetch('/api/commands/cancel-all', { method: 'POST' });
+      const data = res.ok ? await res.json() : null;
+      const count = data?.cancelled ?? 0;
+      trblClearQueueBtn.textContent = count > 0 ? `✅ Cleared ${count}` : '✅ Empty';
+    } catch {
+      trblClearQueueBtn.textContent = '❌ Error';
+    } finally {
+      setTimeout(() => { trblClearQueueBtn.disabled = false; trblClearQueueBtn.textContent = '🧹 Clear Message Queue'; }, 3000);
+    }
+  });
+}
+
 requestJson('/api/commands').then((commands) => {
   window._lastCommands = commands || [];
   renderCommandTable(commands);

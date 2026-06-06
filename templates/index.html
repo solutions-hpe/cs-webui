@@ -2537,9 +2537,11 @@
           </div>
         </div>
         <nav class="setup-subnav" role="tablist" style="border-bottom:1px solid var(--border);margin-bottom:0;">
-          <button class="setup-subtab central-subtab active" data-subtab="central-sites-panel" role="tab">Sites</button>
+          <button class="setup-subtab central-subtab active" data-subtab="central-browse-panel" role="tab">Sites</button>
           <button class="setup-subtab central-subtab" data-subtab="central-alerts-panel" role="tab">Alerts</button>
+          <button class="setup-subtab central-subtab" data-subtab="central-insights-panel" role="tab">Insights</button>
           <button class="setup-subtab central-subtab" data-subtab="central-clients-panel" role="tab">Clients</button>
+          <button class="setup-subtab central-subtab" data-subtab="central-devices-panel" role="tab">Devices</button>
           <button class="setup-subtab central-subtab" data-subtab="central-history-panel" role="tab">History</button>
           <button class="setup-subtab central-subtab" data-subtab="central-config-panel" role="tab">Config</button>
         </nav>
@@ -2547,8 +2549,14 @@
           <input type="search" id="central-search" class="form-input form-input-sm" placeholder="Search sites…" autocomplete="off" style="max-width:320px;">
         </div>
 
-        <!-- Sites sub-tab -->
-        <div id="central-sites-panel" class="setup-subpanel">
+        <div id="central-browse-panel" class="setup-subpanel">
+          <div id="central-browse-content">
+            <div class="empty-state">Loading Central data…</div>
+          </div>
+        </div>
+
+        <!-- Legacy Sites sub-tab / detail panel -->
+        <div id="central-sites-panel" class="setup-subpanel hidden">
           <div id="central-overview">
             <section class="central-toolbar">
               <div id="central-last-synced" class="central-last-synced hidden" aria-hidden="true">Last synced: —</div>
@@ -2619,33 +2627,35 @@
 
         <!-- Alerts sub-tab -->
         <div id="central-alerts-panel" class="setup-subpanel hidden">
-          <div class="setup-card setup-section-gap">
-            <div class="setup-card-header">
-              <h2>Active Alerts <span id="central-all-alerts-count" class="badge-count"></span></h2>
-            </div>
-            <div id="central-all-alerts-body"><p class="form-hint">Select this tab to load alerts across all sites.</p></div>
+          <div id="central-alerts-content">
+            <div class="empty-state">Select this tab to load alerts.</div>
           </div>
+          <div id="central-all-alerts-body" class="hidden"></div>
+        </div>
+
+        <div id="central-insights-panel" class="setup-subpanel hidden">
+          <div id="central-insights-content"><div class="empty-state">Select this tab to load insights.</div></div>
         </div>
 
         <!-- Clients sub-tab -->
         <div id="central-clients-panel" class="setup-subpanel hidden">
-          <div class="setup-card setup-section-gap">
-            <div class="setup-card-header">
-              <h2>Wireless Clients by Site</h2>
-            </div>
-            <table class="data-table" id="central-clients-table">
-              <thead>
-                <tr>
-                  <th>Workspace Site</th>
-                  <th>Central Site</th>
-                  <th>Wireless Clients</th>
-                  <th>Sim Clients Connected</th>
-                </tr>
-              </thead>
-              <tbody id="central-clients-tbody"></tbody>
-            </table>
-            <div id="central-clients-empty" class="central-empty hidden">No client data available.</div>
-          </div>
+          <div id="central-clients-content"><div class="empty-state">Select this tab to load clients.</div></div>
+          <table class="data-table hidden" id="central-clients-table">
+            <thead>
+              <tr>
+                <th>Workspace Site</th>
+                <th>Central Site</th>
+                <th>Wireless Clients</th>
+                <th>Sim Clients Connected</th>
+              </tr>
+            </thead>
+            <tbody id="central-clients-tbody"></tbody>
+          </table>
+          <div id="central-clients-empty" class="central-empty hidden">No client data available.</div>
+        </div>
+
+        <div id="central-devices-panel" class="setup-subpanel hidden">
+          <div id="central-devices-content"><div class="empty-state">Select this tab to load devices.</div></div>
         </div>
 
         <!-- History sub-tab -->
@@ -2800,6 +2810,22 @@
               </div>
         </div>
 
+        <div id="central-monitor-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:center;justify-content:center;">
+          <div style="background:var(--panel);border-radius:10px;padding:0;min-width:340px;max-width:420px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.35);overflow:hidden;" onclick="event.stopPropagation()">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);">
+              <h3 style="margin:0;font-size:1rem;" id="central-modal-title">Monitor</h3>
+              <button id="central-modal-close" class="btn btn-ghost btn-small" type="button" style="font-size:1.1rem;padding:4px 8px;">✕</button>
+            </div>
+            <div style="padding:16px 20px;">
+              <p style="margin:0 0 12px;color:var(--muted);font-size:0.85rem;line-height:1.5;" id="central-modal-sub"></p>
+              <span id="central-modal-msg" class="form-msg" style="font-size:0.82rem;"></span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 20px 16px;border-top:1px solid var(--border);">
+              <button id="central-modal-cancel" class="btn btn-secondary btn-small" type="button">Cancel</button>
+              <button id="central-modal-confirm" class="btn btn-primary btn-small" type="button">Add to Monitoring</button>
+            </div>
+          </div>
+        </div>
 
       </main>
 

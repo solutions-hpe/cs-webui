@@ -73,6 +73,9 @@ let clientCountData = {};   // wsite → { site_name, current, hourly_avg, drop_
 let _hwRowsCache    = [];   // cached hw check rows for renderHwPanel
 let _ccRowsCache    = [];   // cached cc check rows for renderCcPanel
 let availableChecks = { alerts: [], insights: [] };
+let spokeCentralBrowseData = null;
+let spokeCaMonitoredItems = [];
+let spokeCaBrowseActiveTab = 'central-browse-panel';
 // Demo scenario state: hostname → {scenario, minutes_remaining, expires_at}
 let _demoActiveMap = {};
 let _demoRefreshTimer = null;
@@ -96,6 +99,7 @@ let currentSettings = {
     customer_id: ''
   },
   site_mappings: {},
+  spoke_monitored_items: [],
   monitored_checks: [],
   hardware_checks: [],
   relay_enabled: 'off',
@@ -470,9 +474,9 @@ if (agentLogClear) {
 }
 
 // ── Central sub-tabs ──────────────────────────────────────────
-const centralSubPanels = ['central-sites-panel', 'central-alerts-panel', 'central-clients-panel', 'central-history-panel', 'central-config-panel'];
+const centralSubPanels = ['central-browse-panel', 'central-alerts-panel', 'central-insights-panel', 'central-clients-panel', 'central-devices-panel', 'central-history-panel', 'central-config-panel'];
 
-function activateCentralSubtab(subtabId = 'central-sites-panel') {
+function activateCentralSubtab(subtabId = 'central-browse-panel') {
   document.querySelectorAll('.central-subtab').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.subtab === subtabId);
   });
@@ -482,6 +486,11 @@ function activateCentralSubtab(subtabId = 'central-sites-panel') {
     panel.classList.toggle('active', id === subtabId);
     panel.classList.toggle('hidden', id !== subtabId);
   });
+  if (['central-browse-panel', 'central-alerts-panel', 'central-insights-panel', 'central-clients-panel', 'central-devices-panel'].includes(subtabId)) {
+    spokeCaBrowseActiveTab = subtabId;
+    if (!spokeCentralBrowseData) void fetchSpokeCentralBrowse();
+    else renderSpokeCaBrowseTab();
+  }
   if (subtabId === 'central-sites-panel') renderCentralSites();
   if (subtabId === 'central-alerts-panel') renderCentralAllAlerts();
   if (subtabId === 'central-clients-panel') renderCentralClients();
@@ -1008,6 +1017,9 @@ function mergeSettings(next = {}) {
     central_api: mergedCentralApi,
     central_config: mergedCentralConfig,
     site_mappings: next.site_mappings ?? currentSettings.site_mappings ?? {},
+    spoke_monitored_items: Array.isArray(next.spoke_monitored_items)
+      ? next.spoke_monitored_items
+      : (currentSettings.spoke_monitored_items || []),
     monitored_checks: Array.isArray(next.monitored_checks)
       ? next.monitored_checks
       : (currentSettings.monitored_checks || []),
@@ -2525,10 +2537,12 @@ function applySettingsToUI(s) {
   try { renderSiteMappingsTable(); } catch (_) {}
   try { renderSelectedChecksPreview(); } catch (_) {}
   try { renderHwChecksPreview(); } catch (_) {}
+  spokeCaMonitoredItems = settings.spoke_monitored_items || [];
   if ((availableChecks.alerts.length || availableChecks.insights.length) && availableChecksContainer) {
     try { renderAvailableChecks(); } catch (_) {}
   }
   try { renderCentralOverview(); } catch (_) {}
+  try { if (spokeCentralBrowseData || ['central-browse-panel', 'central-alerts-panel', 'central-insights-panel', 'central-clients-panel', 'central-devices-panel'].includes(spokeCaBrowseActiveTab)) renderSpokeCaBrowseTab(); } catch (_) {}
   try { renderChecksList(); } catch (_) {} // Refresh sim tab whenever settings change (monitored checks may have changed)
   try { renderSpokeMonitoredItems(); } catch (_) {}
   try { renderUsbSummary(latestProxmoxData); } catch (_) {}
@@ -4281,7 +4295,8 @@ function formatCentralDate(value) {
 
 function updateCentralToolbar() {
   const mappings = currentSettings.site_mappings || {};
-  const siteCount = Object.keys(mappings).length;
+  const browseSites = Array.isArray(spokeCentralBrowseData?.sites) ? spokeCentralBrowseData.sites.length : null;
+  const siteCount = browseSites ?? Object.keys(mappings).length;
   const centralMode = currentSettings.central_api?.mode === 'central' ? 'Central' : 'Classic';
   const updatedText = centralLastSyncedTs ? formatCentralDate(centralLastSyncedTs / 1000) : '—';
 
@@ -4510,11 +4525,582 @@ function renderAvailableChecks() {
   });
 }
 
+async function fetchSpokeCentralBrowse(force = false) {
+  try {
+    const data = await requestJson(`/api/central/browse${force ? '?force=true' : ''}`);
+    spokeCentralBrowseData = data;
+    spokeCaMonitoredItems = currentSettings.spoke_monitored_items || [];
+    updateCentralToolbar();
+    renderSpokeCaBrowseTab();
+  } catch (err) {
+    const content = document.getElementById('central-browse-content');
+    if (content) content.innerHTML = `<div class="empty-state" style="color:#c0392b;">Failed to load Central data: ${escHtml(err.message)}</div>`;
+  }
+}
+
+function spokeCaMonitoredSiteNames() {
+  const mappings = currentSettings.site_mappings || {};
+  const values = Object.values(mappings)
+    .map((value) => String(value || '').toLowerCase().trim())
+    .filter(Boolean);
+  if (!values.length) return null;
+  return new Set(values);
+}
+
+function spokeCaIsMonitored(type, name, site, identifier = '') {
+  if (type === 'site') {
+    const mappings = currentSettings.site_mappings || {};
+    const lname = (name || '').toLowerCase().trim();
+    return Object.values(mappings).some((value) => (value || '').toLowerCase().trim() === lname);
+  }
+  return spokeCaMonitoredItems.some((item) => {
+    if (item.type !== type) return false;
+    const iname = (identifier || name || '').toLowerCase().trim();
+    const isite = (site || '').toLowerCase().trim();
+    return (item.identifier || item.name || '').toLowerCase().trim() === iname
+      && (item.site || '').toLowerCase().trim() === isite;
+  });
+}
+
+function spokeCaMonitorBtn(type, payload = {}) {
+  const name = payload.name || payload.hostname || payload.mac || '';
+  const site = payload.site || '';
+  const identifier = payload.identifier || payload.mac || payload.hostname || payload.name || '';
+  const monitored = spokeCaIsMonitored(type, name, site, identifier);
+  const dataAttrs = Object.entries(payload)
+    .map(([key, value]) => `data-ca-${key.replace(/_/g, '-')}="${escHtml(String(value ?? ''))}"`)
+    .join(' ');
+  if (monitored) {
+    return `<button class="btn btn-small btn-secondary spoke-ca-unmonitor-btn" type="button" data-ca-type="${escHtml(type)}" ${dataAttrs} title="Click to remove from monitoring">✓ Monitored</button>`;
+  }
+  return `<button class="btn btn-small btn-primary spoke-ca-monitor-btn" type="button" data-ca-type="${escHtml(type)}" ${dataAttrs}>Monitor</button>`;
+}
+
+function attachSpokeCaMonitorButtons(container) {
+  if (!container) return;
+  container.querySelectorAll('.spoke-ca-monitor-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const type = btn.dataset.caType || '';
+      const payload = {
+        name: btn.dataset.caName || '',
+        site: btn.dataset.caSite || '',
+        central_site: btn.dataset.caCentralSite || '',
+        identifier: btn.dataset.caIdentifier || '',
+        mac: btn.dataset.caMac || '',
+        hostname: btn.dataset.caHostname || '',
+      };
+      openSpokeCaMonitorModal(type, payload);
+    });
+  });
+  container.querySelectorAll('.spoke-ca-unmonitor-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const type = btn.dataset.caType || '';
+      const payload = {
+        name: btn.dataset.caName || '',
+        site: btn.dataset.caSite || '',
+        central_site: btn.dataset.caCentralSite || '',
+        identifier: btn.dataset.caIdentifier || '',
+      };
+      spokeCaUnmonitorItem(type, payload, btn);
+    });
+  });
+}
+
+function openSpokeCaMonitorModal(type, payload) {
+  const modal = document.getElementById('central-monitor-modal');
+  const title = document.getElementById('central-modal-title');
+  const sub = document.getElementById('central-modal-sub');
+  const msg = document.getElementById('central-modal-msg');
+  const confirmBtn = document.getElementById('central-modal-confirm');
+  const cancelBtn = document.getElementById('central-modal-cancel');
+  const closeBtn = document.getElementById('central-modal-close');
+  if (!modal) return;
+
+  const label = type === 'site' ? `site "${payload.name}"` : `${type} "${payload.name}"`;
+  if (title) title.textContent = `Monitor ${type.charAt(0).toUpperCase() + type.slice(1)}`;
+  if (sub) sub.textContent = `Add ${label} to monitoring on this spoke.`;
+  if (msg) msg.textContent = '';
+
+  modal.classList.remove('hidden');
+  modal.style.display = 'flex';
+
+  const close = () => {
+    modal.classList.add('hidden');
+    modal.style.display = 'none';
+  };
+
+  if (closeBtn) closeBtn.onclick = close;
+  if (cancelBtn) cancelBtn.onclick = close;
+  modal.onclick = (e) => { if (e.target === modal) close(); };
+
+  if (confirmBtn) {
+    confirmBtn.onclick = async () => {
+      if (msg) msg.textContent = '⏳ Adding…';
+      confirmBtn.disabled = true;
+      try {
+        await spokeCaMonitorItem(type, payload);
+        close();
+        showToast(`"${payload.name}" added to monitoring.`, 'ok');
+      } catch (err) {
+        if (msg) msg.textContent = `Error: ${err.message}`;
+      } finally {
+        confirmBtn.disabled = false;
+      }
+    };
+  }
+}
+
+async function spokeCaMonitorItem(type, payload) {
+  if (type === 'site') {
+    await requestJson('/api/central/monitor-site', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'add', central_site: payload.central_site || payload.name }),
+    });
+    const mappings = { ...(currentSettings.site_mappings || {}) };
+    const csName = payload.central_site || payload.name;
+    mappings[csName] = csName;
+    currentSettings.site_mappings = mappings;
+  } else {
+    const resp = await requestJson('/api/central/monitored-items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, ...payload }),
+    });
+    if (!spokeCaMonitoredItems.some((item) => item.id === resp.item?.id)) {
+      spokeCaMonitoredItems = [...spokeCaMonitoredItems, resp.item];
+    }
+    currentSettings.spoke_monitored_items = spokeCaMonitoredItems;
+  }
+  updateCentralToolbar();
+  renderSpokeCaBrowseTab();
+}
+
+async function spokeCaUnmonitorItem(type, payload, button) {
+  if (button) button.disabled = true;
+  try {
+    if (type === 'site') {
+      await requestJson('/api/central/monitor-site', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'remove', central_site: payload.central_site || payload.name }),
+      });
+      const mappings = { ...(currentSettings.site_mappings || {}) };
+      const csName = (payload.central_site || payload.name || '').toLowerCase().trim();
+      Object.keys(mappings).forEach((key) => {
+        if ((mappings[key] || '').toLowerCase().trim() === csName || key.toLowerCase().trim() === csName) {
+          delete mappings[key];
+        }
+      });
+      currentSettings.site_mappings = mappings;
+    } else {
+      const item = spokeCaMonitoredItems.find((entry) =>
+        entry.type === type
+        && (entry.identifier || entry.name || '').toLowerCase() === (payload.identifier || payload.name || '').toLowerCase()
+        && (entry.site || '').toLowerCase() === (payload.site || '').toLowerCase()
+      );
+      if (item) {
+        await requestJson(`/api/central/monitored-items/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
+        spokeCaMonitoredItems = spokeCaMonitoredItems.filter((entry) => entry.id !== item.id);
+        currentSettings.spoke_monitored_items = spokeCaMonitoredItems;
+      }
+    }
+    showToast(`"${payload.name}" removed from monitoring.`, 'ok');
+    updateCentralToolbar();
+    renderSpokeCaBrowseTab();
+  } catch (err) {
+    if (button) button.disabled = false;
+    showToast(`Failed: ${err.message}`, 'error');
+  }
+}
+
+function renderSpokeCaBrowseTab() {
+  if (!spokeCentralBrowseData) return;
+  const search = (document.getElementById('central-search')?.value || '').trim().toLowerCase();
+  const tab = spokeCaBrowseActiveTab;
+  if (tab === 'central-alerts-panel') {
+    renderSpokeCaAlertsTab(document.getElementById('central-alerts-content') || document.getElementById('central-all-alerts-body'), spokeCentralBrowseData.alerts || [], search);
+  } else if (tab === 'central-insights-panel') {
+    renderSpokeCaInsightsTab(document.getElementById('central-insights-content'), spokeCentralBrowseData.insights || [], search);
+  } else if (tab === 'central-clients-panel') {
+    renderSpokeCaClientsTab(document.getElementById('central-clients-content'), spokeCentralBrowseData.clients_by_site || {}, search, spokeCentralBrowseData.clients || []);
+  } else if (tab === 'central-devices-panel') {
+    renderSpokeCaDevicesTab(document.getElementById('central-devices-content'), spokeCentralBrowseData.devices_by_site || {}, search);
+  } else {
+    renderSpokeCaSitesTab(document.getElementById('central-browse-content'), spokeCentralBrowseData.sites || [], search);
+  }
+
+  const content = tab === 'central-browse-panel'
+    ? document.getElementById('central-browse-content')
+    : tab === 'central-alerts-panel'
+      ? document.getElementById('central-alerts-content')
+      : tab === 'central-insights-panel'
+        ? document.getElementById('central-insights-content')
+        : tab === 'central-clients-panel'
+          ? document.getElementById('central-clients-content')
+          : document.getElementById('central-devices-content');
+  if (spokeCentralBrowseData.warning && content && !content.querySelector('tbody') && !content.querySelector('.ca-browse-warning')) {
+    content.insertAdjacentHTML('afterbegin', `<div class="empty-state ca-browse-warning" style="color:#c0392b;">${escHtml(spokeCentralBrowseData.warning)}</div>`);
+  }
+}
+
+function renderSpokeCaSitesTab(container, sites, search) {
+  if (!container) return;
+  const filtered = sites.filter((site) => !search || JSON.stringify(site).toLowerCase().includes(search));
+  if (!filtered.length) {
+    container.innerHTML = `<div class="empty-state">${search ? 'No sites match your search.' : 'No sites returned from Central.'}</div>`;
+    return;
+  }
+  const tdP = 'padding:6px 10px;';
+  const rows = filtered.map((site) => {
+    const score = site.health_score != null ? parseInt(site.health_score, 10) : null;
+    const healthColor = score == null ? '#aaa' : score >= 80 ? '#27ae60' : score >= 50 ? '#f39c12' : '#e74c3c';
+    const healthLabel = score == null ? '—' : score >= 80 ? 'Healthy' : score >= 50 ? 'Fair' : 'Poor';
+    const healthDot = `<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:${healthColor};display:inline-block;flex-shrink:0;"></span>${healthLabel}</span>`;
+    return `<tr>
+      <td style="width:40%;${tdP}"><strong>${escHtml(site.name || '—')}</strong></td>
+      <td style="${tdP}">${healthDot}</td>
+      <td style="white-space:nowrap;${tdP}">${site.wireless_clients != null ? escHtml(String(site.wireless_clients)) : '—'}</td>
+      <td style="white-space:nowrap;${tdP}">${spokeCaMonitorBtn('site', { name: site.name || '', central_site: site.central_site || site.name || '' })}</td>
+    </tr>`;
+  }).join('');
+  container.innerHTML = `
+    <div class="setup-card" style="overflow-x:auto;padding:0;">
+      <table class="data-table" style="font-size:0.82rem;margin:0;min-width:500px;width:100%;">
+        <thead><tr>
+          <th style="width:40%;padding:5px 10px;">Site</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Health</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Wireless Clients</th>
+          <th style="padding:5px 10px;"></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  attachSpokeCaMonitorButtons(container);
+}
+
+function _caTs(ts) {
+  if (!ts) return '—';
+  try {
+    const d = new Date(ts);
+    const date = d.toLocaleDateString();
+    const time = d.toLocaleTimeString();
+    return `<span style="display:block;font-size:0.78rem;color:var(--muted);">${escHtml(date)}</span><span style="display:block;font-size:0.78rem;color:var(--muted);">${escHtml(time)}</span>`;
+  } catch (_) {
+    return escHtml(String(ts));
+  }
+}
+
+function _caSevDot(sev) {
+  const s = (sev || '').toLowerCase();
+  const color = s === 'critical' || s === 'red' || s === 'error' ? '#e74c3c'
+    : s === 'major' || s === 'orange' ? '#e67e22'
+      : s === 'minor' || s === 'warning' || s === 'yellow' ? '#f1c40f'
+        : s === 'info' || s === 'good' || s === 'green' || s === 'clear' ? '#27ae60'
+          : '#aaa';
+  return `<span style="display:flex;justify-content:center;align-items:center;"><span style="width:10px;height:10px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0;"></span></span>`;
+}
+
+function renderSpokeCaAlertsTab(container, alerts, search) {
+  if (!container) return;
+  const monitoredSites = spokeCaMonitoredSiteNames();
+  if (monitoredSites) alerts = alerts.filter((alert) => monitoredSites.has((alert.site || '').toLowerCase().trim()));
+  const activeCat = container._caCatFilter || 'All';
+  const categories = ['All', ...new Set(alerts.map((alert) => alert.category).filter(Boolean))].sort((a, b) => (a === 'All' ? -1 : a.localeCompare(b)));
+  let filtered = alerts;
+  if (activeCat !== 'All') filtered = filtered.filter((alert) => alert.category === activeCat);
+  if (search) filtered = filtered.filter((alert) => JSON.stringify(alert).toLowerCase().includes(search));
+  const catPills = categories.map((cat) =>
+    `<button class="btn btn-small ${activeCat === cat ? 'btn-primary' : 'btn-secondary'} ca-cat-filter" data-cat="${escHtml(cat)}" style="margin:0 2px 4px;">${escHtml(cat)}</button>`
+  ).join('');
+  const tdP = 'padding:6px 10px;';
+  const rows = filtered.map((alert) => {
+    const catBadge = alert.category ? `<span class="badge badge-grey" style="font-size:10px;margin-left:4px;">${escHtml(alert.category)}</span>` : '';
+    const devType = alert.device_type ? escHtml(alert.device_type) : '—';
+    const detailStr = alert.detail ? `<div style="font-size:11px;color:var(--muted);line-height:1.3;">${escHtml(alert.detail)}</div>` : '';
+    return `<tr>
+      <td style="width:40%;${tdP}"><strong>${escHtml(alert.name || '—')}</strong>${catBadge}${detailStr}</td>
+      <td style="white-space:nowrap;${tdP}">${escHtml(alert.site || '—')}</td>
+      <td style="white-space:nowrap;min-width:80px;text-align:center;${tdP}">${_caSevDot(alert.severity)}</td>
+      <td style="font-size:11px;color:var(--muted);white-space:nowrap;${tdP}">${devType}</td>
+      <td style="min-width:70px;${tdP}">${_caTs(alert.ts)}</td>
+      <td style="white-space:nowrap;${tdP}">${spokeCaMonitorBtn('alert', { name: alert.name || '', site: alert.site || '', identifier: alert.name || '' })}</td>
+    </tr>`;
+  }).join('');
+  container.innerHTML = `
+    <div style="margin-bottom:4px;">${catPills}</div>
+    ${filtered.length ? `<div class="setup-card" style="overflow-x:auto;padding:0;">
+      <table class="data-table" style="font-size:0.82rem;margin:0;min-width:700px;width:100%;">
+        <thead><tr>
+          <th style="width:40%;padding:5px 10px;">Alert</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Site</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Severity</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Device Type</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Time</th>
+          <th style="padding:5px 10px;"></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>` : `<div class="empty-state">${search || activeCat !== 'All' ? 'No alerts match the filter.' : 'No active alerts.'}</div>`}`;
+  container.querySelectorAll('.ca-cat-filter').forEach((btn) => {
+    btn.onclick = () => { container._caCatFilter = btn.dataset.cat; renderSpokeCaAlertsTab(container, alerts, search); };
+  });
+  attachSpokeCaMonitorButtons(container);
+}
+
+function renderSpokeCaInsightsTab(container, insights, search) {
+  if (!container) return;
+  const monitoredSites = spokeCaMonitoredSiteNames();
+  if (monitoredSites) insights = insights.filter((insight) => monitoredSites.has((insight.site || '').toLowerCase().trim()));
+  const activeCat = container._caCatFilter || 'All';
+  const categories = ['All', ...new Set(insights.map((insight) => insight.category).filter(Boolean))].sort((a, b) => (a === 'All' ? -1 : a.localeCompare(b)));
+  let filtered = insights;
+  if (activeCat !== 'All') filtered = filtered.filter((insight) => insight.category === activeCat);
+  if (search) filtered = filtered.filter((insight) => JSON.stringify(insight).toLowerCase().includes(search));
+  const catPills = categories.map((cat) =>
+    `<button class="btn btn-small ${activeCat === cat ? 'btn-primary' : 'btn-secondary'} ca-insight-cat-filter" data-cat="${escHtml(cat)}" style="margin:0 2px 4px;">${escHtml(cat)}</button>`
+  ).join('');
+  const tdP = 'padding:6px 10px;';
+  const rows = filtered.map((insight) => {
+    const catLabel = (insight.category || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    const catBadge = catLabel ? `<span class="badge badge-grey" style="font-size:10px;margin-left:4px;">${escHtml(catLabel)}</span>` : '';
+    const devCount = insight.device_count ? `${insight.device_count} dev` : '';
+    const cliCount = insight.client_count ? `${insight.client_count} client${insight.client_count !== 1 ? 's' : ''}` : '';
+    const impacted = [devCount, cliCount].filter(Boolean).join(', ');
+    const descStr = insight.description ? `<div style="font-size:11px;color:var(--muted);line-height:1.3;">${escHtml(insight.description)}</div>` : '';
+    return `<tr>
+      <td style="width:40%;${tdP}"><strong>${escHtml(insight.name || '—')}</strong>${catBadge}${descStr}</td>
+      <td style="white-space:nowrap;${tdP}">${escHtml(insight.site || '—')}</td>
+      <td style="white-space:nowrap;font-size:11px;${tdP}">${escHtml(impacted || '—')}</td>
+      <td style="min-width:70px;${tdP}">${_caTs(insight.ts)}</td>
+      <td style="white-space:nowrap;${tdP}">${spokeCaMonitorBtn('insight', { name: insight.name || '', site: insight.site || '', identifier: insight.name || '' })}</td>
+    </tr>`;
+  }).join('');
+  container.innerHTML = `
+    <div style="margin-bottom:4px;">${catPills}</div>
+    ${filtered.length ? `<div class="setup-card" style="overflow-x:auto;padding:0;">
+      <table class="data-table" style="font-size:0.82rem;margin:0;min-width:600px;width:100%;">
+        <thead><tr>
+          <th style="width:40%;padding:5px 10px;">Insight</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Site</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Impacted</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Time</th>
+          <th style="padding:5px 10px;"></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>` : `<div class="empty-state">${search || activeCat !== 'All' ? 'No insights match the filter.' : 'No AI insights returned from Central.'}</div>`}`;
+  container.querySelectorAll('.ca-insight-cat-filter').forEach((btn) => {
+    btn.onclick = () => { container._caCatFilter = btn.dataset.cat; renderSpokeCaInsightsTab(container, insights, search); };
+  });
+  attachSpokeCaMonitorButtons(container);
+}
+
+function _caClientIsWireless(c) {
+  if (c.connection_type && typeof c.connection_type === 'string') {
+    const ct = c.connection_type.toUpperCase();
+    if (ct === 'WIRELESS' || ct === 'WIFI') return true;
+    if (ct === 'WIRED' || ct === 'ETHERNET') return false;
+  }
+  return !!(c.ap && c.ap !== '—') || !!(c.ssid && c.ssid !== '—');
+}
+
+function spokeCaIsIndividualClientRecord(client) {
+  if (!client || typeof client !== 'object') return false;
+  return ['mac', 'hostname', 'ip', 'ap', 'ssid', 'status', 'os', 'vlan']
+    .some((key) => Object.prototype.hasOwnProperty.call(client, key));
+}
+
+function renderSpokeCaClientsTab(container, clientsBySite, search, clientsLegacy = []) {
+  if (!container) return;
+  const tdP = 'padding:6px 10px;';
+  const monitoredSites = spokeCaMonitoredSiteNames();
+  const activeTab = container._caClientTab || 'all';
+  const allClients = (clientsLegacy || []).filter((client) => spokeCaIsIndividualClientRecord(client));
+  const clientSource = allClients.length > 0
+    ? (monitoredSites ? allClients.filter((client) => monitoredSites.has((client.site || '').toLowerCase().trim())) : allClients)
+    : null;
+  const tabPills = `<div style="margin-bottom:8px;">
+    <button class="btn btn-small ${activeTab === 'all' ? 'btn-primary' : 'btn-secondary'} ca-client-tab-btn" data-tab="all" style="margin:0 2px 4px;">All</button>
+    <button class="btn btn-small ${activeTab === 'wireless' ? 'btn-primary' : 'btn-secondary'} ca-client-tab-btn" data-tab="wireless" style="margin:0 2px 4px;">Wireless</button>
+    <button class="btn btn-small ${activeTab === 'wired' ? 'btn-primary' : 'btn-secondary'} ca-client-tab-btn" data-tab="wired" style="margin:0 2px 4px;">Wired</button>
+  </div>`;
+  if (clientSource) {
+    const tabFiltered = activeTab === 'all' ? clientSource : clientSource.filter((client) => (activeTab === 'wireless' ? _caClientIsWireless(client) : !_caClientIsWireless(client)));
+    const filtered = tabFiltered.filter((client) => !search || JSON.stringify(client).toLowerCase().includes(search));
+    const emptyMsg = search ? 'No clients match your search.' : `No ${activeTab === 'all' ? '' : `${activeTab} `}clients returned from Central.`;
+    if (!filtered.length) {
+      container.innerHTML = tabPills + `<div class="empty-state">${emptyMsg}</div>`;
+    } else {
+      const isWireless = activeTab === 'wireless';
+      const isAll = activeTab === 'all';
+      const rows = filtered.map((client) => {
+        const statusColor = (client.status || '').toLowerCase() === 'connected' ? '#27ae60'
+          : (client.status || '').toLowerCase() === 'disconnected' ? '#e74c3c' : '#aaa';
+        const statusDot = `<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:8px;height:8px;border-radius:50%;background:${statusColor};display:inline-block;flex-shrink:0;"></span>${escHtml(client.status || '—')}</span>`;
+        const wirelessCells = isAll
+          ? `<td style="white-space:nowrap;${tdP}">${escHtml(client.ap || '—')}</td>
+             <td style="white-space:nowrap;${tdP}">${escHtml(client.ssid || '—')}</td>
+             <td style="white-space:nowrap;${tdP}">${escHtml(client.vlan || '—')}</td>`
+          : isWireless
+            ? `<td style="white-space:nowrap;${tdP}">${escHtml(client.ap || '—')}</td>
+               <td style="white-space:nowrap;${tdP}">${escHtml(client.ssid || '—')}</td>`
+            : `<td style="white-space:nowrap;${tdP}">${escHtml(client.vlan || '—')}</td>`;
+        return `<tr>
+          <td style="width:28%;${tdP}"><strong>${escHtml(client.hostname !== '—' ? client.hostname : (client.username || '—'))}</strong>${client.username && client.hostname !== '—' ? `<div style="font-size:11px;color:var(--muted);margin-top:1px;">${escHtml(client.username)}</div>` : ''}<div style="font-size:11px;color:var(--muted);margin-top:2px;">${escHtml(client.mac || '')}</div></td>
+          <td style="${tdP}"><span style="white-space:nowrap;">${escHtml(client.ip || '—')}</span>${client.site ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;">${escHtml(client.site)}</div>` : ''}</td>
+          ${wirelessCells}
+          <td style="white-space:nowrap;${tdP}">${statusDot}</td>
+          <td style="white-space:nowrap;${tdP}">${spokeCaMonitorBtn('client', {
+            name: client.hostname || client.mac || 'Client',
+            hostname: client.hostname || '',
+            mac: client.mac || '',
+            site: client.site || '',
+          })}</td>
+        </tr>`;
+      }).join('');
+      const extraHeaders = isAll
+        ? `<th style="padding:5px 10px;white-space:nowrap;">AP</th>
+           <th style="padding:5px 10px;white-space:nowrap;">SSID</th>
+           <th style="padding:5px 10px;white-space:nowrap;">VLAN</th>`
+        : isWireless
+          ? `<th style="padding:5px 10px;white-space:nowrap;">AP</th>
+             <th style="padding:5px 10px;white-space:nowrap;">SSID</th>`
+          : `<th style="padding:5px 10px;white-space:nowrap;">VLAN</th>`;
+      container.innerHTML = tabPills + `
+        <div class="setup-card" style="overflow-x:auto;padding:0;">
+          <table class="data-table" style="font-size:0.82rem;margin:0;min-width:${isAll ? 700 : isWireless ? 600 : 500}px;width:100%;">
+            <thead><tr>
+              <th style="width:28%;padding:5px 10px;">Client</th>
+              <th style="padding:5px 10px;white-space:nowrap;">IP / Site</th>
+              ${extraHeaders}
+              <th style="padding:5px 10px;white-space:nowrap;">Status</th>
+              <th style="padding:5px 10px;"></th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }
+  } else {
+    let entries = Object.entries(clientsBySite || {});
+    if (monitoredSites) entries = entries.filter(([site]) => monitoredSites.has(site.toLowerCase().trim()));
+    const filtered = entries.filter(([site]) => !search || site.toLowerCase().includes(search));
+    const emptyMsg = search ? 'No clients match your search.' : 'No clients returned from Central.';
+    if (!filtered.length) {
+      container.innerHTML = tabPills + `<div class="empty-state">${emptyMsg}</div>`;
+    } else {
+      const isAll = activeTab === 'all';
+      const countKey = activeTab === 'wired' ? 'wired' : 'wireless';
+      const rows = filtered.sort((a, b) => (b[1].total || 0) - (a[1].total || 0)).map(([site, counts]) => `
+        <tr>
+          <td style="width:40%;${tdP}"><strong>${escHtml(site)}</strong></td>
+          ${isAll ? `<td style="white-space:nowrap;${tdP}">${counts.total ?? '—'}</td>
+          <td style="white-space:nowrap;${tdP}">${counts.wireless ?? counts.wireless_clients ?? '—'}</td>
+          <td style="white-space:nowrap;${tdP}">${counts.wired ?? '—'}</td>`
+          : `<td style="white-space:nowrap;${tdP}">${counts[countKey] ?? (countKey === 'wireless' ? counts.wireless_clients : '—') ?? '—'}</td>`}
+          <td style="white-space:nowrap;${tdP}">${spokeCaMonitorBtn('client', { name: `Client Count: ${site}`, site })}</td>
+        </tr>`).join('');
+      const countHeaders = isAll
+        ? `<th style="padding:5px 10px;white-space:nowrap;">Total</th>
+           <th style="padding:5px 10px;white-space:nowrap;">Wireless</th>
+           <th style="padding:5px 10px;white-space:nowrap;">Wired</th>`
+        : `<th style="padding:5px 10px;white-space:nowrap;">${activeTab === 'wired' ? 'Wired' : 'Wireless'} Clients</th>`;
+      container.innerHTML = tabPills + `
+        <div class="setup-card" style="overflow-x:auto;padding:0;">
+          <table class="data-table" style="font-size:0.82rem;margin:0;min-width:${isAll ? 500 : 400}px;width:100%;">
+            <thead><tr>
+              <th style="width:40%;padding:5px 10px;">Site</th>
+              ${countHeaders}
+              <th style="padding:5px 10px;"></th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }
+  }
+  container.querySelectorAll('.ca-client-tab-btn').forEach((btn) => {
+    btn.onclick = () => { container._caClientTab = btn.dataset.tab; renderSpokeCaClientsTab(container, clientsBySite, search, clientsLegacy); };
+  });
+  attachSpokeCaMonitorButtons(container);
+}
+
+function _caDeviceTabType(device) {
+  const t = (device.type || '').toUpperCase();
+  if (t === 'AP' || t === 'IAP' || t === 'CAP' || t.startsWith('AP-') || t.includes('IAP')) return 'ap';
+  if (t === 'GATEWAY' || t === 'GW' || t === 'VGW' || t === 'BRANCH_GATEWAY' || t.includes('GATEWAY')) return 'gateway';
+  if (t === 'SWITCH' || t === 'SW' || t === 'CX' || t.includes('SWITCH')) return 'switch';
+  return 'other';
+}
+
+function renderSpokeCaDevicesTab(container, devicesBySite, search) {
+  if (!container) return;
+  const monitoredSites = spokeCaMonitoredSiteNames();
+  const activeTab = container._caDeviceTab || 'all';
+  const allDevices = Object.entries(devicesBySite || {})
+    .filter(([site]) => !monitoredSites || monitoredSites.has(site.toLowerCase().trim()))
+    .flatMap(([site, devices]) => devices.map((device) => ({ ...device, site })));
+  const tabPills = `<div style="margin-bottom:8px;">
+    <button class="btn btn-small ${activeTab === 'all' ? 'btn-primary' : 'btn-secondary'} ca-device-tab-btn" data-tab="all" style="margin:0 2px 4px;">All</button>
+    <button class="btn btn-small ${activeTab === 'ap' ? 'btn-primary' : 'btn-secondary'} ca-device-tab-btn" data-tab="ap" style="margin:0 2px 4px;">Access Points</button>
+    <button class="btn btn-small ${activeTab === 'gateway' ? 'btn-primary' : 'btn-secondary'} ca-device-tab-btn" data-tab="gateway" style="margin:0 2px 4px;">Gateway</button>
+    <button class="btn btn-small ${activeTab === 'switch' ? 'btn-primary' : 'btn-secondary'} ca-device-tab-btn" data-tab="switch" style="margin:0 2px 4px;">Switch</button>
+  </div>`;
+  const tabDevices = activeTab === 'all' ? allDevices : allDevices.filter((device) => _caDeviceTabType(device) === activeTab);
+  const filtered = tabDevices.filter((device) => !search || JSON.stringify(device).toLowerCase().includes(search));
+  if (!filtered.length) {
+    const emptyLabel = activeTab === 'all' ? 'devices' : activeTab === 'ap' ? 'access points' : activeTab === 'gateway' ? 'gateways' : 'switches';
+    container.innerHTML = tabPills + `<div class="empty-state">${search ? 'No devices match your search.' : `No ${emptyLabel} returned from Central.`}</div>`;
+    container.querySelectorAll('.ca-device-tab-btn').forEach((btn) => {
+      btn.onclick = () => { container._caDeviceTab = btn.dataset.tab; renderSpokeCaDevicesTab(container, devicesBySite, search); };
+    });
+    return;
+  }
+  const tdP = 'padding:6px 10px;';
+  const rows = filtered.map((device) => {
+    const statusColor = (device.status || '').toUpperCase() === 'DOWN' || (device.status || '').toUpperCase() === 'OFFLINE' ? '#e74c3c'
+      : (device.status || '').toUpperCase() === 'UP' || (device.status || '').toUpperCase() === 'ONLINE' ? '#27ae60'
+        : '#aaa';
+    const statusDot = `<span style="display:inline-flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:${statusColor};display:inline-block;flex-shrink:0;"></span>${escHtml(device.status || '—')}</span>`;
+    const deviceName = String(device.name || device.serial || device.type || 'Device').trim() || 'Device';
+    const deviceIdentifier = String(device.name || device.serial || `${device.type || 'device'}:${device.site || ''}`).trim();
+    const subLine = [device.model, device.serial].filter(Boolean).map(escHtml).join(' · ');
+    const ipFw = [device.ip, device.firmware || device.version].filter(Boolean).map(escHtml).join(' · ');
+    const monitorType = _caDeviceTabType(device) === 'other' ? 'gateway' : _caDeviceTabType(device);
+    return `<tr>
+      <td style="width:40%;${tdP}"><strong>${escHtml(device.name || '—')}</strong>${subLine ? `<div style="font-size:11px;color:var(--muted);">${subLine}</div>` : ''}</td>
+      <td style="white-space:nowrap;${tdP}">${escHtml(device.site || '—')}</td>
+      <td style="white-space:nowrap;font-size:11px;color:var(--muted);${tdP}">${escHtml(device.type || '—')}</td>
+      <td style="white-space:nowrap;min-width:80px;${tdP}">${statusDot}</td>
+      <td style="font-size:11px;color:var(--muted);${tdP}">${ipFw || '—'}</td>
+      <td style="white-space:nowrap;${tdP}">${spokeCaMonitorBtn(monitorType, { name: deviceName, identifier: deviceIdentifier, site: device.site || '' })}</td>
+    </tr>`;
+  }).join('');
+  container.innerHTML = tabPills + `
+    <div class="setup-card" style="overflow-x:auto;padding:0;">
+      <table class="data-table" style="font-size:0.82rem;margin:0;min-width:650px;width:100%;">
+        <thead><tr>
+          <th style="width:40%;padding:5px 10px;">Device</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Site</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Type</th>
+          <th style="padding:5px 10px;white-space:nowrap;">Status</th>
+          <th style="padding:5px 10px;white-space:nowrap;">IP / Firmware</th>
+          <th style="padding:5px 10px;"></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  container.querySelectorAll('.ca-device-tab-btn').forEach((btn) => {
+    btn.onclick = () => { container._caDeviceTab = btn.dataset.tab; renderSpokeCaDevicesTab(container, devicesBySite, search); };
+  });
+  attachSpokeCaMonitorButtons(container);
+}
+
 function renderCentralSites() {
   const tbody = document.getElementById('central-sites-tbody');
   const centralEmpty = document.getElementById('central-empty');
   if (!centralOverview || !tbody || !centralEmpty) return;
   updateCentralToolbar();
+  if (spokeCentralBrowseData) renderSpokeCaBrowseTab();
   tbody.textContent = '';
 
   const mappings = currentSettings.site_mappings || {};
@@ -4578,11 +5164,18 @@ function renderCentralSites() {
 
 function renderCentralOverview() {
   renderCentralSites();
+  if (spokeCentralBrowseData) renderSpokeCaBrowseTab();
 }
 
 async function renderCentralAllAlerts() {
   const body = document.getElementById('central-all-alerts-body');
   const countBadge = document.getElementById('central-all-alerts-count');
+  const browseBody = document.getElementById('central-alerts-content') || body;
+  if (spokeCentralBrowseData && browseBody) {
+    renderSpokeCaAlertsTab(browseBody, spokeCentralBrowseData.alerts || [], (centralSearchInput?.value || '').trim().toLowerCase());
+    if (countBadge) countBadge.textContent = (spokeCentralBrowseData.alerts || []).length ? `(${(spokeCentralBrowseData.alerts || []).length})` : '';
+    return;
+  }
   if (!body) return;
   body.textContent = 'Loading alerts…';
   const mappings = currentSettings.site_mappings || {};
@@ -4625,6 +5218,11 @@ async function renderCentralAllAlerts() {
 function renderCentralClients() {
   const tbody = document.getElementById('central-clients-tbody');
   const empty = document.getElementById('central-clients-empty');
+  const browseBody = document.getElementById('central-clients-content');
+  if (spokeCentralBrowseData && browseBody) {
+    renderSpokeCaClientsTab(browseBody, spokeCentralBrowseData.clients_by_site || {}, (centralSearchInput?.value || '').trim().toLowerCase(), spokeCentralBrowseData.clients || []);
+    return;
+  }
   if (!tbody) return;
   tbody.textContent = '';
   const mappings = currentSettings.site_mappings || {};
@@ -7359,6 +7957,11 @@ centralTabButtons.forEach((button) => {
     } else {
       renderCentralOverview();
     }
+    if (!spokeCentralBrowseData) {
+      fetchSpokeCentralBrowse().catch(() => {});
+    } else {
+      renderSpokeCaBrowseTab();
+    }
   });
 });
 
@@ -7870,6 +8473,7 @@ if (centralRefreshBtn) {
     try {
       await requestJson('/api/central/poll', { method: 'POST' });
       await loadCentralStatus();
+      await fetchSpokeCentralBrowse(true);
     } catch (error) {
       if (centralLastSynced) centralLastSynced.textContent = `Refresh failed: ${error.message}`;
       if (centralUpdatedPill) centralUpdatedPill.textContent = 'Refresh failed';
@@ -7881,7 +8485,10 @@ if (centralRefreshBtn) {
 }
 
 if (centralSearchInput) {
-  centralSearchInput.addEventListener('input', () => renderCentralSites());
+  centralSearchInput.addEventListener('input', () => {
+    if (spokeCentralBrowseData) renderSpokeCaBrowseTab();
+    else renderCentralSites();
+  });
 }
 
 if (centralSaveBtn) {

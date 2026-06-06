@@ -4348,6 +4348,10 @@ function addMappingRow(wsite = '', centralSite = '') {
 
 function renderSiteMappingsTable() {
   if (!siteMappingsBody) return;
+  // Don't wipe the table while the user has a select or input focused inside it —
+  // that would destroy an open dropdown mid-interaction.
+  const ae = document.activeElement;
+  if (ae && siteMappingsBody.contains(ae)) return;
   siteMappingsBody.textContent = '';
   const entries = Object.entries(currentSettings.site_mappings || {});
   entries.forEach(([wsite, centralSite]) => addMappingRow(wsite, centralSite));
@@ -8790,6 +8794,13 @@ function restartRefreshTimer() {
     updateRefreshCountdownDisplay(String(refreshSecondsLeft) + 's');
   }, 1000);
   _refreshTimer = setInterval(async () => {
+    // Skip auto-refresh while user is interacting with an input/select/textarea
+    // so open dropdowns and text boxes are not destroyed mid-edit.
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT' || ae.tagName === 'TEXTAREA')) {
+      updateRefreshCountdownDisplay('Paused', true);
+      return;
+    }
     refreshSecondsLeft = refreshIntervalSeconds;
     updateRefreshCountdownDisplay(String(refreshSecondsLeft) + 's');
     await refreshAll();

@@ -3463,6 +3463,37 @@
             </div>
           </div>
 
+          <div id="msg-stats-card" class="setup-card setup-section-gap">
+            <div class="setup-card-header">
+              <h2>Message Statistics</h2>
+              <p>Live WebSocket telemetry for troubleshooting spoke messaging and server load.</p>
+            </div>
+            <div class="msg-stats-grid">
+              <div class="msg-stat-item">
+                <div class="msg-stat-label">WebSocket msg/s</div>
+                <div id="msg-stats-rate" class="msg-stat-value">0.0</div>
+              </div>
+              <div class="msg-stat-item">
+                <div class="msg-stat-label">Messages in last 10s</div>
+                <div id="msg-stats-count" class="msg-stat-value">0</div>
+              </div>
+              <div class="msg-stat-item">
+                <div class="msg-stat-label">Server pressure level</div>
+                <div id="msg-stats-pressure" class="msg-stat-status">
+                  <span id="msg-stats-pressure-dot" class="msg-stat-dot level-idle" aria-hidden="true"></span>
+                  <span id="msg-stats-pressure-text">idle</span>
+                </div>
+              </div>
+              <div class="msg-stat-item">
+                <div class="msg-stat-label">WS connection state</div>
+                <div id="msg-stats-ws" class="msg-stat-status">
+                  <span id="msg-stats-ws-dot" class="status-dot offline" aria-hidden="true"></span>
+                  <span id="msg-stats-ws-text">disconnected</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- System Health -->
           <div class="setup-card setup-section-gap">
             <div class="setup-card-header" style="display:flex;justify-content:space-between;align-items:center;">

@@ -53,6 +53,13 @@ const emptyRow = document.getElementById('empty-row');
 const clientCount = document.getElementById('client-count');
 const wsDot = document.getElementById('ws-dot');
 const wsText = document.getElementById('ws-text');
+const setupTroubleshootPanel = document.getElementById('setup-troubleshoot');
+const msgStatsRate = document.getElementById('msg-stats-rate');
+const msgStatsCount = document.getElementById('msg-stats-count');
+const msgStatsPressureDot = document.getElementById('msg-stats-pressure-dot');
+const msgStatsPressureText = document.getElementById('msg-stats-pressure-text');
+const msgStatsWsDot = document.getElementById('msg-stats-ws-dot');
+const msgStatsWsText = document.getElementById('msg-stats-ws-text');
 const repoDot = document.getElementById('repo-dot');
 const repoText = document.getElementById('repo-text');
 let socket = null;
@@ -311,6 +318,7 @@ async function hydrateSetupSubtab(subtabId) {
 
   if (subtabId === 'setup-troubleshoot') {
     await loadSystemHealth();
+    _updateMsgStatsCard();
     return;
   }
 
@@ -543,7 +551,7 @@ const serverPressureIndicator = document.getElementById('server-pressure-indicat
 
 // Message rate tracking (rolling 10-second window)
 const _msgTimestamps = [];
-let _pressureState = { active: false, level: 'normal', throttle_interval: 15, reason: '' };
+let _pressureState = { active: false, level: 'idle', throttle_interval: 15, reason: '' };
 let _msgRateTimer = null;
 
 function _recordWsMsg() {
@@ -565,31 +573,59 @@ function _getWsMsgRate() {
   return (_msgTimestamps.length / 10);
 }
 
-function _updatePressureBadge() {
-  if (!serverPressureIndicator) return;
+function _getPressureLevel() {
+  const rawLevel = String(_pressureState?.level || '').toLowerCase();
+  if (!_pressureState?.active || rawLevel === 'idle' || rawLevel === 'normal') return 'idle';
+  return rawLevel === 'high' ? 'high' : 'medium';
+}
+
+function _isTroubleshootVisible() {
+  return !!setupTroubleshootPanel && !setupTroubleshootPanel.classList.contains('hidden');
+}
+
+function _updateMsgStatsCard() {
+  if (!_isTroubleshootVisible() || !msgStatsRate || !msgStatsCount || !msgStatsPressureText || !msgStatsWsText) return;
   const rate = _getWsMsgRate();
-  const { active, level, throttle_interval } = _pressureState;
+  const pressureLevel = _getPressureLevel();
+  const wsConnected = socket?.readyState === WebSocket.OPEN;
+
+  msgStatsRate.textContent = rate.toFixed(1);
+  msgStatsCount.textContent = String(_msgTimestamps.length);
+  if (msgStatsPressureDot) msgStatsPressureDot.className = `msg-stat-dot level-${pressureLevel}`;
+  msgStatsPressureText.textContent = pressureLevel;
+  if (msgStatsWsDot) msgStatsWsDot.className = `status-dot ${wsConnected ? 'online' : 'offline'}`;
+  msgStatsWsText.textContent = wsConnected ? 'connected' : 'disconnected';
+}
+
+function _updatePressureBadge() {
+  const rate = _getWsMsgRate();
+  const { active, throttle_interval, reason } = _pressureState;
+  const level = _getPressureLevel();
   const showBadge = active || rate >= 1;
-  if (!showBadge) {
-    serverPressureIndicator.style.display = 'none';
-    return;
+
+  if (serverPressureIndicator) {
+    if (!showBadge) {
+      serverPressureIndicator.style.display = 'none';
+    } else {
+      const rateFmt = rate.toFixed(1);
+      const icon = level === 'high' ? '⚠️' : level === 'medium' ? '⏳' : '📊';
+      const throttleText = active ? ` → ${throttle_interval}s` : '';
+      serverPressureIndicator.textContent = `${icon} ${rateFmt} msg/s${throttleText}`;
+      serverPressureIndicator.title = active
+        ? `Server under load${reason ? ` (${reason})` : ''} — client reporting slowed to ${throttle_interval}s intervals`
+        : 'WebSocket receive rate';
+      serverPressureIndicator.className = `spoke-only server-pressure-badge level-${level}`;
+      serverPressureIndicator.style.display = '';
+    }
   }
-  const rateFmt = rate.toFixed(1);
-  const icon = level === 'high' ? '⚠️' : level === 'medium' ? '⏳' : '📊';
-  const throttleText = active ? ` → ${throttle_interval}s` : '';
-  serverPressureIndicator.textContent = `${icon} ${rateFmt} msg/s${throttleText}`;
-  serverPressureIndicator.title = active
-    ? `Server under load — client reporting slowed to ${throttle_interval}s intervals`
-    : `WebSocket receive rate`;
-  const badgeLevel = active ? level : 'idle';
-  serverPressureIndicator.className = `spoke-only server-pressure-badge level-${badgeLevel}`;
-  serverPressureIndicator.style.display = '';
+
+  _updateMsgStatsCard();
 }
 
 function applyServerPressure(msg) {
   _pressureState = {
     active: !!msg.active,
-    level: msg.level || 'normal',
+    level: msg.level || 'idle',
     throttle_interval: msg.throttle_interval || 15,
     reason: msg.reason || '',
   };
@@ -2868,6 +2904,7 @@ function badgeClass(simulation) {
 function setWsStatus(connected, label) {
   wsDot.className = `status-dot ${connected ? 'online' : 'offline'}`;
   wsText.textContent = label;
+  _updateMsgStatsCard();
 }
 
 function setCentralApiStatus(valid, tokenState) {
@@ -6127,6 +6164,7 @@ function connectWebSocket() {
     // Start msg/s refresh timer
     if (_msgRateTimer) clearInterval(_msgRateTimer);
     _msgRateTimer = setInterval(_updatePressureBadge, 2000);
+    _updatePressureBadge();
     // Refresh all data on reconnect so stale state doesn't linger after a disconnect
     if (_spokeBooted) refreshAll().catch(() => {});
     // Fetch initial repo status via HTTP in case WS message races or was missed

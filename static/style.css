@@ -895,6 +895,65 @@ tbody tr.updated { animation: row-update 1.4s ease-out; }
   overflow: hidden;
 }
 
+.msg-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.msg-stat-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 88%, #fff 12%);
+  padding: 14px 16px;
+}
+
+.msg-stat-label {
+  font-size: 0.76rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+
+.msg-stat-value {
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--hpe-navy);
+}
+
+.msg-stat-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: capitalize;
+}
+
+.msg-stat-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.msg-stat-dot.level-idle {
+  background: var(--grey);
+}
+
+.msg-stat-dot.level-medium {
+  background: var(--warning);
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.18);
+}
+
+.msg-stat-dot.level-high {
+  background: var(--hpe-red);
+  box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.18);
+}
+
 /* Tables break out of card padding so the dark header is edge-to-edge,
    clipped symmetrically by the card's overflow:hidden + border-radius */
 .setup-card .data-table {

@@ -2306,8 +2306,11 @@ function renderProxmoxServerCards(approved) {
             ${dot}
             <h2 style="margin:0;white-space:nowrap;">${escHtml(srv.hostname || 'Unknown')}</h2>
           </div>
-          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;">
-            ${cpuPill}${ramPill}${cpuAvgPill}${memAvgPill}${storagePills}${throttlePill}
+          <div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:0;">
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;">
+              ${cpuPill}${ramPill}${storagePills}
+            </div>
+            ${(cpuAvgPill || memAvgPill || throttlePill) ? `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;">${cpuAvgPill}${memAvgPill}${throttlePill}</div>` : ''}
           </div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:stretch;gap:4px;flex-shrink:0;min-width:130px;">

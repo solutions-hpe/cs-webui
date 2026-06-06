@@ -9946,12 +9946,43 @@ async function loadTenantSetup(force = false) {
     container.innerHTML = '<div class="empty-state">Sign in and select a tenant to view setup.</div>';
     return;
   }
+
+  // Before wiping the DOM, snapshot any values the user has typed into the
+  // Proxmox setup form so we can restore them after the rebuild.  This
+  // prevents WS-triggered refreshes (which re-call loadTenantSetup) from
+  // silently discarding in-progress edits.
+  const _TS_FIELD_IDS = [
+    'ts-usb-auto-provision', 'ts-usb-missing-timeout', 'ts-usb-max-slots',
+    'ts-cpu-prov-thr', 'ts-cpu-del-thr', 'ts-mem-prov-thr', 'ts-mem-del-thr',
+    'ts-vm-image-1-template-id', 'ts-vm-image-2-template-id', 'ts-vm-image-1-pct',
+    'ts-reclone-concurrency', 'ts-protected-vmids',
+    'ts-ov-protected-vmids',
+  ];
+  const savedFields = {};
+  const tsProxPanel = container.querySelector('#ts-proxmox-panel');
+  if (tsProxPanel && !tsProxPanel.classList.contains('hidden')) {
+    for (const id of _TS_FIELD_IDS) {
+      const el = document.getElementById(id);
+      if (el) savedFields[id] = el.type === 'checkbox' ? el.checked : el.value;
+    }
+  }
+
   container.innerHTML = '<div class="empty-state">Loading…</div>';
   const data = await loadTenantDetailData(force);
   container.innerHTML = data ? renderTenantSetupPanel(data) : '<div class="empty-state">Unable to load tenant setup.</div>';
   if (data) hydrateTenantSetupPanel(data);
   if (data && canManageTenant()) loadTenantPendingSpokes();
   await activateHubTenantSetupSubtab(hubTenantSetupActiveSubtab, force);
+
+  // Restore user-typed values over the fresh spoke-defaults loaded by initTsProxmoxTab.
+  if (Object.keys(savedFields).length) {
+    for (const [id, value] of Object.entries(savedFields)) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      if (el.type === 'checkbox') el.checked = value;
+      else el.value = value;
+    }
+  }
 }
 
 async function loadConfig(force = false) {

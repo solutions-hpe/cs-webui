@@ -660,8 +660,8 @@ function setRelayStatus(data = {}) {
   if (stateText) stateText.textContent = !data.enabled ? 'Disabled' : data.connected ? '✓ Connected' : isNameConflict ? '✗ Name conflict' : data.error ? '✗ Error' : data.registration_status === 'pending' ? 'Pending approval' : 'Enabled';
   if (lastTime) lastTime.textContent = data.last_sync ? new Date(data.last_sync * 1000).toLocaleTimeString() : '—';
   if (lastError) lastError.textContent = data.error || '—';
-  if (spokeIdDisplay) spokeIdDisplay.textContent = data.spoke_id || '—';
-  if (apikeyStatus) apikeyStatus.textContent = data.api_key_configured ? '✓ Received' : 'Pending approval';
+  if (spokeIdDisplay) spokeIdDisplay.textContent = !data.enabled ? '—' : (data.spoke_id || '—');
+  if (apikeyStatus) apikeyStatus.textContent = !data.enabled ? '—' : (data.api_key_configured ? '✓ Received' : 'Pending approval');
 
   const dotEl = document.getElementById('relay-indicator-dot');
   const textEl = document.getElementById('relay-indicator-text');
@@ -2567,9 +2567,10 @@ function applySettingsToUI(s) {
   setInputValueIfIdle(relaySpokeName, settings.relay_spoke_name || '');
   setInputValueIfIdle(relayTenantIdInput, settings.relay_tenant_id || settings.relay_tenant_hint || '');
   const spokeIdDisplay = document.getElementById('relay-spoke-id-display');
-  if (spokeIdDisplay) spokeIdDisplay.textContent = settings.relay_spoke_id || '—';
+  const _relayDisabled = !settings.relay_enabled || settings.relay_enabled === 'off';
+  if (spokeIdDisplay) spokeIdDisplay.textContent = _relayDisabled ? '—' : (settings.relay_spoke_id || '—');
   const apikeyStatus = document.getElementById('relay-apikey-status');
-  if (apikeyStatus) apikeyStatus.textContent = settings.relay_api_key_configured ? '✓ Received' : 'Pending approval';
+  if (apikeyStatus) apikeyStatus.textContent = _relayDisabled ? '—' : (settings.relay_api_key_configured ? '✓ Received' : 'Pending approval');
   if (adminPasswordInput && !adminPasswordInput.matches(':focus')) {
     adminPasswordInput.value = '';
   }

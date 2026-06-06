@@ -2338,9 +2338,7 @@ function renderSpokeVmServerView(approved) {
     if (backBtn && !backBtn._bound) {
       backBtn.addEventListener('click', () => {
         proxmoxServerSelected = null;
-        renderSpokeVmServerView(
-          Array.isArray(latestProxmoxData.approved_proxmox) ? latestProxmoxData.approved_proxmox : []
-        );
+        renderServerTab(latestProxmoxData);
       });
       backBtn._bound = true;
     }
@@ -2425,7 +2423,7 @@ function renderSpokeServerList(approved) {
   container.querySelectorAll('.hub-vmserver-spoke-card').forEach(card => {
     const openCard = () => {
       proxmoxServerSelected = card.dataset.hostname;
-      renderSpokeVmServerView(approved);
+      renderServerTab(latestProxmoxData);
     };
     card.addEventListener('click', openCard);
     card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') openCard(); });

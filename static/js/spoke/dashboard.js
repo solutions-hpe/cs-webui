@@ -5555,6 +5555,21 @@ function buildConfigToggle(field, value) {
   return toggle;
 }
 
+function buildSimBoolCheckbox(section, key, val) {
+  const lbl = document.createElement('label');
+  lbl.style.cssText = 'display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;font-size:0.875rem;';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.dataset.configSection = section;
+  cb.dataset.configKey = key;
+  cb.checked = normalizeFlagValue(val) === 'on';
+  const span = document.createElement('span');
+  span.textContent = _fmtConfigKey(key);
+  lbl.appendChild(cb);
+  lbl.appendChild(span);
+  return lbl;
+}
+
 function collectSectionedConfigState(root) {
   const payloads = {};
   if (!root) return payloads;
@@ -5620,13 +5635,10 @@ function _buildSectionCard(section, values, container) {
   if (textPairs.length) form.appendChild(fieldGrid);
 
   if (boolPairs.length) {
-    const h3 = document.createElement('h3');
-    h3.textContent = 'Flags';
-    form.appendChild(h3);
-    const grid = document.createElement('div');
-    grid.className = 'toggle-grid';
-    boolPairs.forEach(([key, val]) => grid.appendChild(buildConfigToggle({ section, key }, val)));
-    form.appendChild(grid);
+    const flagRow = document.createElement('div');
+    flagRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px 20px;padding:6px 0;';
+    boolPairs.forEach(([key, val]) => flagRow.appendChild(buildSimBoolCheckbox(section, key, val)));
+    form.appendChild(flagRow);
   }
 
   const actions = document.createElement('div');
@@ -5723,30 +5735,25 @@ function renderBucketEditors() {
     if (idx === 0) details.open = true;
 
     const summary = document.createElement('summary');
-    summary.textContent = buildBucketSummary(section, values);
+    summary.style.cssText = 'cursor:pointer;font-weight:600;';
+    summary.textContent = `Simulation S${section.slice(1)}`;
     details.appendChild(summary);
 
     const body = document.createElement('div');
     body.className = 'setup-form';
 
-    const tracked = { ...values };
-
     const fieldGrid = document.createElement('div');
-    fieldGrid.className = 'config-field-grid';
+    fieldGrid.className = 'form-grid';
 
     // Text inputs (preserve file order, skip booleans and sim_phy)
     Object.entries(values).forEach(([key, val]) => {
       if (key === 'sim_phy' || _isBoolVal(val)) return;
-      const { group, input } = buildConfigInput(
+      const { group } = buildConfigInput(
         { section, key, type: PW_KEY_RE.test(key) ? 'password' : 'text' },
         val,
       );
       const lbl = group.querySelector('label');
       if (lbl) lbl.textContent = _fmtConfigKey(key);
-      input.addEventListener('input', () => {
-        tracked[key] = input.value.trim();
-        summary.textContent = buildBucketSummary(section, tracked);
-      });
       fieldGrid.appendChild(group);
     });
 
@@ -5760,16 +5767,13 @@ function renderBucketEditors() {
 
     body.appendChild(fieldGrid);
 
-    // Toggle flags
+    // Compact inline checkboxes (no Flags heading)
     const boolPairs = Object.entries(values).filter(([k, v]) => k !== 'sim_phy' && _isBoolVal(v));
     if (boolPairs.length) {
-      const h3 = document.createElement('h3');
-      h3.textContent = 'Flags';
-      body.appendChild(h3);
-      const grid = document.createElement('div');
-      grid.className = 'toggle-grid';
-      boolPairs.forEach(([key, val]) => grid.appendChild(buildConfigToggle({ section, key }, val)));
-      body.appendChild(grid);
+      const flagRow = document.createElement('div');
+      flagRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px 20px;padding:6px 0;';
+      boolPairs.forEach(([key, val]) => flagRow.appendChild(buildSimBoolCheckbox(section, key, val)));
+      body.appendChild(flagRow);
     }
 
     const actions = document.createElement('div');
@@ -5777,7 +5781,7 @@ function renderBucketEditors() {
     const saveButton = document.createElement('button');
     saveButton.type = 'button';
     saveButton.className = 'btn btn-primary';
-    saveButton.textContent = 'Save Bucket';
+    saveButton.textContent = `Save S${section.slice(1)} to GitHub`;
     actions.appendChild(saveButton);
     body.appendChild(actions);
 
@@ -5795,13 +5799,13 @@ function renderBucketEditors() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ section, updates }),
         });
-        showInlineMessage(message, result?.pushed ? `Saved ${section} and pushed to GitHub.` : `Saved ${section}. GitHub push skipped.`, false, 7000);
+        showInlineMessage(message, result?.pushed ? `Simulation S${section.slice(1)} saved and pushed to GitHub.` : `Simulation S${section.slice(1)} saved. GitHub push skipped.`, false, 7000);
         await loadConfigEditor(true);
       } catch (error) {
         showInlineMessage(message, `Error: ${error.message}`, true, 7000);
       } finally {
         saveButton.disabled = false;
-        saveButton.textContent = 'Save Bucket';
+        saveButton.textContent = `Save S${section.slice(1)} to GitHub`;
       }
     });
 
@@ -7967,6 +7971,11 @@ async function loadSiteMappingSources() {
   localWsites = wsiteResult.status === 'fulfilled' ? (wsiteResult.value.wsites || []) : [];
   centralSites = centralResult.status === 'fulfilled' ? (centralResult.value.sites || []) : [];
   renderSiteMappingsTable();
+  // Auto-add rows for any local wsites not yet mapped so user sees dropdowns immediately
+  const existingMappings = currentSettings.site_mappings || {};
+  localWsites.forEach(wsite => {
+    if (!(wsite in existingMappings)) addMappingRow(wsite, '');
+  });
 
   const msgs = [];
   if (wsiteResult.status === 'rejected') msgs.push(`Local: ${wsiteResult.reason?.message}`);

@@ -71,7 +71,7 @@
           <span id="relay-indicator-text" class="repo-label"></span>
         </div>
         <span id="gkill-indicator" class="gkill-banner spoke-only" style="display:none;"></span>
-        <span id="server-pressure-indicator" class="spoke-only" style="display:none;" title="Server is under load — client reporting slowed down"></span>
+        <span id="server-pressure-indicator" class="spoke-only" style="display:none;" title="Server backpressure is active — API/WebSocket load is high, so client reporting is being throttled"></span>
         <div class="ws-status spoke-only" aria-live="polite">
           <span id="ws-dot" class="status-dot offline"></span>
           <span class="repo-label">API</span>
@@ -617,7 +617,7 @@
                 <div class="settings-section-title">Provisioning Behavior</div>
                 <div class="toggle-grid">
                   <label class="toggle-label">
-                    <input type="checkbox" id="ts-usb-auto-provision">
+                    <input type="checkbox" id="ts-usb-auto-provision" title="Enable or disable auto-provisioning for spoke VMs. New provisioning stays blocked until telemetry is warm and whenever a delete cooldown or resource halt is active.">
                     <span>Auto-Provision VMs</span>
                   </label>
                 </div>
@@ -637,21 +637,21 @@
                 <div class="form-row">
                   <div class="form-group">
                     <label class="form-label" for="ts-cpu-prov-thr">CPU — Block provisioning above (%)</label>
-                    <input id="ts-cpu-prov-thr" class="form-input" type="number" value="80" min="0" max="100" placeholder="80">
+                    <input id="ts-cpu-prov-thr" class="form-input" type="number" value="80" min="0" max="100" placeholder="80" title="Block new provisioning when the host's 1-hour average CPU is at or above this percentage. Decisions stay blocked until telemetry is warm.">
                   </div>
                   <div class="form-group">
                     <label class="form-label" for="ts-cpu-del-thr">CPU — Delete VM above (%)</label>
-                    <input id="ts-cpu-del-thr" class="form-input" type="number" value="90" min="0" max="100" placeholder="90">
+                    <input id="ts-cpu-del-thr" class="form-input" type="number" value="90" min="0" max="100" placeholder="90" title="When the host's 1-hour average CPU reaches this threshold, auto-provisioning may delete the highest VMID to recover capacity. Warm telemetry is required first.">
                   </div>
                 </div>
                 <div class="form-row">
                   <div class="form-group">
                     <label class="form-label" for="ts-mem-prov-thr">Memory — Block provisioning above (%)</label>
-                    <input id="ts-mem-prov-thr" class="form-input" type="number" value="80" min="0" max="100" placeholder="80">
+                    <input id="ts-mem-prov-thr" class="form-input" type="number" value="80" min="0" max="100" placeholder="80" title="Block new provisioning when the host's 1-hour average memory usage is at or above this percentage. Decisions stay blocked until telemetry is warm.">
                   </div>
                   <div class="form-group">
                     <label class="form-label" for="ts-mem-del-thr">Memory — Delete VM above (%)</label>
-                    <input id="ts-mem-del-thr" class="form-input" type="number" value="90" min="0" max="100" placeholder="90">
+                    <input id="ts-mem-del-thr" class="form-input" type="number" value="90" min="0" max="100" placeholder="90" title="Delete-gate companion for memory pressure. CPU still controls the automatic delete decision, but telemetry must be warm before any allow or block result is returned.">
                   </div>
                 </div>
                 <p class="form-hint">When the 1-hour rolling average exceeds the provision threshold no new VMs are spun up. When it exceeds the delete threshold the newest sim VM is removed (one per cycle). Values apply only after a full hour of telemetry data is available.</p>
@@ -684,7 +684,7 @@
                 <div class="form-row">
                   <div class="form-group">
                     <label class="form-label" for="ts-protected-vmids">Protected VMIDs <button class="help-icon" data-help-topic="protected-vmids" type="button" aria-label="Help">?</button></label>
-                    <input id="ts-protected-vmids" class="form-input" type="text" placeholder="e.g. 101, 200-90000">
+                    <input id="ts-protected-vmids" class="form-input" type="text" placeholder="e.g. 101, 200-90000" title="Comma-separated VMIDs or inclusive ranges such as 200-90000. Protected VMs are skipped by delete, reclone, start, and stop actions.">
                     <span class="form-hint">Comma-separated VMIDs or ranges (e.g. 101, 200-90000) that cannot be started, stopped, recloned, or deleted. VM 1001 is always protected.</span>
                   </div>
                 </div>
@@ -713,7 +713,7 @@
                   <div class="settings-section-title">Provisioning Behavior</div>
                   <div class="toggle-grid">
                     <label class="toggle-label">
-                      <input type="checkbox" id="ts-ov-usb-auto-provision">
+                      <input type="checkbox" id="ts-ov-usb-auto-provision" title="Per-spoke override for auto-provisioning. New provisioning stays blocked until telemetry is warm and whenever a delete cooldown or resource halt is active.">
                       <span>Auto-Provision VMs</span>
                     </label>
                   </div>
@@ -756,7 +756,7 @@
                   <div class="form-row">
                     <div class="form-group">
                       <label class="form-label" for="ts-ov-protected-vmids">Protected VMIDs</label>
-                      <input id="ts-ov-protected-vmids" class="form-input" type="text" placeholder="e.g. 101, 200-90000">
+                      <input id="ts-ov-protected-vmids" class="form-input" type="text" placeholder="e.g. 101, 200-90000" title="Per-spoke protected VMID list. Use comma-separated IDs or ranges such as 200-90000.">
                       <span class="form-hint">Comma-separated VMIDs or ranges (e.g. 200-90000). VM 1001 is always protected.</span>
                     </div>
                   </div>
@@ -1950,7 +1950,7 @@
               <span class="stat-pill" id="spoke-vm-usb-pill">— USB</span>
               <span class="stat-pill" id="spoke-vm-clients-pill">— clients</span>
             </div>
-            <button class="btn btn-danger btn-small" id="server-delete-all-sim" style="margin-left:auto;" title="Delete all simulation client VMs (VMID &gt; 90000). Does not affect templates, containers, or non-sim guests.">✕ Delete All Sim VMs</button>
+            <button class="btn btn-danger btn-small" id="server-delete-all-sim" style="margin-left:auto;" title="Queue deletion of all simulation client VMs across connected hosts. Protected VMIDs are skipped; templates, containers, and non-sim guests are untouched.">✕ Delete All Sim VMs</button>
           </div>
 
           <!-- Fleet Reclone + Auto-Provisioning: shown in list view, like the hub -->
@@ -2001,7 +2001,7 @@
                 <div class="setup-card-header" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
                   <h2 style="font-size:1rem;margin:0;white-space:nowrap;flex-shrink:0;">VM Auto-Provisioning</h2>
                   <div id="autoprov-status-bar" class="autoprov-status-bar is-disabled" role="button" tabindex="0"
-                       style="cursor:pointer;" title="Click to enable/disable VM Auto-Provisioning">
+                       style="cursor:pointer;" title="Click to enable or disable VM Auto-Provisioning. Even when enabled, provisioning can still be blocked by warmup, delete cooldown, or a resource halt.">
                     <span id="autoprov-status-icon" class="autoprov-status-icon"><span class="autoprov-dot" aria-hidden="true"></span></span>
                    <span id="autoprov-status-text">Off</span>
                   </div>
@@ -2011,7 +2011,7 @@
                   <button id="template-unlock-btn" class="btn btn-warning btn-small" type="button">🔓 Unlock Template</button>
                 </div>
                 <div id="autoprov-live-summary" class="autoprov-live-summary" aria-live="polite"></div>
-                <button id="autoprov-reset-btn" class="btn btn-sm btn-outline-secondary mt-2" onclick="resetAutoprovStatus()" title="Clear stuck auto-provisioning status" style="display:none;">↺ Clear Status</button>
+                <button id="autoprov-reset-btn" class="btn btn-sm btn-outline-secondary mt-2" onclick="resetAutoprovStatus()" title="Clear stale auto-provisioning status after a completed or failed run" style="display:none;">↺ Clear Status</button>
               </div>
               <div class="autoprov-right">
                 <div id="auto-prov-log" class="autoprov-live-list" aria-live="polite"></div>
@@ -2302,7 +2302,7 @@
                 <input type="search" id="cmd-search" class="form-input" placeholder="Filter by target, action, message…">
               </div>
               <button class="btn btn-secondary" id="cmd-clear-btn" type="button">Clear History</button>
-              <button class="btn btn-danger" id="cmd-cancel-all-btn" type="button" title="Cancel all pending/delivered commands">🛑 Cancel All Queued</button>
+              <button class="btn btn-danger" id="cmd-cancel-all-btn" type="button" title="Clear all pending or delivered commands from the local queue. Same action as Troubleshooting → Clear Message Queue.">🛑 Cancel All Queued</button>
             </div>
             <div id="cmd-msg" class="form-msg" style="margin-bottom:6px;"></div>
             <div class="table-scroll">
@@ -2758,7 +2758,7 @@
 
                 <div class="setup-form">
                   <div class="form-actions" style="margin-bottom:0.75rem;">
-                    <button id="load-sites-btn" class="btn btn-primary" type="button">🔄 Load Sites</button>
+                    <button id="load-sites-btn" class="btn btn-primary" type="button" title="Load local wsites plus Aruba Central sites, then auto-add rows for any unmapped local wsites.">🔄 Load Sites</button>
                     <span id="sites-load-status" class="form-hint" style="margin-left:0.75rem;"></span>
                   </div>
 
@@ -3069,7 +3069,7 @@
                 <div class="settings-section-title">Provisioning Behavior</div>
                 <div class="toggle-grid">
                   <label class="toggle-label">
-                    <input type="checkbox" id="usb-auto-provision">
+                    <input type="checkbox" id="usb-auto-provision" title="Enable or disable auto-provisioning for this spoke. New provisioning stays blocked until telemetry is warm and whenever a delete cooldown or resource halt is active.">
                     <span>Auto-Provision VMs</span>
                   </label>
                 </div>
@@ -3103,7 +3103,7 @@
                 <div class="form-row">
                   <div class="form-group">
                     <label class="form-label" for="protected-vmids">Protected VMIDs</label>
-                    <input id="protected-vmids" class="form-input" type="text" placeholder="e.g. 101, 200-90000">
+                    <input id="protected-vmids" class="form-input" type="text" placeholder="e.g. 101, 200-90000" title="Comma-separated VMIDs or inclusive ranges such as 200-90000. Protected VMs are skipped by delete, reclone, start, and stop actions.">
                     <span class="form-hint">Comma-separated VMIDs or ranges (e.g. 101, 200-90000) that cannot be started, stopped, recloned, or deleted from this UI. VM 1001 is always protected.</span>
                   </div>
                 </div>
@@ -3492,7 +3492,7 @@
                 <h2>Message Statistics</h2>
                 <p>Live WebSocket telemetry for troubleshooting spoke messaging and server load.</p>
               </div>
-              <button id="trbl-clear-queue-btn" class="btn btn-warning btn-small" type="button" style="white-space:nowrap;">🧹 Clear Message Queue</button>
+              <button id="trbl-clear-queue-btn" class="btn btn-warning btn-small" type="button" style="white-space:nowrap;" title="POST /api/commands/cancel-all and clear the pending/delivered local message queue.">🧹 Clear Message Queue</button>
             </div>
             <div class="msg-stats-grid">
               <div class="msg-stat-item">

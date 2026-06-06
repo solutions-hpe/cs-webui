@@ -21,7 +21,8 @@ The UI is the operator-facing surface for:
 - approving and managing spokes
 - sending commands
 - managing Proxmox VM/USB operations
-- viewing Proxmox 1-hour CPU/memory warmup states, guest-agent watchdog recovery status, post-provision retry state, and agent/PVE version metadata
+- viewing Proxmox multi-host VM Server state, 1-hour CPU/memory warmup states, provision-halt / throttle badges, guest-agent watchdog recovery status, and agent/PVE version metadata
+- launching direct Proxmox VNC consoles from spoke mode and reviewing Command Queue / Command Trace detail in hub mode
 - editing GitHub-backed `simulation.conf` and `user-overrides.conf` flows in hub or standalone spoke mode
 - configuring Aruba Central, notifications, relay, and TLS
 - checking service health and troubleshooting state
@@ -59,12 +60,12 @@ Hub requires login. Spoke mode does not implement the same tenant-auth flow.
 | Tab | What it is for |
 |---|---|
 | **Simulations** | Current simulation buckets, counts, Central correlation, hardware alert status, and 7-day client-count baseline monitoring |
-| **Clients** | Live client inventory, status, SSID, active simulations, errors, and per-client control panel. Client type tabs: **All**, **T1** (no USB dongle), **T2** (has USB dongle), **IoT/T3** (placeholder) |
-| **Central** | Aruba Central overview plus site alerts, wireless client counts, and 24-hour history |
-| **VM Server** | Proxmox VM and USB management; appears when Proxmox integration is active. Sub-tabs: **VMs**, **USB (T2)**, **IoT (T3)**, **Other**, **VirtualHere**, **Command Queue**, **Details** |
+| **Simulation Clients** | Live client inventory with hostname search, online/offline filtering, and client-type tabs: **All**, **T1** (no USB dongle), **T2** (has USB dongle), and **T3** |
+| **Central Monitoring** | Aruba Central overview plus sites, alerts, insights, clients, devices, and background polling while the tab is active |
+| **VM Server** | Proxmox VM and USB management with two-level server list → agent detail navigation, per-server average/throttle/halt badges, and sub-tabs: **VMs**, **USB (T2)**, **IoT (T3)**, **Other**, **VirtualHere**, **Command Queue**, **Details** |
 | **API Server** | Spoke service status, health, and service log views |
 | **Config** | Unified `simulation.conf` editor plus standalone `user-overrides.conf` management |
-| **Setup** | Repository, Simulation, VM/USB, Hub relay, Central API, notifications, TLS, and troubleshooting configuration |
+| **Setup** | Repository, Simulations, VM/USB, Hub relay, Central API, notifications, TLS, and troubleshooting configuration |
 
 #### Hub mode tabs
 
@@ -73,7 +74,7 @@ Hub requires login. Spoke mode does not implement the same tenant-auth flow.
 | **Tenants** | Superadmin landing view and tenant selection |
 | **Simulations** | Cross-spoke simulation summary inside a tenant context, including 7-day client-count baseline alarms |
 | **Clients** | Aggregate client list across the selected tenant |
-| **Spokes** | Approved spokes, detail modal, processing mode, spoke health, relayed Proxmox Details metrics, watchdog/retry status, and access to VM Server workflows for backup/reseed operations |
+| **Spokes** | Approved spokes, detail modal, processing mode, spoke health, relayed Proxmox Details metrics, provision-halt and hardware-alert badges, and access to VM Server workflows for backup/reseed operations |
 | **Commands** | Queue commands to a spoke |
 | **Setup** | Tenant settings, notifications, API info, TLS, and pending spoke approval |
 | **Config** | Tenant processing-mode summary plus `simulation.conf` / `user-overrides.conf` editors |
@@ -92,30 +93,32 @@ Use **Simulations** first to answer:
 - whether the expected Aruba Central check is passing or failing
 - whether 7-day client-count or hardware-alert monitoring is reporting issues
 
-#### 2. Clients
+#### 2. Simulation Clients
 
-Use **Clients** for day-to-day VM troubleshooting:
+Use **Simulation Clients** for day-to-day VM troubleshooting:
 
 - online/offline state (online means the last heartbeat was within 300 seconds)
-- last seen time
-- platform/hardware type
+- hostname search and status filtering
+- platform/hardware type plus T1 / T2 / T3 classification
 - active simulations
 - Aruba impact badge
 - recent client-side errors posted by `simulation.sh`
 
 #### 3. VM Server / USB (T2) / IoT (T3)
 
-When the spoke has a connected Proxmox agent, **VM Server** exposes sub-tabs:
+When the spoke has a connected Proxmox agent, **VM Server** exposes a server list first, then a per-agent detail view with these sub-tabs:
 
 | Sub-tab | Content |
 |---------|---------|
-| **VMs** | Simulation VMs plus recovery states such as `retrying…`, `agent rebooting…`, and `agent down` when the post-provision retry queue or guest-agent watchdog is active |
+| **VMs** | Simulation VMs plus recovery states such as `retrying…`, `agent rebooting…`, and `agent down` when the post-provision retry queue or guest-agent watchdog is active; spoke mode also offers direct Proxmox VNC launch actions |
 | **USB (T2)** | USB dongle inventory, VID:PID, assigned VMs, missing/available status |
 | **IoT (T3)** | VMs with T3 PCI passthrough on this node |
 | **Other** | Non-sim, non-IoT VMs plus containers |
 | **VirtualHere** | VH hub/server name, device names, connection state, auto-use status |
-| **Command Queue** | Queued and completed commands for clients and the Proxmox host |
-| **Details** | Proxmox node info, agent/PVE version metadata, live CPU/RAM, and 1-hour CPU/memory average pills with warmup countdowns |
+| **Command Queue** | Queued and completed commands for clients and the Proxmox host; hub mode expands entries with smart payload summaries plus detail/result sub-rows |
+| **Details** | Proxmox node info, agent/PVE version metadata, spoke version metadata in hub mode, live CPU/RAM, 1-hour CPU/memory average pills with warmup countdowns, and the hub-side Command Trace panel |
+
+Server cards and breadcrumbs also surface **Auto-Provisioning Throttled** and **Provision Halt** badges when a host is blocked by the current resource gates.
 
 Hub and spoke Details views use the same three resource-average states:
 
@@ -123,7 +126,7 @@ Hub and spoke Details views use the same three resource-average states:
 2. `📊 CPU avg: ~3.2% (<N> min remaining)` / `Mem avg: ~…` — estimated average from samples collected so far
 3. `📊 CPU avg: 3.2%` / `Mem avg: 41.7%` — confirmed 1-hour rolling average once the full window is available
 
-**T1 / T2 client classification** is visible on the **Clients** tab using the type filter buttons at the top of the client list:
+**T1 / T2 client classification** is visible on the **Simulation Clients** tab using the type filter buttons at the top of the client list:
 - **T1** — client VM has no USB dongle assigned
 - **T2** — client VM has an active USB dongle assignment (determined by the `has_usb` field on each client)
 - **IoT (T3)** — placeholder for future classification
@@ -152,7 +155,7 @@ Use:
 Setup -> Central API
 ```
 
-for Aruba Central credentials, site mappings, monitored checks, and hardware-alert settings.
+for Aruba Central credentials, site mappings, monitored checks, and hardware-alert settings. After **Load Sites**, any local `wsite` values that are still unmapped are auto-added as rows so operators can finish the mapping quickly.
 
 #### 6. Setup -> Notifications
 
@@ -186,7 +189,8 @@ for:
 
 - system health summary
 - service control buttons
-- install/service log history
+- **Message Statistics** with live WebSocket load indicators and **Clear Message Queue**
+- install/service/journal log history (newest entries first)
 - Proxmox agent setup instructions
 - relay diagnostics
 

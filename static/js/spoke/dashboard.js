@@ -25,6 +25,7 @@ const FLAG_ORDER = [
 
 const FAILURE_SIMS = new Set(['dns_fail', 'ssidpw_fail', 'auth_fail', 'dhcp_fail', 'port_flap', 'assoc_fail']);
 const TRAFFIC_SIMS = new Set(['iperf', 'download', 'www_traffic', 'ping_test']);
+const ALL_KNOWN_SIMS = ['dns_fail', 'ssidpw_fail', 'auth_fail', 'dhcp_fail', 'port_flap', 'assoc_fail', 'iperf', 'download', 'www_traffic', 'ping_test'];
 const IMPACT_LABELS = {
   dns_fail: '⚠ DNS Failure',
   ssidpw_fail: '⚠ Auth Failure',
@@ -3112,6 +3113,15 @@ function renderClientRows() {
   container.querySelectorAll('button.client-control-btn[data-hostname]').forEach((btn) => {
     btn.addEventListener('click', () => toggleControlRow(btn.dataset.hostname));
   });
+  container.querySelectorAll('button.sim-toggle-btn[data-sim]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const { hostname, sim } = btn.dataset;
+      const currentlyOn = btn.dataset.overridden === '1';
+      btn.disabled = true;
+      toggleSpokeSimOverride(hostname, sim, currentlyOn).finally(() => { btn.disabled = false; });
+    });
+  });
   if (openControlHost && clients.has(openControlHost)) {
     const detailCell = container.querySelector(`tr.control-row[data-hostname="${CSS.escape(openControlHost)}"] td`);
     if (detailCell) renderControlPanel(openControlHost, detailCell);
@@ -3132,11 +3142,11 @@ function renderSpokeClientRows(client) {
     : '—';
   const isOpen = openControlHost === hostname;
   const ctrlLabel = isOpen ? 'Close' : 'Control';
-  const simBadgesHtml = buildSimBadgesHtml(sims);
+  const simBadgesHtml = buildSimBadgesHtml(sims, client.overrides || {}, hostname);
   return `
     <tr class="client-row hub-client-main-row${isOnline ? '' : ' client-offline'}${isOpen ? ' expanded' : ''}" data-hostname="${escHtml(hostname)}">
       <td class="status-cell"><span class="status-dot ${isOnline ? 'online' : 'offline'}"></span></td>
-      <td class="hostname-cell">${hostnameHtml}</td>
+      <td class="hostname-cell">${hostnameHtml}${client.simulation_id ? `<br><span style="font-size:0.75em;color:var(--muted);font-family:monospace">${escHtml(client.simulation_id)}</span>` : ''}</td>
       <td>${escHtml(client.platform || '—')}</td>
       <td style="white-space:nowrap">${escHtml(client.connected_ssid || '—')}</td>
       <td class="nowrap-cell">${lastSeen}</td>
@@ -3152,9 +3162,22 @@ function renderSpokeClientRows(client) {
   `;
 }
 
-function buildSimBadgesHtml(sims = []) {
-  if (!sims.length) return '<span class="muted-text">— No active simulations</span>';
-  return sims.map((sim) => `<span class="${escHtml(badgeClass(sim))}">${escHtml(sim)}</span>`).join(' ');
+function buildSimBadgesHtml(activeSims = [], overrides = {}, hostname = '') {
+  const activeSet = new Set((activeSims || []).filter(Boolean));
+  const lockIcon = '🔒 ';
+  return `<div class="badge-list sim-badge-list">${ALL_KNOWN_SIMS.map((sim) => {
+    const isOverride = (overrides[sim] || '').toLowerCase() === 'on';
+    const isActive = activeSet.has(sim);
+    const colored = isActive || isOverride;
+    const cls = colored ? badgeClass(sim) : 'badge badge-sim-inactive';
+    if (hostname) {
+      const titleStr = isOverride
+        ? `Remove override for ${sim}`
+        : `Force-enable ${sim} for ${hostname}`;
+      return `<button type="button" class="sim-toggle-btn ${cls}" data-hostname="${escHtml(hostname)}" data-sim="${escHtml(sim)}" data-overridden="${isOverride ? '1' : '0'}" title="${escHtml(titleStr)}">${isOverride ? lockIcon : ''}${escHtml(sim)}</button>`;
+    }
+    return `<span class="${cls}" title="${escHtml(sim)}">${escHtml(sim)}</span>`;
+  }).join('')}</div>`;
 }
 
 function syncSpokeClientTypeFilter() {
@@ -3278,6 +3301,19 @@ function upsertClient(client) {
   renderClientRows();
   if (centralSiteDetailOpen) {
     renderSiteClients(centralSiteDetailOpen);
+  }
+}
+
+async function toggleSpokeSimOverride(hostname, sim, currentlyOn) {
+  try {
+    const result = await sendJson(`/api/clients/${encodeURIComponent(hostname)}/control`, {
+      method: 'POST',
+      body: JSON.stringify({ [sim]: currentlyOn ? 'off' : 'on' })
+    });
+    if (result?.client) upsertClient(result.client);
+    showToast(`${currentlyOn ? 'Disabled' : 'Enabled'} ${sim} for ${hostname}`, 'success');
+  } catch (e) {
+    showToast(`Failed to update simulation: ${e.message}`, 'error');
   }
 }
 

@@ -161,7 +161,7 @@
       <div id="spoke-nav" class="spoke-nav-panel" aria-label="Spoke navigation">
         <div class="tenant-context-nav-row2 spoke-nav-row">
           <button class="tab active" role="tab" aria-selected="true" data-tab="simulations" type="button">Simulations</button>
-          <button class="tab" role="tab" aria-selected="false" data-tab="dashboard" type="button">Clients</button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="dashboard" type="button">Simulation Clients</button>
           <button class="tab" role="tab" aria-selected="false" data-tab="central" type="button">Central</button>
           <button class="tab tab-btn" id="tab-server-btn" role="tab" aria-selected="false" data-tab="server" style="display:none;" type="button">VM Server</button>
           <span class="tab-nav-sep" aria-hidden="true"></span>
@@ -1893,14 +1893,25 @@
           <button class="setup-subtab client-type-tab" data-clienttype="t2" role="tab" type="button">
             T2 <span id="client-type-count-t2" class="badge-count">0</span>
           </button>
-          <button class="setup-subtab client-type-tab disabled" data-clienttype="t3" role="tab" type="button" disabled title="T3 classification coming soon">
-            T3 <span id="client-type-count-t3" class="badge-count">—</span>
+          <button class="setup-subtab client-type-tab" data-clienttype="t3" role="tab" type="button" title="T3: IoT/PCI adapter clients">
+            T3 <span id="client-type-count-t3" class="badge-count">0</span>
           </button>
         </nav>
-        <div id="clients-node-bar" class="server-node-bar">
-          <span class="server-node-name">Clients</span>
-          <span class="server-stat-pill" id="client-count" title="Connected clients">0 clients</span>
-          <button id="purge-history-btn" class="btn btn-success btn-small" type="button" style="margin-left:auto" title="Remove all client records from memory and disk">🗑 Purge Clients</button>
+        <div class="page-toolbar">
+          <div class="toolbar-stats">
+            <span class="stat-pill" id="clients-pill">0 clients</span>
+            <span class="stat-pill" id="clients-online-pill">0 online</span>
+            <span class="stat-pill" id="client-count" title="Connected clients">0 clients</span>
+          </div>
+          <div class="toolbar-actions">
+            <input id="clients-search" type="search" class="form-input form-input-sm" placeholder="Search clients…" autocomplete="off">
+            <select id="clients-status-filter" class="form-input form-input-sm">
+              <option value="all">All statuses</option>
+              <option value="online">Online</option>
+              <option value="offline">Offline</option>
+            </select>
+            <button id="purge-history-btn" class="btn btn-success btn-small" type="button" title="Remove all client records from memory and disk">🗑 Purge Clients</button>
+          </div>
         </div>
 
         <div class="setup-card">

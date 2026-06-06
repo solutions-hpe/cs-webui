@@ -51,6 +51,8 @@ const rowRefs = new Map();
 const tbody = document.getElementById('clients-body');
 const emptyRow = document.getElementById('empty-row');
 const clientCount = document.getElementById('client-count');
+const clientsPill = document.getElementById('clients-pill');
+const clientsOnlinePill = document.getElementById('clients-online-pill');
 const wsDot = document.getElementById('ws-dot');
 const wsText = document.getElementById('ws-text');
 const setupTroubleshootPanel = document.getElementById('setup-troubleshoot');
@@ -2809,10 +2811,30 @@ function clientVmid(client = {}) {
   return proxmoxVmid != null && String(proxmoxVmid).trim() !== '' ? String(proxmoxVmid).trim() : '';
 }
 
+function clientIsOnline(client = {}) {
+  return Boolean(client?.connected || client?.online);
+}
+
+function clientHasT3Pci(client = {}, proxmoxVm = proxmoxVmForHostname(client?.hostname)) {
+  if (client?.has_t3_pci) return true;
+  if (Number(client?.t3_pci_count || 0) > 0) return true;
+  if (String(client?.hw_type || '').trim().toUpperCase() === 'T3') return true;
+  const t3AddrSet = new Set(
+    (Array.isArray(latestProxmoxData?.t3_pci_devices) ? latestProxmoxData.t3_pci_devices : [])
+      .map((device) => String(device?.id || '').trim().toLowerCase())
+      .filter(Boolean)
+  );
+  return t3AddrSet.size > 0
+    && Array.isArray(proxmoxVm?.pci_passthrough_addrs)
+    && proxmoxVm.pci_passthrough_addrs.some((address) => t3AddrSet.has(String(address || '').trim().toLowerCase()));
+}
+
 function classifyClient(client = {}, usbVmids = spokeUsbVmids()) {
-  if (client.has_usb != null) return client.has_usb ? 't2' : 't1';
   const proxmoxVm = proxmoxVmForHostname(client?.hostname);
+  if (clientHasT3Pci(client, proxmoxVm)) return 't3';
+  if (client.has_usb != null) return client.has_usb ? 't2' : 't1';
   if (proxmoxVm?.reclone_bus_path) return 't2';
+  if (Array.isArray(client?.usb_devices) && client.usb_devices.length) return 't2';
   return usbVmids.has(clientVmid(client)) ? 't2' : 't1';
 }
 
@@ -2824,9 +2846,10 @@ function syncSpokeClientTypeTabs() {
 
 function updateSpokeClientTypeCounts(allClients = [...clients.values()]) {
   const usbVmids = spokeUsbVmids();
-  const counts = { all: allClients.length, t1: 0, t2: 0 };
+  const counts = { all: allClients.length, t1: 0, t2: 0, t3: 0 };
   allClients.forEach((client) => {
-    counts[classifyClient(client, usbVmids)] += 1;
+    const type = classifyClient(client, usbVmids);
+    if (counts[type] !== undefined) counts[type] += 1;
   });
   const countAll = document.getElementById('client-type-count-all');
   const countT1 = document.getElementById('client-type-count-t1');
@@ -2835,30 +2858,57 @@ function updateSpokeClientTypeCounts(allClients = [...clients.values()]) {
   if (countAll) countAll.textContent = String(counts.all);
   if (countT1) countT1.textContent = String(counts.t1);
   if (countT2) countT2.textContent = String(counts.t2);
-  if (countT3) countT3.textContent = '—';
+  if (countT3) countT3.textContent = String(counts.t3);
   return counts;
 }
 
-function syncSpokeClientTypeFilter() {
+function renderClientRows() {
   syncSpokeClientTypeTabs();
   const allClients = [...clients.values()];
   const usbVmids = spokeUsbVmids();
   const counts = updateSpokeClientTypeCounts(allClients);
+  const search = String(document.getElementById('clients-search')?.value || '').trim().toLowerCase();
+  const statusFilter = String(document.getElementById('clients-status-filter')?.value || 'all').trim().toLowerCase();
   let visibleCount = 0;
+  let onlineCount = 0;
+
   allClients.forEach((client) => {
     const refs = rowRefs.get(client.hostname);
     if (!refs) return;
-    const matches = clientTypeFilter === 'all' || classifyClient(client, usbVmids) === clientTypeFilter;
-    if (matches) visibleCount += 1;
+    const typeMatch = clientTypeFilter === 'all' || classifyClient(client, usbVmids) === clientTypeFilter;
+    const isOnline = clientIsOnline(client);
+    const statusMatch = statusFilter === 'all'
+      || (statusFilter === 'online' && isOnline)
+      || (statusFilter === 'offline' && !isOnline);
+    const haystack = [
+      client.hostname,
+      client.platform,
+      client.connected_ssid,
+      ...(Array.isArray(client.active_simulations) ? client.active_simulations : []),
+    ].join(' ').toLowerCase();
+    const searchMatch = !search || haystack.includes(search);
+    const matches = typeMatch && statusMatch && searchMatch;
+
+    if (matches) {
+      visibleCount += 1;
+      if (isOnline) onlineCount += 1;
+    }
     refs.mainRow.classList.toggle('hidden', !matches);
     refs.detailRow.classList.toggle('hidden', !matches || openControlHost !== client.hostname);
   });
+
+  if (clientsPill) clientsPill.textContent = `${visibleCount} client${visibleCount === 1 ? '' : 's'}`;
+  if (clientsOnlinePill) clientsOnlinePill.textContent = `${onlineCount} online`;
   updateClientCount(visibleCount, counts.all);
 }
 
+function syncSpokeClientTypeFilter() {
+  renderClientRows();
+}
+
 function setClientTypeFilter(nextFilter = 'all') {
-  clientTypeFilter = nextFilter === 't1' || nextFilter === 't2' ? nextFilter : 'all';
-  syncSpokeClientTypeFilter();
+  clientTypeFilter = ['t1', 't2', 't3'].includes(nextFilter) ? nextFilter : 'all';
+  renderClientRows();
 }
 
 function clientHasPendingCheckin(hostname) {
@@ -3095,8 +3145,9 @@ function upsertClient(client) {
   clients.set(client.hostname, merged);
   const refs = ensureRow(client.hostname);
 
-  refs.statusDot.className = `status-dot ${merged.online ? 'online' : 'offline'}`;
-  refs.mainRow.classList.toggle('client-offline', !merged.online);
+  const isOnline = clientIsOnline(merged);
+  refs.statusDot.className = `status-dot ${isOnline ? 'online' : 'offline'}`;
+  refs.mainRow.classList.toggle('client-offline', !isOnline);
   renderClientHostname(refs.hostnameCell, merged.hostname);
   refs.platformCell.textContent = merged.platform || '—';
   refs.ssidCell.textContent = merged.connected_ssid || '—';
@@ -8967,6 +9018,8 @@ let loadServiceLogs = () => {};
 })();
 
 document.getElementById('spoke-acme-dns-provider')?.addEventListener('change', toggleSpokeAcmeDnsSection);
+document.getElementById('clients-search')?.addEventListener('input', () => renderClientRows());
+document.getElementById('clients-status-filter')?.addEventListener('change', () => renderClientRows());
 
 document.querySelectorAll('[data-clienttype]').forEach(button => {
   button.addEventListener('click', () => setClientTypeFilter(button.dataset.clienttype || 'all'));

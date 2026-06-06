@@ -2096,7 +2096,7 @@ function renderPxServersList(approved, pending) {
 
   // Approved servers table
   if (approved.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No approved servers yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No approved servers yet.</td></tr>';
   } else {
     tbody.innerHTML = approved.map((s) => {
       const connected = s.connected;
@@ -2104,6 +2104,7 @@ function renderPxServersList(approved, pending) {
         ? '<span class="status-dot online" title="Connected"></span>'
         : '<span class="status-dot offline" title="Offline"></span>';
       const enc = encodeURIComponent(String(s.hostname || ''));
+      const vmSetInfo = proxmoxVmSetInfo(s);
       return `<tr>
         <td style="text-align:center;">${dot}</td>
         <td><strong>${escHtml(s.hostname)}</strong></td>
@@ -2111,11 +2112,13 @@ function renderPxServersList(approved, pending) {
         <td>${escHtml(s.agent_version || '—')}</td>
         <td>${s.vm_count ?? '—'}</td>
         <td>${_fmtRelTime(s.last_seen)}</td>
+        <td><select class="form-input vm-set-override-select" data-hostname="${escHtml(s.hostname || '')}" data-previous="${vmSetInfo.override}" style="min-width:180px;font-size:12px;padding:3px 6px;" title="Override the VM set (VMID block) for this host">${vmSetOverrideOptions(vmSetInfo.override)}</select></td>
         <td>
           <button class="btn btn-danger btn-small" onclick="revokeProxmoxAgent(decodeURIComponent('${enc}'))">Remove</button>
         </td>
       </tr>`;
     }).join('');
+    bindVmSetOverrideSelects();
   }
 
   // Pending agents table
@@ -2393,8 +2396,7 @@ function renderSpokeServerList(approved) {
       ? `<span class="server-stat-pill" title="RAM">📊 Mem: ${ramUsed} / ${ramTotal}</span>`
       : '';
     const vmSetInfo = proxmoxVmSetInfo(srv);
-    const bucketSummary = `VMIDs ${vmSetInfo.range.start}–${vmSetInfo.range.end} · Effective VM set ${vmSetInfo.effectiveVmSet}`;
-    const bucketControl = `<label style="display:inline-flex;align-items:center;gap:6px;margin-left:auto;" title="Override the VM set (VMID block) assigned to this Proxmox host"><span style="font-size:12px;color:var(--muted);">VM Set Override</span><select class="form-input vm-set-override-select" data-hostname="${escHtml(srv.hostname || '')}" data-previous="${vmSetInfo.override}" style="min-width:220px;font-size:12px;padding:4px 8px;">${vmSetOverrideOptions(vmSetInfo.override)}</select></label>`;
+    const bucketSummary = `VMIDs ${vmSetInfo.range.start}–${vmSetInfo.range.end} · VM set ${vmSetInfo.effectiveVmSet}`;
     const ph = srv.provision_halt;
     const throttlePill = (currentSettings.usb_auto_provision === 'on' && ph && ph.halted) ? (() => {
       const reason = ph.reason === 'cpu'
@@ -2416,12 +2418,9 @@ function renderSpokeServerList(approved) {
         <div style="padding:8px 16px;font-size:0.82rem;color:var(--muted);display:flex;flex-wrap:wrap;align-items:center;gap:8px;">
           <span>Agent ${escHtml(srv.agent_version || '—')} &nbsp;·&nbsp; PVE ${escHtml(srv.pve_version || '—')} &nbsp;·&nbsp; ${online ? '🟢 Proxmox connected' : '⚫ Agent not reporting'}</span>
           <span>${escHtml(bucketSummary)}</span>
-          ${bucketControl}
         </div>
       </div>`;
   }).join('');
-
-  bindVmSetOverrideSelects();
 
   container.querySelectorAll('.hub-vmserver-spoke-card').forEach(card => {
     const openCard = () => {

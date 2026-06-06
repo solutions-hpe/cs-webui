@@ -684,8 +684,8 @@
                 <div class="form-row">
                   <div class="form-group">
                     <label class="form-label" for="ts-protected-vmids">Protected VMIDs <button class="help-icon" data-help-topic="protected-vmids" type="button" aria-label="Help">?</button></label>
-                    <input id="ts-protected-vmids" class="form-input" type="text" placeholder="e.g. 101, 102, 200">
-                    <span class="form-hint">Comma-separated VMIDs that cannot be started, stopped, recloned, or deleted. VM 1001 is always protected.</span>
+                    <input id="ts-protected-vmids" class="form-input" type="text" placeholder="e.g. 101, 200-90000">
+                    <span class="form-hint">Comma-separated VMIDs or ranges (e.g. 101, 200-90000) that cannot be started, stopped, recloned, or deleted. VM 1001 is always protected.</span>
                   </div>
                 </div>
               </div>
@@ -756,8 +756,8 @@
                   <div class="form-row">
                     <div class="form-group">
                       <label class="form-label" for="ts-ov-protected-vmids">Protected VMIDs</label>
-                      <input id="ts-ov-protected-vmids" class="form-input" type="text" placeholder="e.g. 101, 102, 200">
-                      <span class="form-hint">Comma-separated. VM 1001 is always protected.</span>
+                      <input id="ts-ov-protected-vmids" class="form-input" type="text" placeholder="e.g. 101, 200-90000">
+                      <span class="form-hint">Comma-separated VMIDs or ranges (e.g. 200-90000). VM 1001 is always protected.</span>
                     </div>
                   </div>
                 </div>
@@ -2939,8 +2939,8 @@
                 <div class="form-row">
                   <div class="form-group">
                     <label class="form-label" for="protected-vmids">Protected VMIDs</label>
-                    <input id="protected-vmids" class="form-input" type="text" placeholder="e.g. 101, 102, 200">
-                    <span class="form-hint">Comma-separated VMIDs that cannot be started, stopped, recloned, or deleted from this UI. VM 1001 is always protected.</span>
+                    <input id="protected-vmids" class="form-input" type="text" placeholder="e.g. 101, 200-90000">
+                    <span class="form-hint">Comma-separated VMIDs or ranges (e.g. 101, 200-90000) that cannot be started, stopped, recloned, or deleted from this UI. VM 1001 is always protected.</span>
                   </div>
                 </div>
               </div>

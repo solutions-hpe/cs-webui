@@ -2348,12 +2348,17 @@
           <!-- Proxmox API Token -->
           <div class="setup-card setup-section-gap" style="padding:14px 16px;">
             <div style="font-weight:600;font-size:13px;margin-bottom:8px;">🔑 Proxmox API Token (for VM console)</div>
-            <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Required to open VNC console sessions. Format: <code>user@realm!tokenid=secret</code>. Stored locally on this spoke.</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">
+              Required to open VNC console sessions. Format: <code>user@realm!tokenid=secret</code>.
+              Stored per-server on this spoke. Use <strong>⚙ Auto-provision</strong> to create a token via pvesh on the selected host.
+            </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
               <input id="server-proxmox-api-token-input" type="password" autocomplete="new-password"
                      placeholder="user@pam!tokenid=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                      style="flex:1;min-width:200px;font-family:monospace;font-size:12px;" />
               <button id="server-proxmox-api-token-save-btn" class="btn btn-primary" style="flex-shrink:0;" type="button">Save Token</button>
+              <button id="server-proxmox-api-token-autoprov-btn" class="btn btn-secondary" style="flex-shrink:0;" type="button"
+                      title="Automatically create a Proxmox API token on this host via pvesh (requires agent running on Proxmox host)">⚙ Auto-provision</button>
             </div>
             <div id="server-proxmox-token-status" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>
           </div>

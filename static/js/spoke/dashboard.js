@@ -2126,6 +2126,87 @@ function renderPxServersList(approved, pending) {
  * Top-level router: shows the server card list or the per-agent detail view
  * depending on whether an agent has been selected.
  */
+function refreshProxmoxTokenCard(hostname) {
+  const tokenInput = document.getElementById('server-proxmox-api-token-input');
+  const tokenSaveBtn = document.getElementById('server-proxmox-api-token-save-btn');
+  const tokenAutoprovBtn = document.getElementById('server-proxmox-api-token-autoprov-btn');
+  const tokenStatus = document.getElementById('server-proxmox-token-status');
+  if (!tokenStatus) return;
+
+  if (!hostname) {
+    tokenStatus.textContent = 'Select a server to manage its API token.';
+  } else {
+    tokenStatus.textContent = '⏳ Loading token status…';
+    requestJson(`/api/proxmox/token/${encodeURIComponent(hostname)}`)
+      .then(data => {
+        const liveStatus = document.getElementById('server-proxmox-token-status');
+        if (!liveStatus) return;
+        if (data.configured) {
+          liveStatus.textContent = `✅ API token configured for ${hostname}.`;
+        } else if (data.global_configured) {
+          liveStatus.textContent = '⚠️ No per-host token — using global fallback token.';
+        } else {
+          liveStatus.textContent = '⚠️ No API token saved — VNC console sessions will fail.';
+        }
+      })
+      .catch(() => {
+        const liveStatus = document.getElementById('server-proxmox-token-status');
+        if (liveStatus) liveStatus.textContent = '⚠️ Could not load token status.';
+      });
+  }
+
+  if (tokenSaveBtn && tokenInput) {
+    const newSaveBtn = tokenSaveBtn.cloneNode(true);
+    tokenSaveBtn.replaceWith(newSaveBtn);
+    newSaveBtn.addEventListener('click', async () => {
+      const token = (document.getElementById('server-proxmox-api-token-input')?.value || '').trim();
+      const liveStatus = document.getElementById('server-proxmox-token-status');
+      if (!token) { if (liveStatus) liveStatus.textContent = 'Enter a token first.'; return; }
+      if (!hostname) { if (liveStatus) liveStatus.textContent = 'No server selected.'; return; }
+      newSaveBtn.disabled = true;
+      newSaveBtn.textContent = 'Saving…';
+      try {
+        await requestJson(`/api/proxmox/token/${encodeURIComponent(hostname)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ proxmox_token: token }),
+        });
+        if (liveStatus) liveStatus.textContent = `✅ API token saved for ${hostname}.`;
+        const input = document.getElementById('server-proxmox-api-token-input');
+        if (input) input.value = '';
+      } catch (err) {
+        if (liveStatus) liveStatus.textContent = `Error: ${err.message}`;
+      } finally {
+        newSaveBtn.disabled = false;
+        newSaveBtn.textContent = 'Save Token';
+      }
+    });
+  }
+
+  if (tokenAutoprovBtn) {
+    const newAutoprovBtn = tokenAutoprovBtn.cloneNode(true);
+    tokenAutoprovBtn.replaceWith(newAutoprovBtn);
+    newAutoprovBtn.addEventListener('click', async () => {
+      const liveStatus = document.getElementById('server-proxmox-token-status');
+      if (!hostname) { if (liveStatus) liveStatus.textContent = 'No server selected.'; return; }
+      newAutoprovBtn.disabled = true;
+      newAutoprovBtn.textContent = '⏳ Provisioning…';
+      if (liveStatus) liveStatus.textContent = `⏳ Creating Proxmox API token via pvesh on ${hostname}…`;
+      try {
+        await requestJson(`/api/proxmox/token/${encodeURIComponent(hostname)}/auto-provision`, {
+          method: 'POST',
+        });
+        if (liveStatus) liveStatus.textContent = `✅ API token auto-provisioned (root@pam!cs-hub) for ${hostname}.`;
+      } catch (err) {
+        if (liveStatus) liveStatus.textContent = `❌ Auto-provision failed: ${err.message}`;
+      } finally {
+        newAutoprovBtn.disabled = false;
+        newAutoprovBtn.textContent = '⚙ Auto-provision';
+      }
+    });
+  }
+}
+
 function renderSpokeVmServerView(approved) {
   const listView   = document.getElementById('server-list-view');
   const detailView = document.getElementById('server-detail-view');
@@ -2134,6 +2215,7 @@ function renderSpokeVmServerView(approved) {
   if (proxmoxServerSelected) {
     listView.style.display   = 'none';
     detailView.style.display = '';
+    refreshProxmoxTokenCard(proxmoxServerSelected);
 
     // Update breadcrumb header for the selected agent
     const agent = (approved || []).find(a => a.hostname === proxmoxServerSelected);
@@ -8354,46 +8436,6 @@ document.getElementById('server-clear-cache-btn')?.addEventListener('click', asy
     showToast(`Failed: ${err.message}`, 'error');
   }
 });
-
-// Proxmox API Token save (Details tab card)
-(async () => {
-  const tokenInput = document.getElementById('server-proxmox-api-token-input');
-  const tokenSaveBtn = document.getElementById('server-proxmox-api-token-save-btn');
-  const tokenStatus = document.getElementById('server-proxmox-token-status');
-
-  // Load current token status on page load
-  try {
-    const s = await requestJson('/api/settings');
-    if (tokenStatus) {
-      tokenStatus.textContent = s.proxmox_api_token_configured
-        ? '✅ API token is configured.'
-        : '⚠️ No API token saved — console sessions will fail.';
-    }
-  } catch (_) {}
-
-  if (tokenSaveBtn && tokenInput) {
-    tokenSaveBtn.addEventListener('click', async () => {
-      const token = tokenInput.value.trim();
-      if (!token) { if (tokenStatus) tokenStatus.textContent = 'Enter a token first.'; return; }
-      tokenSaveBtn.disabled = true;
-      tokenSaveBtn.textContent = 'Saving…';
-      try {
-        await requestJson('/api/settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ proxmox_api_token: token }),
-        });
-        if (tokenStatus) tokenStatus.textContent = '✅ API token saved.';
-        tokenInput.value = '';
-      } catch (err) {
-        if (tokenStatus) tokenStatus.textContent = `Error: ${err.message}`;
-      } finally {
-        tokenSaveBtn.disabled = false;
-        tokenSaveBtn.textContent = 'Save Token';
-      }
-    });
-  }
-})();
 
 document.getElementById('setup-clear-cache-btn')?.addEventListener('click', async () => {
   if (!confirm('Clear all cache and re-clone?\n\nThis will:\n• Remove git lock files\n• Wipe and re-clone the repo from GitHub\n• Delete client history, state cache, and central history files\n• Restart the WebUI service\n\nThe page will reload automatically once the service is back up.')) return;

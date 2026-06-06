@@ -2217,7 +2217,7 @@ function renderSpokeServerList(approved) {
       <div class="setup-card hub-vmserver-spoke-card" role="button" tabindex="0"
            data-hostname="${escHtml(srv.hostname || '')}" style="cursor:pointer;">
         <div class="panel-header">
-          <span class="server-node-name">${escHtml(srv.hostname || 'Unknown')}</span>
+          <span class="server-node-name" style="min-width:180px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(srv.hostname || '')}">${escHtml(srv.hostname || 'Unknown')}</span>
           <span class="stat-pill ${online ? 'online' : 'offline'}">${online ? 'Online' : 'Offline'}</span>
           <span class="stat-pill">${srv.vm_count ?? 0} VMs</span>
           <span class="stat-pill">${srv.usb_count ?? 0} USB</span>

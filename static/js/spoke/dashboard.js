@@ -2224,80 +2224,81 @@ function refreshProxmoxTokenCard(hostname) {
   }
 }
 
-function bucketRangeFor(n) {
-  const bucket = Math.max(1, parseInt(n, 10) || 1);
-  const start = 90000 + (bucket - 1) * 24 + 1;
-  return { start, end: start + 23 };
+function vmSetRangeFor(n) {
+  const vmSet = Math.max(1, parseInt(n, 10) || 1);
+  const stride = Math.max(1, parseInt(currentSettings?.usb_max_slots, 10) || 24);
+  const start = 90000 + (vmSet - 1) * stride + 1;
+  return { start, end: start + stride - 1 };
 }
 
-function parseHostnameBucket(hostname) {
+function parseHostnameVmSet(hostname) {
   const match = String(hostname || '').match(/(\d+)$/);
-  const bucket = match ? parseInt(match[1], 10) : 1;
-  return Number.isFinite(bucket) && bucket >= 1 ? bucket : 1;
+  const vmSet = match ? parseInt(match[1], 10) : 1;
+  return Number.isFinite(vmSet) && vmSet >= 1 ? vmSet : 1;
 }
 
-function bucketOverrideOptions(currentVal) {
+function vmSetOverrideOptions(currentVal) {
   const selectedVal = parseInt(currentVal, 10) || 0;
   let opts = `<option value="0"${selectedVal === 0 ? ' selected' : ''}>Auto (from hostname)</option>`;
   for (let n = 1; n <= 99; n += 1) {
-    const { start, end } = bucketRangeFor(n);
-    opts += `<option value="${n}"${selectedVal === n ? ' selected' : ''}>Bucket ${n} (${start}–${end})</option>`;
+    const { start, end } = vmSetRangeFor(n);
+    opts += `<option value="${n}"${selectedVal === n ? ' selected' : ''}>VM Set ${n} (${start}–${end})</option>`;
   }
   return opts;
 }
 
-function proxmoxBucketInfo(srv = {}) {
+function proxmoxVmSetInfo(srv = {}) {
   const hostname = String(srv.hostname || '');
   const hostConfig = (currentSettings.proxmox_config && currentSettings.proxmox_config[hostname]) || {};
-  const override = parseInt(srv.bucket_override ?? hostConfig.bucket_override ?? 0, 10) || 0;
-  let effectiveBucket = parseInt(srv.effective_bucket, 10);
-  if (!Number.isFinite(effectiveBucket) || effectiveBucket < 1) {
-    effectiveBucket = override || parseHostnameBucket(hostname);
+  const override = parseInt(srv.vm_set_override ?? hostConfig.vm_set_override ?? 0, 10) || 0;
+  let effectiveVmSet = parseInt(srv.effective_vm_set, 10);
+  if (!Number.isFinite(effectiveVmSet) || effectiveVmSet < 1) {
+    effectiveVmSet = override || parseHostnameVmSet(hostname);
   }
   const range = (srv.vmid_range && Number.isFinite(Number(srv.vmid_range.start)) && Number.isFinite(Number(srv.vmid_range.end)))
     ? { start: Number(srv.vmid_range.start), end: Number(srv.vmid_range.end) }
-    : bucketRangeFor(effectiveBucket);
-  return { override, effectiveBucket, range };
+    : vmSetRangeFor(effectiveVmSet);
+  return { override, effectiveVmSet, range };
 }
 
-async function saveProxmoxBucketOverride(hostname, bucketOverride) {
+async function saveProxmoxVmSetOverride(hostname, vmSetOverride) {
   const result = await requestJson(`/api/proxmox/config/${encodeURIComponent(hostname)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ bucket_override: bucketOverride }),
+    body: JSON.stringify({ vm_set_override: vmSetOverride }),
   });
   const nextConfig = { ...(currentSettings.proxmox_config || {}) };
-  if (result.bucket_override) {
-    nextConfig[hostname] = { ...(nextConfig[hostname] || {}), bucket_override: result.bucket_override };
+  if (result.vm_set_override) {
+    nextConfig[hostname] = { ...(nextConfig[hostname] || {}), vm_set_override: result.vm_set_override };
   } else {
     delete nextConfig[hostname];
   }
   currentSettings.proxmox_config = nextConfig;
   const approved = Array.isArray(latestProxmoxData.approved_proxmox) ? latestProxmoxData.approved_proxmox : [];
   const target = approved.find((srv) => String(srv.hostname || '') === hostname);
-  if (target) target.bucket_override = result.bucket_override || 0;
+  if (target) target.vm_set_override = result.vm_set_override || 0;
   renderSpokeVmServerView(approved);
   scheduleProxmoxRefresh(500);
   return result;
 }
 
-function bindBucketOverrideSelects() {
-  document.querySelectorAll('.bucket-override-select').forEach((select) => {
+function bindVmSetOverrideSelects() {
+  document.querySelectorAll('.vm-set-override-select').forEach((select) => {
     ['click', 'mousedown', 'keydown'].forEach((eventName) => {
       select.addEventListener(eventName, (event) => event.stopPropagation());
     });
     select.addEventListener('change', async (event) => {
       const el = event.currentTarget;
       const hostname = el.dataset.hostname || '';
-      const bucketOverride = parseInt(el.value, 10) || 0;
+      const vmSetOverride = parseInt(el.value, 10) || 0;
       const previous = parseInt(el.dataset.previous || '0', 10) || 0;
       el.disabled = true;
       try {
-        await saveProxmoxBucketOverride(hostname, bucketOverride);
-        showToast(`Saved bucket override for ${hostname}: ${bucketOverride || 'Auto'}`, 'success');
+        await saveProxmoxVmSetOverride(hostname, vmSetOverride);
+        showToast(`Saved VM set override for ${hostname}: ${vmSetOverride || 'Auto'}`, 'success');
       } catch (error) {
         el.value = String(previous);
-        showToast(`Failed to save bucket override: ${error.message}`, 'error');
+        showToast(`Failed to save VM set override: ${error.message}`, 'error');
       } finally {
         el.disabled = false;
       }
@@ -2391,9 +2392,9 @@ function renderSpokeServerList(approved) {
     const ramPill  = ramUsed && ramTotal
       ? `<span class="server-stat-pill" title="RAM">📊 Mem: ${ramUsed} / ${ramTotal}</span>`
       : '';
-    const bucketInfo = proxmoxBucketInfo(srv);
-    const bucketSummary = `VMIDs ${bucketInfo.range.start}–${bucketInfo.range.end} · Effective bucket ${bucketInfo.effectiveBucket}`;
-    const bucketControl = `<label style="display:inline-flex;align-items:center;gap:6px;margin-left:auto;" title="Override the VMID bucket assigned to this Proxmox host"><span style="font-size:12px;color:var(--muted);">Bucket</span><select class="form-input bucket-override-select" data-hostname="${escHtml(srv.hostname || '')}" data-previous="${bucketInfo.override}" style="min-width:220px;font-size:12px;padding:4px 8px;">${bucketOverrideOptions(bucketInfo.override)}</select></label>`;
+    const vmSetInfo = proxmoxVmSetInfo(srv);
+    const bucketSummary = `VMIDs ${vmSetInfo.range.start}–${vmSetInfo.range.end} · Effective VM set ${vmSetInfo.effectiveVmSet}`;
+    const bucketControl = `<label style="display:inline-flex;align-items:center;gap:6px;margin-left:auto;" title="Override the VM set (VMID block) assigned to this Proxmox host"><span style="font-size:12px;color:var(--muted);">VM Set Override</span><select class="form-input vm-set-override-select" data-hostname="${escHtml(srv.hostname || '')}" data-previous="${vmSetInfo.override}" style="min-width:220px;font-size:12px;padding:4px 8px;">${vmSetOverrideOptions(vmSetInfo.override)}</select></label>`;
     const ph = srv.provision_halt;
     const throttlePill = (currentSettings.usb_auto_provision === 'on' && ph && ph.halted) ? (() => {
       const reason = ph.reason === 'cpu'
@@ -2420,7 +2421,7 @@ function renderSpokeServerList(approved) {
       </div>`;
   }).join('');
 
-  bindBucketOverrideSelects();
+  bindVmSetOverrideSelects();
 
   container.querySelectorAll('.hub-vmserver-spoke-card').forEach(card => {
     const openCard = () => {

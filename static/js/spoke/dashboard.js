@@ -151,7 +151,9 @@ let currentSettings = {
   mem_provision_threshold: '80',
   mem_delete_threshold: '90',
   vm_image_1_template_id: '100',
+  vm_image_1_template_spec: '100',
   vm_image_2_template_id: '200',
+  vm_image_2_template_spec: '200',
   vm_image_1_pct: '50',
   usb_auto_provision: 'off',
   usb_ignored_vidpids: '[]',
@@ -168,7 +170,8 @@ let currentSettings = {
   guest_agent_check_interval_minutes: '10',
   guest_agent_reboot_after_minutes: '10',
   guest_agent_reclone_after_minutes: '30',
-  watchdog_reboot_enabled: 'on'
+  watchdog_reboot_enabled: 'on',
+  proxmox_config: {}
 };
 let configData = {};
 let configLoaded = false;
@@ -845,6 +848,7 @@ const usbMissingTimeoutInput = document.getElementById('usb-missing-timeout');
 const usbMaxSlotsInput = document.getElementById('usb-max-slots');
 const vmImage1TemplateIdInput = document.getElementById('vm-image-1-template-id');
 const vmImage2TemplateIdInput = document.getElementById('vm-image-2-template-id');
+const templateVmidSpecError = document.getElementById('template-vmid-spec-error');
 const vmImage1PctInput = document.getElementById('vm-image-1-pct');
 const usbVidPidTbody = document.getElementById('usb-vidpid-tbody');
 const newVidPidInput = document.getElementById('new-vidpid');
@@ -1075,7 +1079,9 @@ function mergeSettings(next = {}) {
     mem_provision_threshold: next.mem_provision_threshold ?? currentSettings.mem_provision_threshold ?? '80',
     mem_delete_threshold:    next.mem_delete_threshold    ?? currentSettings.mem_delete_threshold    ?? '90',
     vm_image_1_template_id: next.vm_image_1_template_id ?? currentSettings.vm_image_1_template_id ?? '100',
+    vm_image_1_template_spec: next.vm_image_1_template_spec ?? currentSettings.vm_image_1_template_spec ?? String(next.vm_image_1_template_id ?? currentSettings.vm_image_1_template_id ?? '100'),
     vm_image_2_template_id: next.vm_image_2_template_id ?? currentSettings.vm_image_2_template_id ?? '200',
+    vm_image_2_template_spec: next.vm_image_2_template_spec ?? currentSettings.vm_image_2_template_spec ?? String(next.vm_image_2_template_id ?? currentSettings.vm_image_2_template_id ?? '200'),
     vm_image_1_pct: next.vm_image_1_pct ?? currentSettings.vm_image_1_pct ?? '50',
     usb_auto_provision: next.usb_auto_provision ?? currentSettings.usb_auto_provision ?? 'off',
     usb_ignored_vidpids: next.usb_ignored_vidpids ?? currentSettings.usb_ignored_vidpids ?? '[]',
@@ -1092,7 +1098,8 @@ function mergeSettings(next = {}) {
     guest_agent_check_interval_minutes: next.guest_agent_check_interval_minutes ?? currentSettings.guest_agent_check_interval_minutes ?? '10',
     guest_agent_reboot_after_minutes: next.guest_agent_reboot_after_minutes ?? currentSettings.guest_agent_reboot_after_minutes ?? '10',
     guest_agent_reclone_after_minutes: next.guest_agent_reclone_after_minutes ?? currentSettings.guest_agent_reclone_after_minutes ?? '30',
-    watchdog_reboot_enabled: next.watchdog_reboot_enabled ?? currentSettings.watchdog_reboot_enabled ?? 'on'
+    watchdog_reboot_enabled: next.watchdog_reboot_enabled ?? currentSettings.watchdog_reboot_enabled ?? 'on',
+    proxmox_config: next.proxmox_config ?? currentSettings.proxmox_config ?? {}
   };
   currentSettings = merged;
   return merged;
@@ -1679,10 +1686,7 @@ function renderServerTab(data) {
     Array.isArray(latestProxmoxData.auto_recovery_pending) ? latestProxmoxData.auto_recovery_pending : []
   );
 
-  const configuredTemplateIds = new Set([
-    String(currentSettings.vm_image_1_template_id || '100'),
-    String(currentSettings.vm_image_2_template_id || '200'),
-  ]);
+  const configuredTemplateIds = getConfiguredTemplateIds(currentSettings);
 
   // Categorise VMs: templates → sim clients (vmid > 90000, qemu) → containers (lxc) → T3 IoT → other
   const templateVms = vms.filter((v) =>
@@ -2220,6 +2224,87 @@ function refreshProxmoxTokenCard(hostname) {
   }
 }
 
+function bucketRangeFor(n) {
+  const bucket = Math.max(1, parseInt(n, 10) || 1);
+  const start = 90000 + (bucket - 1) * 24 + 1;
+  return { start, end: start + 23 };
+}
+
+function parseHostnameBucket(hostname) {
+  const match = String(hostname || '').match(/(\d+)$/);
+  const bucket = match ? parseInt(match[1], 10) : 1;
+  return Number.isFinite(bucket) && bucket >= 1 ? bucket : 1;
+}
+
+function bucketOverrideOptions(currentVal) {
+  const selectedVal = parseInt(currentVal, 10) || 0;
+  let opts = `<option value="0"${selectedVal === 0 ? ' selected' : ''}>Auto (from hostname)</option>`;
+  for (let n = 1; n <= 99; n += 1) {
+    const { start, end } = bucketRangeFor(n);
+    opts += `<option value="${n}"${selectedVal === n ? ' selected' : ''}>Bucket ${n} (${start}–${end})</option>`;
+  }
+  return opts;
+}
+
+function proxmoxBucketInfo(srv = {}) {
+  const hostname = String(srv.hostname || '');
+  const hostConfig = (currentSettings.proxmox_config && currentSettings.proxmox_config[hostname]) || {};
+  const override = parseInt(srv.bucket_override ?? hostConfig.bucket_override ?? 0, 10) || 0;
+  let effectiveBucket = parseInt(srv.effective_bucket, 10);
+  if (!Number.isFinite(effectiveBucket) || effectiveBucket < 1) {
+    effectiveBucket = override || parseHostnameBucket(hostname);
+  }
+  const range = (srv.vmid_range && Number.isFinite(Number(srv.vmid_range.start)) && Number.isFinite(Number(srv.vmid_range.end)))
+    ? { start: Number(srv.vmid_range.start), end: Number(srv.vmid_range.end) }
+    : bucketRangeFor(effectiveBucket);
+  return { override, effectiveBucket, range };
+}
+
+async function saveProxmoxBucketOverride(hostname, bucketOverride) {
+  const result = await requestJson(`/api/proxmox/config/${encodeURIComponent(hostname)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bucket_override: bucketOverride }),
+  });
+  const nextConfig = { ...(currentSettings.proxmox_config || {}) };
+  if (result.bucket_override) {
+    nextConfig[hostname] = { ...(nextConfig[hostname] || {}), bucket_override: result.bucket_override };
+  } else {
+    delete nextConfig[hostname];
+  }
+  currentSettings.proxmox_config = nextConfig;
+  const approved = Array.isArray(latestProxmoxData.approved_proxmox) ? latestProxmoxData.approved_proxmox : [];
+  const target = approved.find((srv) => String(srv.hostname || '') === hostname);
+  if (target) target.bucket_override = result.bucket_override || 0;
+  renderSpokeVmServerView(approved);
+  scheduleProxmoxRefresh(500);
+  return result;
+}
+
+function bindBucketOverrideSelects() {
+  document.querySelectorAll('.bucket-override-select').forEach((select) => {
+    ['click', 'mousedown', 'keydown'].forEach((eventName) => {
+      select.addEventListener(eventName, (event) => event.stopPropagation());
+    });
+    select.addEventListener('change', async (event) => {
+      const el = event.currentTarget;
+      const hostname = el.dataset.hostname || '';
+      const bucketOverride = parseInt(el.value, 10) || 0;
+      const previous = parseInt(el.dataset.previous || '0', 10) || 0;
+      el.disabled = true;
+      try {
+        await saveProxmoxBucketOverride(hostname, bucketOverride);
+        showToast(`Saved bucket override for ${hostname}: ${bucketOverride || 'Auto'}`, 'success');
+      } catch (error) {
+        el.value = String(previous);
+        showToast(`Failed to save bucket override: ${error.message}`, 'error');
+      } finally {
+        el.disabled = false;
+      }
+    });
+  });
+}
+
 function renderSpokeVmServerView(approved) {
   const listView   = document.getElementById('server-list-view');
   const detailView = document.getElementById('server-detail-view');
@@ -2306,6 +2391,9 @@ function renderSpokeServerList(approved) {
     const ramPill  = ramUsed && ramTotal
       ? `<span class="server-stat-pill" title="RAM">📊 Mem: ${ramUsed} / ${ramTotal}</span>`
       : '';
+    const bucketInfo = proxmoxBucketInfo(srv);
+    const bucketSummary = `VMIDs ${bucketInfo.range.start}–${bucketInfo.range.end} · Effective bucket ${bucketInfo.effectiveBucket}`;
+    const bucketControl = `<label style="display:inline-flex;align-items:center;gap:6px;margin-left:auto;" title="Override the VMID bucket assigned to this Proxmox host"><span style="font-size:12px;color:var(--muted);">Bucket</span><select class="form-input bucket-override-select" data-hostname="${escHtml(srv.hostname || '')}" data-previous="${bucketInfo.override}" style="min-width:220px;font-size:12px;padding:4px 8px;">${bucketOverrideOptions(bucketInfo.override)}</select></label>`;
     const ph = srv.provision_halt;
     const throttlePill = (currentSettings.usb_auto_provision === 'on' && ph && ph.halted) ? (() => {
       const reason = ph.reason === 'cpu'
@@ -2324,13 +2412,15 @@ function renderSpokeServerList(approved) {
           ${cpuPill}${ramPill}${throttlePill}
           <span class="stat-pill" style="margin-left:auto;">Click to open →</span>
         </div>
-        <div style="padding:8px 16px;font-size:0.82rem;color:var(--muted);">
-          Agent ${escHtml(srv.agent_version || '—')} &nbsp;·&nbsp;
-          PVE ${escHtml(srv.pve_version || '—')} &nbsp;·&nbsp;
-          ${online ? '🟢 Proxmox connected' : '⚫ Agent not reporting'}
+        <div style="padding:8px 16px;font-size:0.82rem;color:var(--muted);display:flex;flex-wrap:wrap;align-items:center;gap:8px;">
+          <span>Agent ${escHtml(srv.agent_version || '—')} &nbsp;·&nbsp; PVE ${escHtml(srv.pve_version || '—')} &nbsp;·&nbsp; ${online ? '🟢 Proxmox connected' : '⚫ Agent not reporting'}</span>
+          <span>${escHtml(bucketSummary)}</span>
+          ${bucketControl}
         </div>
       </div>`;
   }).join('');
+
+  bindBucketOverrideSelects();
 
   container.querySelectorAll('.hub-vmserver-spoke-card').forEach(card => {
     const openCard = () => {
@@ -2506,8 +2596,9 @@ function applySettingsToUI(s) {
   if (cpuDelThrInput  && !cpuDelThrInput.matches(':focus'))  cpuDelThrInput.value  = settings.cpu_delete_threshold ?? '90';
   if (memProvThrInput && !memProvThrInput.matches(':focus'))  memProvThrInput.value = settings.mem_provision_threshold ?? '80';
   if (memDelThrInput  && !memDelThrInput.matches(':focus'))   memDelThrInput.value  = settings.mem_delete_threshold ?? '90';
-  if (vmImage1TemplateIdInput && !vmImage1TemplateIdInput.matches(':focus')) vmImage1TemplateIdInput.value = settings.vm_image_1_template_id ?? '100';
-  if (vmImage2TemplateIdInput && !vmImage2TemplateIdInput.matches(':focus')) vmImage2TemplateIdInput.value = settings.vm_image_2_template_id ?? '200';
+  if (vmImage1TemplateIdInput && !vmImage1TemplateIdInput.matches(':focus')) vmImage1TemplateIdInput.value = getTemplateSpecValue(settings, 1);
+  if (vmImage2TemplateIdInput && !vmImage2TemplateIdInput.matches(':focus')) vmImage2TemplateIdInput.value = getTemplateSpecValue(settings, 2);
+  updateTemplateSpecValidation();
   if (vmImage1PctInput && !vmImage1PctInput.matches(':focus')) vmImage1PctInput.value = settings.vm_image_1_pct ?? '50';
   if (vmSilentTimeoutInput && !vmSilentTimeoutInput.matches(':focus')) vmSilentTimeoutInput.value = settings.vm_silent_timeout ?? '24';
   const schedule = parseScheduleCron(settings.reclone_schedule_cron);
@@ -3255,6 +3346,88 @@ function parseScheduleCron(cronValue = 'sunday 02:00') {
   return { day, time: /^\d{2}:\d{2}$/.test(time || '') ? time : '02:00' };
 }
 
+function getTemplateSpecValue(settings = currentSettings, slot = 1) {
+  const specKey = slot === 1 ? 'vm_image_1_template_spec' : 'vm_image_2_template_spec';
+  const idKey = slot === 1 ? 'vm_image_1_template_id' : 'vm_image_2_template_id';
+  if (settings && Object.prototype.hasOwnProperty.call(settings, specKey)) {
+    return String(settings[specKey] ?? '').trim();
+  }
+  return String(settings?.[idKey] ?? (slot === 1 ? '100' : '200')).trim();
+}
+
+function parseVmidSpec(spec, label = 'Template VMIDs') {
+  const normalized = String(spec ?? '').trim();
+  if (!normalized) return [];
+  const vmids = new Set();
+  for (const rawPart of normalized.split(',')) {
+    const part = rawPart.trim();
+    if (!part) continue;
+    const rangeMatch = part.match(/^(\d+)-(\d+)$/);
+    if (rangeMatch) {
+      const start = Number.parseInt(rangeMatch[1], 10);
+      const end = Number.parseInt(rangeMatch[2], 10);
+      if (start > end) throw new Error(`${label}: range start must be less than or equal to end (${part})`);
+      if ((end - start) > 1000) throw new Error(`${label}: range too large (${part}); max span is 1001 VMIDs`);
+      for (let vmid = start; vmid <= end; vmid += 1) vmids.add(vmid);
+      continue;
+    }
+    if (/^\d+$/.test(part)) {
+      vmids.add(Number.parseInt(part, 10));
+      continue;
+    }
+    throw new Error(`${label}: invalid token "${part}"`);
+  }
+  return [...vmids].sort((a, b) => a - b);
+}
+
+function getTemplateCandidateVmids(settings = currentSettings, slot = 1) {
+  try {
+    const spec = getTemplateSpecValue(settings, slot);
+    const parsed = parseVmidSpec(spec, slot === 1 ? 'VM Image 1 Template VMIDs' : 'VM Image 2 Template VMIDs');
+    if (parsed.length > 0) return parsed.map((vmid) => String(vmid));
+  } catch {
+    // Fall back to the primary derived template ID if an old or invalid value slips through.
+  }
+  const idKey = slot === 1 ? 'vm_image_1_template_id' : 'vm_image_2_template_id';
+  const fallback = String(settings?.[idKey] ?? '').trim();
+  return fallback ? [fallback] : [];
+}
+
+function getConfiguredTemplateIds(settings = currentSettings) {
+  return new Set([
+    ...getTemplateCandidateVmids(settings, 1),
+    ...getTemplateCandidateVmids(settings, 2),
+  ]);
+}
+
+function getTemplateSpecValidationError(spec1 = vmImage1TemplateIdInput?.value ?? getTemplateSpecValue(currentSettings, 1), spec2 = vmImage2TemplateIdInput?.value ?? getTemplateSpecValue(currentSettings, 2)) {
+  let parsed1 = [];
+  let parsed2 = [];
+  try {
+    parsed1 = parseVmidSpec(spec1, 'VM Image 1 Template VMIDs');
+    parsed2 = parseVmidSpec(spec2, 'VM Image 2 Template VMIDs');
+  } catch (error) {
+    return error.message;
+  }
+  if (!parsed1.length || !parsed2.length) return '';
+  const parsed2Set = new Set(parsed2);
+  const overlap = parsed1.filter((vmid) => parsed2Set.has(vmid));
+  if (!overlap.length) return '';
+  const preview = overlap.slice(0, 5).join(', ');
+  return `VM Image 1 and VM Image 2 overlap at VMID(s): ${preview}${overlap.length > 5 ? '…' : ''}`;
+}
+
+function updateTemplateSpecValidation() {
+  const message = getTemplateSpecValidationError();
+  [vmImage1TemplateIdInput, vmImage2TemplateIdInput].forEach((input) => {
+    if (input) input.setCustomValidity(message);
+  });
+  if (templateVmidSpecError) {
+    showInlineMessage(templateVmidSpecError, message, Boolean(message), 0);
+  }
+  return message;
+}
+
 function formatUiDate(value) {
   if (!value) return '—';
   const date = new Date(typeof value === 'number' ? value * 1000 : value);
@@ -3365,14 +3538,17 @@ async function loadUsbConfig() {
   currentSettings.usb_missing_timeout = String(data.missing_timeout ?? currentSettings.usb_missing_timeout ?? '60');
   currentSettings.usb_max_slots = String(data.max_slots ?? currentSettings.usb_max_slots ?? '24');
   currentSettings.vm_image_1_template_id = String(data.image1_template_id ?? currentSettings.vm_image_1_template_id ?? '100');
+  currentSettings.vm_image_1_template_spec = String(data.image1_template_spec ?? currentSettings.vm_image_1_template_spec ?? currentSettings.vm_image_1_template_id ?? '100');
   currentSettings.vm_image_2_template_id = String(data.image2_template_id ?? currentSettings.vm_image_2_template_id ?? '200');
+  currentSettings.vm_image_2_template_spec = String(data.image2_template_spec ?? currentSettings.vm_image_2_template_spec ?? currentSettings.vm_image_2_template_id ?? '200');
   currentSettings.vm_image_1_pct = String(data.image1_pct ?? currentSettings.vm_image_1_pct ?? '50');
   currentSettings.usb_auto_provision = data.auto_provision || 'off';
   if (usbAutoProvisionInput) usbAutoProvisionInput.checked = currentSettings.usb_auto_provision === 'on';
   if (usbMissingTimeoutInput && !usbMissingTimeoutInput.matches(':focus')) usbMissingTimeoutInput.value = currentSettings.usb_missing_timeout;
   if (usbMaxSlotsInput && !usbMaxSlotsInput.matches(':focus')) usbMaxSlotsInput.value = currentSettings.usb_max_slots ?? '24';
-  if (vmImage1TemplateIdInput && !vmImage1TemplateIdInput.matches(':focus')) vmImage1TemplateIdInput.value = currentSettings.vm_image_1_template_id;
-  if (vmImage2TemplateIdInput && !vmImage2TemplateIdInput.matches(':focus')) vmImage2TemplateIdInput.value = currentSettings.vm_image_2_template_id;
+  if (vmImage1TemplateIdInput && !vmImage1TemplateIdInput.matches(':focus')) vmImage1TemplateIdInput.value = getTemplateSpecValue(currentSettings, 1);
+  if (vmImage2TemplateIdInput && !vmImage2TemplateIdInput.matches(':focus')) vmImage2TemplateIdInput.value = getTemplateSpecValue(currentSettings, 2);
+  updateTemplateSpecValidation();
   if (vmImage1PctInput && !vmImage1PctInput.matches(':focus')) vmImage1PctInput.value = currentSettings.vm_image_1_pct;
   renderUsbVidPidTable();
   renderIgnoredUsbList();
@@ -3401,6 +3577,10 @@ function removeVidPid(vidpid) {
 }
 
 function collectUsbSettingsPayload() {
+  const vmImage1TemplateSpec = String(vmImage1TemplateIdInput?.value ?? getTemplateSpecValue(currentSettings, 1)).trim();
+  const vmImage2TemplateSpec = String(vmImage2TemplateIdInput?.value ?? getTemplateSpecValue(currentSettings, 2)).trim();
+  const parsedImage1 = parseVmidSpec(vmImage1TemplateSpec, 'VM Image 1 Template VMIDs');
+  const parsedImage2 = parseVmidSpec(vmImage2TemplateSpec, 'VM Image 2 Template VMIDs');
   return {
     usb_vidpids: currentSettings.usb_vidpids,
     usb_missing_timeout: String(usbMissingTimeoutInput?.value || currentSettings.usb_missing_timeout || '60'),
@@ -3409,8 +3589,10 @@ function collectUsbSettingsPayload() {
     cpu_delete_threshold:    String(document.getElementById('cpu-delete-threshold')?.value ?? currentSettings.cpu_delete_threshold ?? '90'),
     mem_provision_threshold: String(document.getElementById('mem-provision-threshold')?.value ?? currentSettings.mem_provision_threshold ?? '80'),
     mem_delete_threshold:    String(document.getElementById('mem-delete-threshold')?.value ?? currentSettings.mem_delete_threshold ?? '90'),
-    vm_image_1_template_id: String(vmImage1TemplateIdInput?.value || currentSettings.vm_image_1_template_id || '100'),
-    vm_image_2_template_id: String(vmImage2TemplateIdInput?.value || currentSettings.vm_image_2_template_id || '200'),
+    vm_image_1_template_id: String(parsedImage1[0] ?? currentSettings.vm_image_1_template_id ?? '100'),
+    vm_image_1_template_spec: vmImage1TemplateSpec,
+    vm_image_2_template_id: String(parsedImage2[0] ?? currentSettings.vm_image_2_template_id ?? '200'),
+    vm_image_2_template_spec: vmImage2TemplateSpec,
     vm_image_1_pct: String(vmImage1PctInput?.value ?? currentSettings.vm_image_1_pct ?? '50'),
     usb_auto_provision: usbAutoProvisionInput?.checked ? 'on' : 'off',
     usb_ignored_vidpids: currentSettings.usb_ignored_vidpids,
@@ -8487,12 +8669,22 @@ if (addIgnoredHostnameBtn) {
 // Text / number inputs → save on blur (when user clicks/tabs away).
 
 async function _autoSaveUsb(msgEl) {
+  const validationError = updateTemplateSpecValidation();
+  if (validationError) {
+    showInlineMessage(msgEl, validationError, true, 0);
+    return;
+  }
   try {
+    const payload = collectUsbSettingsPayload();
     await requestJson('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(collectUsbSettingsPayload()),
+      body: JSON.stringify(payload),
     });
+    currentSettings.vm_image_1_template_id = payload.vm_image_1_template_id;
+    currentSettings.vm_image_1_template_spec = payload.vm_image_1_template_spec;
+    currentSettings.vm_image_2_template_id = payload.vm_image_2_template_id;
+    currentSettings.vm_image_2_template_spec = payload.vm_image_2_template_spec;
     showInlineMessage(msgEl, 'Saved.', false);
   } catch (err) {
     showInlineMessage(msgEl, `Error: ${err.message}`, true);
@@ -8519,8 +8711,13 @@ async function _autoSaveVmMaintenance(msgEl) {
 
 // USB — save checkbox changes immediately; number inputs on blur.
 if (usbAutoProvisionInput) usbAutoProvisionInput.addEventListener('change', () => _autoSaveUsb(usbSettingsMsg));
-[usbMissingTimeoutInput, usbMaxSlotsInput, vmImage1TemplateIdInput, vmImage2TemplateIdInput, vmImage1PctInput].forEach((el) => {
+[usbMissingTimeoutInput, usbMaxSlotsInput, vmImage1PctInput].forEach((el) => {
   if (el) el.addEventListener('blur', () => _autoSaveUsb(usbSettingsMsg));
+});
+[vmImage1TemplateIdInput, vmImage2TemplateIdInput].forEach((el) => {
+  if (!el) return;
+  el.addEventListener('input', updateTemplateSpecValidation);
+  el.addEventListener('blur', () => _autoSaveUsb(usbSettingsMsg));
 });
 // Protected VMIDs — save on blur (was missing, causing value to not persist)
 const protectedVmidsInput = document.getElementById('protected-vmids');
@@ -9254,10 +9451,8 @@ document.getElementById('server-select-all')?.addEventListener('change', (e) => 
 });
 
 document.getElementById('server-delete-all-sim')?.addEventListener('click', async () => {
-  const configuredTemplateIds = new Set([
-    String(currentSettings.vm_image_1_template_id || '100'),
-    String(currentSettings.vm_image_2_template_id || '200'),
-  ]);
+  updateTemplateSpecValidation();
+  const configuredTemplateIds = getConfiguredTemplateIds(currentSettings);
   // Parse user-configured protected VMIDs from settings (comma-separated)
   const protectedVmids = new Set(
     String(currentSettings.protected_vmids || '').split(',')

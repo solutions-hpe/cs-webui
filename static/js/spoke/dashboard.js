@@ -7000,18 +7000,26 @@ function handleMessage(message) {
     if (message.pending_proxmox !== undefined) renderProxmoxPending(message.pending_proxmox || []);
     if (message.approved_proxmox !== undefined) renderProxmoxApproved(message.approved_proxmox || []);
     renderServerTab(message);
-    // Refresh the Proxmox Servers list if the Setup → Proxmox tab is visible
+    // Refresh the Proxmox Servers list if the Setup → Proxmox tab is visible,
+    // but skip if user has a select/input focused (avoids destroying open dropdowns).
     if (document.getElementById('px-servers-tbody') && !document.getElementById('setup-proxmox')?.classList.contains('hidden')) {
-      loadPxServersList().catch(() => {});
+      const _ae = document.activeElement;
+      if (!_ae || (_ae.tagName !== 'SELECT' && _ae.tagName !== 'INPUT' && _ae.tagName !== 'TEXTAREA')) {
+        loadPxServersList().catch(() => {});
+      }
     }
     return;
   }
 
   if (message.type === 'proxmox_pending_update') {
     renderProxmoxPending(message.pending || []);
-    // Refresh the Proxmox Servers list if the Setup → Proxmox tab is visible
+    // Refresh the Proxmox Servers list if the Setup → Proxmox tab is visible,
+    // but skip if user has a select/input focused (avoids destroying open dropdowns).
     if (document.getElementById('px-servers-tbody') && !document.getElementById('setup-proxmox')?.classList.contains('hidden')) {
-      loadPxServersList().catch(() => {});
+      const _ae = document.activeElement;
+      if (!_ae || (_ae.tagName !== 'SELECT' && _ae.tagName !== 'INPUT' && _ae.tagName !== 'TEXTAREA')) {
+        loadPxServersList().catch(() => {});
+      }
     }
     return;
   }

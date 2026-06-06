@@ -354,14 +354,14 @@ function getSpokeVmCount(spoke) {
   const proxmox = getSpokeProxmoxSummary(spoke);
   const vmCount = Number(proxmox.vm_count);
   if (Number.isFinite(vmCount)) return vmCount;
-  return Array.isArray(proxmox.vms) ? proxmox.vms.length : 0;
+  return Array.isArray(proxmox.vms) ? proxmox.vms.filter(v => !v.is_template).length : 0;
 }
 
 function getSpokeRunningVmCount(spoke) {
   const proxmox = getSpokeProxmoxSummary(spoke);
   const runningCount = Number(proxmox.running_count);
   if (Number.isFinite(runningCount)) return runningCount;
-  return Array.isArray(proxmox.vms) ? proxmox.vms.filter(vm => vm.status === "running").length : 0;
+  return Array.isArray(proxmox.vms) ? proxmox.vms.filter(vm => vm.status === "running" && !vm.is_template).length : 0;
 }
 
 function getSpokeUsbCount(spoke) {
@@ -10459,8 +10459,8 @@ function renderSpokeServerTab() {
 
   // Node bar
   $("#spoke-server-hostname") && ($("#spoke-server-hostname").textContent = proxmox.hostname || activeSpokeModal.spoke?.hostname || "—");
-  $("#spoke-server-vm-count") && ($("#spoke-server-vm-count").textContent = `${proxmox.vm_count ?? vms.length} VMs`);
-  $("#spoke-server-running-count") && ($("#spoke-server-running-count").textContent = `${proxmox.running_count ?? vms.filter(v => v.status === "running").length} running`);
+  $("#spoke-server-vm-count") && ($("#spoke-server-vm-count").textContent = `${proxmox.vm_count ?? vms.filter(v => !v.is_template).length} VMs`);
+  $("#spoke-server-running-count") && ($("#spoke-server-running-count").textContent = `${proxmox.running_count ?? vms.filter(v => v.status === "running" && !v.is_template).length} running`);
   $("#spoke-server-pve-version") && ($("#spoke-server-pve-version").textContent = proxmox.pve_version ? `PVE ${proxmox.pve_version}` : "");
   $("#spoke-server-agent-version") && ($("#spoke-server-agent-version").textContent = proxmox.agent_version ? `Agent ${proxmox.agent_version}` : "");
 

@@ -47,9 +47,6 @@ function _fmtSection(s) { return KNOWN_SECTION_LABELS[s] || s.charAt(0).toUpperC
 function _isBoolVal(v) { return BOOL_VALUE_SET.has(String(v ?? '').toLowerCase().trim()); }
 
 const clients = new Map();
-const rowRefs = new Map();
-const tbody = document.getElementById('clients-body');
-const emptyRow = document.getElementById('empty-row');
 const clientCount = document.getElementById('client-count');
 const clientsPill = document.getElementById('clients-pill');
 const clientsOnlinePill = document.getElementById('clients-online-pill');
@@ -2869,18 +2866,16 @@ function updateSpokeClientTypeCounts(allClients = [...clients.values()]) {
 }
 
 function renderClientRows() {
+  const container = document.getElementById('clients-sites-list');
+  if (!container) return;
   syncSpokeClientTypeTabs();
   const allClients = [...clients.values()];
   const usbVmids = spokeUsbVmids();
   const counts = updateSpokeClientTypeCounts(allClients);
   const search = String(document.getElementById('clients-search')?.value || '').trim().toLowerCase();
   const statusFilter = String(document.getElementById('clients-status-filter')?.value || 'all').trim().toLowerCase();
-  let visibleCount = 0;
-  let onlineCount = 0;
 
-  allClients.forEach((client) => {
-    const refs = rowRefs.get(client.hostname);
-    if (!refs) return;
+  const filtered = allClients.filter((client) => {
     const typeMatch = clientTypeFilter === 'all' || classifyClient(client, usbVmids) === clientTypeFilter;
     const isOnline = clientIsOnline(client);
     const statusMatch = statusFilter === 'all'
@@ -2892,20 +2887,87 @@ function renderClientRows() {
       client.connected_ssid,
       ...(Array.isArray(client.active_simulations) ? client.active_simulations : []),
     ].join(' ').toLowerCase();
-    const searchMatch = !search || haystack.includes(search);
-    const matches = typeMatch && statusMatch && searchMatch;
-
-    if (matches) {
-      visibleCount += 1;
-      if (isOnline) onlineCount += 1;
-    }
-    refs.mainRow.classList.toggle('hidden', !matches);
-    refs.detailRow.classList.toggle('hidden', !matches || openControlHost !== client.hostname);
+    return typeMatch && statusMatch && (!search || haystack.includes(search));
   });
 
-  if (clientsPill) clientsPill.textContent = `${visibleCount} client${visibleCount === 1 ? '' : 's'}`;
+  filtered.sort((a, b) => {
+    const onlineDiff = Number(clientIsOnline(b)) - Number(clientIsOnline(a));
+    if (onlineDiff) return onlineDiff;
+    return String(a.hostname || '').localeCompare(String(b.hostname || ''), undefined, { sensitivity: 'base' });
+  });
+
+  const onlineCount = filtered.filter((client) => clientIsOnline(client)).length;
+  if (clientsPill) clientsPill.textContent = `${filtered.length} client${filtered.length === 1 ? '' : 's'}`;
   if (clientsOnlinePill) clientsOnlinePill.textContent = `${onlineCount} online`;
-  updateClientCount(visibleCount, counts.all);
+  updateClientCount(filtered.length, counts.all);
+
+  if (!filtered.length) {
+    container.innerHTML = `<div class="empty-state">${allClients.length ? 'No clients match the current filters.' : 'No clients connected — waiting for beacons…'}</div>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="table-scroll">
+      <table class="data-table hub-client-site-table">
+        <thead><tr>
+          <th>Status</th><th>Hostname</th><th>Platform</th>
+          <th style="min-width:120px;white-space:nowrap">SSID</th>
+          <th style="white-space:nowrap">Last Seen</th>
+          <th>Errors</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          ${filtered.map((client) => renderSpokeClientRows(client)).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  container.querySelectorAll('button.client-control-btn[data-hostname]').forEach((btn) => {
+    btn.addEventListener('click', () => toggleControlRow(btn.dataset.hostname));
+  });
+  if (openControlHost && clients.has(openControlHost)) {
+    const detailCell = container.querySelector(`tr.control-row[data-hostname="${CSS.escape(openControlHost)}"] td`);
+    if (detailCell) renderControlPanel(openControlHost, detailCell);
+  }
+}
+
+function renderSpokeClientRows(client) {
+  const isOnline = clientIsOnline(client);
+  const hostname = client.hostname || '—';
+  const errCount = Number(client.error_count || 0);
+  const sims = Array.isArray(client.active_simulations) ? client.active_simulations : [];
+  const formattedTitle = typeof fmtDate === 'function' ? fmtDate(client.last_seen) : (client.last_seen || '');
+  const lastSeen = `<span title="${escHtml(formattedTitle)}">${escHtml(formatLastSeen(client.last_seen))}</span>`;
+  const hasPending = clientHasPendingCheckin(hostname);
+  const hostnameHtml = escHtml(hostname) + (hasPending ? ' <span class="badge bg-warning text-dark ms-1">Awaiting Check-in</span>' : '');
+  const errHtml = errCount > 0
+    ? `<span class="error-badge" title="${escHtml(`${errCount} error(s) — open Control to see log`)}">${errCount > 99 ? '99+' : errCount}</span>`
+    : '—';
+  const isOpen = openControlHost === hostname;
+  const ctrlLabel = isOpen ? 'Close' : 'Control';
+  const simBadgesHtml = buildSimBadgesHtml(sims);
+  return `
+    <tr class="client-row hub-client-main-row${isOnline ? '' : ' client-offline'}${isOpen ? ' expanded' : ''}" data-hostname="${escHtml(hostname)}">
+      <td class="status-cell"><span class="status-dot ${isOnline ? 'online' : 'offline'}"></span></td>
+      <td class="hostname-cell">${hostnameHtml}</td>
+      <td>${escHtml(client.platform || '—')}</td>
+      <td style="white-space:nowrap">${escHtml(client.connected_ssid || '—')}</td>
+      <td class="nowrap-cell">${lastSeen}</td>
+      <td class="error-cell">${errHtml}</td>
+      <td><button type="button" class="btn btn-small client-control-btn" data-hostname="${escHtml(hostname)}">${ctrlLabel}</button></td>
+    </tr>
+    <tr class="hub-client-sims-row">
+      <td colspan="7" class="hub-client-sims-cell">${simBadgesHtml}</td>
+    </tr>
+    <tr class="control-row${isOpen ? '' : ' hidden'}" data-hostname="${escHtml(hostname)}">
+      <td colspan="7"></td>
+    </tr>
+  `;
+}
+
+function buildSimBadgesHtml(sims = []) {
+  if (!sims.length) return '<span class="muted-text">— No active simulations</span>';
+  return sims.map((sim) => `<span class="${escHtml(badgeClass(sim))}">${escHtml(sim)}</span>`).join(' ');
 }
 
 function syncSpokeClientTypeFilter() {
@@ -2919,18 +2981,6 @@ function setClientTypeFilter(nextFilter = 'all') {
 
 function clientHasPendingCheckin(hostname) {
   return Boolean(proxmoxVmForHostname(hostname)?.pending_checkin);
-}
-
-function renderClientHostname(cell, hostname) {
-  cell.textContent = '';
-  const label = document.createElement('span');
-  label.textContent = hostname || '—';
-  cell.appendChild(label);
-  if (!hostname || !clientHasPendingCheckin(hostname)) return;
-  const badge = document.createElement('span');
-  badge.className = 'badge bg-warning text-dark ms-1';
-  badge.textContent = 'Awaiting Check-in';
-  cell.appendChild(badge);
 }
 
 function impactSummary(activeSimulations = []) {
@@ -3011,122 +3061,11 @@ function updateClientCount(visibleCount = clients.size, totalCount = clients.siz
       ? `${visible} / ${total} clients`
       : `${visible} client${visible === 1 ? '' : 's'}`;
   }
-  // Keep the VM Server summary clients pill in sync
   const clientsPill = document.getElementById('spoke-vm-clients-pill');
   if (clientsPill) {
     const cnt = clients.size;
     clientsPill.textContent = `${cnt} client${cnt === 1 ? '' : 's'}`;
   }
-  if (!emptyRow) return;
-  const visible = Number.isFinite(visibleCount) ? visibleCount : clients.size;
-  const total = Number.isFinite(totalCount) ? totalCount : clients.size;
-  emptyRow.style.display = visible > 0 ? 'none' : '';
-  const emptyCell = emptyRow.querySelector('td');
-  if (emptyCell) {
-    emptyCell.textContent = total > 0
-      ? 'No clients match the current filter.'
-      : 'No clients connected — waiting for beacons…';
-  }
-}
-
-function createCell(className = '') {
-  const cell = document.createElement('td');
-  if (className) cell.className = className;
-  return cell;
-}
-
-function ensureRow(hostname) {
-  if (rowRefs.has(hostname)) {
-    return rowRefs.get(hostname);
-  }
-
-  const mainRow = document.createElement('tr');
-  mainRow.dataset.hostname = hostname;
-  mainRow.className = 'client-row';
-
-  const detailRow = document.createElement('tr');
-  detailRow.className = 'control-row hidden';
-  const detailCell = document.createElement('td');
-  detailCell.colSpan = 8;
-  detailRow.appendChild(detailCell);
-
-  const statusCell = createCell('status-cell');
-  const statusDot = document.createElement('span');
-  statusDot.className = 'status-dot offline';
-  statusCell.appendChild(statusDot);
-
-  const hostnameCell = createCell('hostname-cell');
-  const platformCell = createCell();
-  const ssidCell = createCell();
-  const activeCell = createCell('badge-cell');
-  const lastSeenCell = createCell('nowrap-cell');
-  const actionsCell = createCell();
-
-  // Error count badge cell — shows a red badge when the client has reported errors.
-  // WHY: Operators need to see at a glance which clients are having problems
-  // without clicking into each one individually.
-  const errorCell = createCell('error-cell');
-  const errorBadge = document.createElement('span');
-  errorBadge.className = 'error-badge hidden';
-  errorBadge.title = 'Click Actions → Control to see error log';
-  errorCell.appendChild(errorBadge);
-
-  const controlButton = document.createElement('button');
-  controlButton.type = 'button';
-  controlButton.className = 'btn btn-small';
-  controlButton.textContent = 'Control';
-  controlButton.addEventListener('click', () => toggleControlRow(hostname));
-  actionsCell.appendChild(controlButton);
-
-  [
-    statusCell,
-    hostnameCell,
-    platformCell,
-    ssidCell,
-    activeCell,
-    lastSeenCell,
-    errorCell,
-    actionsCell
-  ].forEach((cell) => mainRow.appendChild(cell));
-
-  tbody.appendChild(mainRow);
-  tbody.appendChild(detailRow);
-
-  const refs = {
-    mainRow,
-    detailRow,
-    detailCell,
-    statusDot,
-    hostnameCell,
-    platformCell,
-    ssidCell,
-    activeCell,
-    lastSeenCell,
-    errorCell,
-    errorBadge,
-    controlButton
-  };
-
-  rowRefs.set(hostname, refs);
-  return refs;
-}
-
-function renderBadges(container, activeSimulations) {
-  container.textContent = '';
-  const inner = document.createElement('div');
-  inner.className = 'badge-cell-inner';
-  if (!activeSimulations || !activeSimulations.length) {
-    inner.textContent = '—';
-    container.appendChild(inner);
-    return;
-  }
-  activeSimulations.forEach((simulation) => {
-    const badge = document.createElement('span');
-    badge.className = badgeClass(simulation);
-    badge.textContent = simulation;
-    inner.appendChild(badge);
-  });
-  container.appendChild(inner);
 }
 
 function refreshClientWatchdogBadges() {
@@ -3149,35 +3088,7 @@ function upsertClient(client) {
   };
 
   clients.set(client.hostname, merged);
-  const refs = ensureRow(client.hostname);
-
-  const isOnline = clientIsOnline(merged);
-  refs.statusDot.className = `status-dot ${isOnline ? 'online' : 'offline'}`;
-  refs.mainRow.classList.toggle('client-offline', !isOnline);
-  renderClientHostname(refs.hostnameCell, merged.hostname);
-  refs.platformCell.textContent = merged.platform || '—';
-  refs.ssidCell.textContent = merged.connected_ssid || '—';
-  renderBadges(refs.activeCell, merged.active_simulations || []);
-  refs.lastSeenCell.textContent = formatLastSeen(merged.last_seen);
-  refs.controlButton.textContent = openControlHost === merged.hostname ? 'Close' : 'Control';
-
-  // Update error badge — show count if there are any errors, hide if clean.
-  // WHY: Red number in the Errors column is the fastest way to spot a problem
-  // on a table with many clients without reading every row in detail.
-  const errCount = merged.error_count || 0;
-  if (errCount > 0) {
-    refs.errorBadge.textContent = errCount > 99 ? '99+' : String(errCount);
-    refs.errorBadge.className = 'error-badge';
-    refs.errorBadge.title = `${errCount} error(s) reported — open Control to see log`;
-  } else {
-    refs.errorBadge.className = 'error-badge hidden';
-  }
-
-  if (openControlHost === merged.hostname) {
-    renderControlPanel(merged.hostname);
-  }
-
-  syncSpokeClientTypeFilter();
+  renderClientRows();
   if (centralSiteDetailOpen) {
     renderSiteClients(centralSiteDetailOpen);
   }
@@ -5320,13 +5231,13 @@ function buildToggle(flag, checked) {
   return wrapper;
 }
 
-function renderControlPanel(hostname) {
+function renderControlPanel(hostname, cellOverride) {
   const client = clients.get(hostname);
-  const refs = rowRefs.get(hostname);
-  if (!client || !refs) return;
+  const cell = cellOverride || document.querySelector(`tr.control-row[data-hostname="${CSS.escape(hostname)}"] td`);
+  if (!client || !cell) return;
 
   const baseConfig = client.effective_config || client.config || {};
-  refs.detailCell.textContent = '';
+  cell.textContent = '';
 
   const panel = document.createElement('div');
   panel.className = 'control-panel';
@@ -5472,31 +5383,12 @@ function renderControlPanel(hostname) {
   }
 
   panel.appendChild(errorSection);
-  refs.detailCell.appendChild(panel);
+  cell.appendChild(panel);
 }
 
 function toggleControlRow(hostname) {
-  if (openControlHost && openControlHost !== hostname) {
-    const currentRefs = rowRefs.get(openControlHost);
-    if (currentRefs) {
-      currentRefs.detailRow.classList.add('hidden');
-      currentRefs.mainRow.classList.remove('expanded');
-      currentRefs.controlButton.textContent = 'Control';
-    }
-  }
-
-  const refs = rowRefs.get(hostname);
-  if (!refs) return;
-
-  const shouldOpen = openControlHost !== hostname || refs.detailRow.classList.contains('hidden');
-  refs.detailRow.classList.toggle('hidden', !shouldOpen);
-  refs.mainRow.classList.toggle('expanded', shouldOpen);
-  refs.controlButton.textContent = shouldOpen ? 'Close' : 'Control';
-  openControlHost = shouldOpen ? hostname : null;
-
-  if (shouldOpen) {
-    renderControlPanel(hostname);
-  }
+  openControlHost = openControlHost === hostname ? null : hostname;
+  renderClientRows();
 }
 
 function buildConfigInput(field, value = '') {
@@ -6258,10 +6150,8 @@ function handleMessage(message) {
 
   if (message.type === 'clients_purged') {
     clients.clear();
-    document.querySelectorAll('#clients-body tr:not(#empty-row)').forEach(r => r.remove());
-    const emptyRow = document.getElementById('empty-row');
-    if (emptyRow) emptyRow.classList.remove('hidden');
-    syncSpokeClientTypeFilter();
+    openControlHost = null;
+    renderClientRows();
     updateCmdTargetDropdown([]);
   }
 }

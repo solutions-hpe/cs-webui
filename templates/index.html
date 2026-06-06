@@ -1901,7 +1901,6 @@
           <div class="toolbar-stats">
             <span class="stat-pill" id="clients-pill">0 clients</span>
             <span class="stat-pill" id="clients-online-pill">0 online</span>
-            <span class="stat-pill" id="client-count" title="Connected clients">0 clients</span>
           </div>
           <div class="toolbar-actions">
             <input id="clients-search" type="search" class="form-input form-input-sm" placeholder="Search clients…" autocomplete="off">
@@ -1915,25 +1914,7 @@
         </div>
 
         <div class="setup-card">
-          <table class="data-table" id="clients-table">
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>Hostname</th>
-                <th>Platform</th>
-                <th>SSID</th>
-                <th style="white-space:normal;min-width:100px">Active Simulations</th>
-                <th style="white-space:nowrap">Last Seen</th>
-                <th>Errors</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="clients-body">
-              <tr id="empty-row">
-                <td colspan="8" class="empty-state">No clients connected — waiting for beacons…</td>
-              </tr>
-            </tbody>
-          </table>
+          <div id="clients-sites-list" class="hub-clients-sites-list"></div>
         </div>
       </main>
 

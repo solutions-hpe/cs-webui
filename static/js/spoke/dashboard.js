@@ -355,7 +355,7 @@ async function hydrateSetupSubtab(subtabId) {
 
   await loadSetupSettings();
 
-  if (subtabId === 'setup-central') {
+  if (subtabId === 'setup-central' || subtabId === 'central-config-panel') {
     await loadCentralStatus().catch(() => {});
   }
 
@@ -473,7 +473,7 @@ if (agentLogClear) {
 }
 
 // ── Central sub-tabs ──────────────────────────────────────────
-const centralSubPanels = ['central-sites-panel', 'central-alerts-panel', 'central-clients-panel', 'central-history-panel'];
+const centralSubPanels = ['central-sites-panel', 'central-alerts-panel', 'central-clients-panel', 'central-history-panel', 'central-config-panel'];
 
 function activateCentralSubtab(subtabId = 'central-sites-panel') {
   document.querySelectorAll('.central-subtab').forEach((btn) => {
@@ -485,9 +485,11 @@ function activateCentralSubtab(subtabId = 'central-sites-panel') {
     panel.classList.toggle('active', id === subtabId);
     panel.classList.toggle('hidden', id !== subtabId);
   });
+  if (subtabId === 'central-sites-panel') renderCentralSites();
   if (subtabId === 'central-alerts-panel') renderCentralAllAlerts();
   if (subtabId === 'central-clients-panel') renderCentralClients();
   if (subtabId === 'central-history-panel') renderCentralAllHistory();
+  if (subtabId === 'central-config-panel') void hydrateSetupSubtab('central-config-panel');
 }
 
 document.querySelectorAll('.central-subtab').forEach((btn) => {
@@ -740,6 +742,10 @@ const centralOverview = document.getElementById('central-overview');
 const centralSitesGrid = document.getElementById('central-sites-table');
 const centralEmpty = document.getElementById('central-empty');
 const centralRefreshBtn = document.getElementById('central-refresh-btn');
+const centralSearchInput = document.getElementById('central-search');
+const centralModePill = document.getElementById('central-mode-pill');
+const centralSitesPill = document.getElementById('central-sites-pill');
+const centralUpdatedPill = document.getElementById('central-updated-pill');
 const centralLastSynced = document.getElementById('central-last-synced');
 const centralTokenDot = document.getElementById('central-token-dot');
 const centralTokenText = document.getElementById('central-token-text');
@@ -4281,9 +4287,23 @@ function formatCentralDate(value) {
 }
 
 function updateCentralToolbar() {
+  const mappings = currentSettings.site_mappings || {};
+  const siteCount = Object.keys(mappings).length;
+  const centralMode = currentSettings.central_api?.mode === 'central' ? 'Central' : 'Classic';
+  const updatedText = centralLastSyncedTs ? formatCentralDate(centralLastSyncedTs / 1000) : '—';
+
+  if (centralModePill) {
+    centralModePill.textContent = `${centralMode} mode`;
+  }
+  if (centralSitesPill) {
+    centralSitesPill.textContent = `${siteCount} site${siteCount === 1 ? '' : 's'}`;
+  }
+  if (centralUpdatedPill) {
+    centralUpdatedPill.textContent = centralLastSyncedTs ? `Updated ${updatedText}` : 'Updated —';
+  }
   if (centralLastSynced) {
     centralLastSynced.textContent = centralLastSyncedTs
-      ? `Last synced: ${formatCentralDate(centralLastSyncedTs / 1000)}`
+      ? `Last synced: ${updatedText}`
       : 'Last synced: —';
   }
   if (centralTokenDot) {
@@ -4493,7 +4513,7 @@ function renderAvailableChecks() {
   });
 }
 
-function renderCentralOverview() {
+function renderCentralSites() {
   const tbody = document.getElementById('central-sites-tbody');
   const centralEmpty = document.getElementById('central-empty');
   if (!centralOverview || !tbody || !centralEmpty) return;
@@ -4508,17 +4528,35 @@ function renderCentralOverview() {
     return;
   }
 
-  centralEmpty.classList.add('hidden');
+  const searchTerm = centralSearchInput?.value.trim().toLowerCase() || '';
   const monitoredChecks = currentSettings.monitored_checks || [];
-
-  entries.forEach(([wsite, centralSite]) => {
+  const clientValues = [...(clients instanceof Map ? clients.values() : Object.values(clients || {}))];
+  const filteredEntries = entries.filter(([wsite, centralSite]) => {
+    if (!searchTerm) return true;
     const siteChecks = centralStatusData[wsite] || {};
     const okCount = monitoredChecks.filter((c) => siteChecks[c.id]?.status === 'OK').length;
     const errorCount = monitoredChecks.filter((c) => siteChecks[c.id]?.status === 'ERROR').length;
     const unknownCount = Math.max(monitoredChecks.length - okCount - errorCount, 0);
     const wirelessCount = centralWirelessClients[wsite] ?? '—';
-    const simCount = [...(clients instanceof Map ? clients.values() : Object.values(clients || {}))]
-      .filter((cl) => (cl.config?.wsite || cl.effective_config?.wsite || '') === wsite).length;
+    const simCount = clientValues.filter((cl) => (cl.config?.wsite || cl.effective_config?.wsite || '') === wsite).length;
+    return [wsite, centralSite, String(wirelessCount), String(simCount), String(okCount), String(errorCount), String(unknownCount)]
+      .some((value) => String(value || '').toLowerCase().includes(searchTerm));
+  });
+
+  if (!filteredEntries.length) {
+    centralEmpty.textContent = searchTerm ? 'No sites match your search.' : 'No Aruba Central site mappings configured yet.';
+    centralEmpty.classList.remove('hidden');
+    return;
+  }
+
+  centralEmpty.classList.add('hidden');
+
+  filteredEntries.forEach(([wsite, centralSite]) => {
+    const siteChecks = centralStatusData[wsite] || {};
+    const okCount = monitoredChecks.filter((c) => siteChecks[c.id]?.status === 'OK').length;
+    const errorCount = monitoredChecks.filter((c) => siteChecks[c.id]?.status === 'ERROR').length;
+    const unknownCount = Math.max(monitoredChecks.length - okCount - errorCount, 0);
+    const wirelessCount = centralWirelessClients[wsite] ?? '—';
 
     const tr = document.createElement('tr');
     tr.style.cursor = 'pointer';
@@ -4539,6 +4577,10 @@ function renderCentralOverview() {
     tr.addEventListener('click', () => openSiteDetail(wsite));
     tbody.appendChild(tr);
   });
+}
+
+function renderCentralOverview() {
+  renderCentralSites();
 }
 
 async function renderCentralAllAlerts() {
@@ -7832,11 +7874,16 @@ if (centralRefreshBtn) {
       await loadCentralStatus();
     } catch (error) {
       if (centralLastSynced) centralLastSynced.textContent = `Refresh failed: ${error.message}`;
+      if (centralUpdatedPill) centralUpdatedPill.textContent = 'Refresh failed';
     } finally {
       centralRefreshBtn.disabled = false;
       centralRefreshBtn.textContent = originalLabel;
     }
   });
+}
+
+if (centralSearchInput) {
+  centralSearchInput.addEventListener('input', () => renderCentralSites());
 }
 
 if (centralSaveBtn) {

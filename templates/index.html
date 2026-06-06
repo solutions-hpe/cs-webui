@@ -162,7 +162,7 @@
         <div class="tenant-context-nav-row2 spoke-nav-row">
           <button class="tab active" role="tab" aria-selected="true" data-tab="simulations" type="button">Simulations</button>
           <button class="tab" role="tab" aria-selected="false" data-tab="dashboard" type="button">Simulation Clients</button>
-          <button class="tab" role="tab" aria-selected="false" data-tab="central" type="button">Central</button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="central" type="button">Central Monitoring</button>
           <button class="tab tab-btn" id="tab-server-btn" role="tab" aria-selected="false" data-tab="server" style="display:none;" type="button">VM Server</button>
           <span class="tab-nav-sep" aria-hidden="true"></span>
           <button class="tab tab-nav-right" role="tab" aria-selected="false" data-tab="setup" type="button">⚙ Setup</button>
@@ -2540,22 +2540,33 @@
 
       <!-- ── Central tab ── -->
       <main id="tab-central" class="page tab-content hidden">
-        <nav class="setup-subnav" role="tablist">
+        <div class="page-toolbar">
+          <div class="toolbar-stats">
+            <span class="stat-pill" id="central-mode-pill">— mode</span>
+            <span class="stat-pill" id="central-sites-pill">— sites</span>
+            <span class="stat-pill" id="central-updated-pill">—</span>
+          </div>
+          <div class="toolbar-actions">
+            <button id="central-refresh-btn" class="btn btn-primary btn-small" type="button">↺ Refresh</button>
+          </div>
+        </div>
+        <nav class="setup-subnav" role="tablist" style="border-bottom:1px solid var(--border);margin-bottom:0;">
           <button class="setup-subtab central-subtab active" data-subtab="central-sites-panel" role="tab">Sites</button>
           <button class="setup-subtab central-subtab" data-subtab="central-alerts-panel" role="tab">Alerts</button>
           <button class="setup-subtab central-subtab" data-subtab="central-clients-panel" role="tab">Clients</button>
           <button class="setup-subtab central-subtab" data-subtab="central-history-panel" role="tab">History</button>
+          <button class="setup-subtab central-subtab" data-subtab="central-config-panel" role="tab">Config</button>
         </nav>
+        <div style="padding:8px 0 4px;">
+          <input type="search" id="central-search" class="form-input form-input-sm" placeholder="Search sites…" autocomplete="off" style="max-width:320px;">
+        </div>
 
         <!-- Sites sub-tab -->
         <div id="central-sites-panel" class="setup-subpanel">
           <div id="central-overview">
             <section class="central-toolbar">
-              <div>
-                <div id="central-last-synced" class="central-last-synced">Last synced: —</div>
-              </div>
-              <div class="toolbar-actions">
-                <button id="central-refresh-btn" class="btn btn-primary btn-small" type="button">Refresh Now</button>
+              <div id="central-last-synced" class="central-last-synced hidden" aria-hidden="true">Last synced: —</div>
+              <div class="toolbar-actions" style="justify-content:flex-end;">
                 <div id="central-token-status" class="central-token-status">
                   <span id="central-token-dot" class="status-dot offline"></span>
                   <span id="central-token-text">Token status unknown</span>
@@ -2661,6 +2672,149 @@
           </div>
         </div>
 
+        <!-- Config sub-tab -->
+        <div id="central-config-panel" class="setup-subpanel hidden">
+          <div class="setup-card setup-section-gap">
+                <div class="setup-card-header">
+                  <h2>Central API <button class="help-icon" data-help-topic="aruba-central" type="button" aria-label="Help">?</button></h2>
+                  <p>Configure the active Central API connection mode for this spoke.</p>
+                </div>
+
+                <div class="setup-form">
+                  <div class="form-group">
+                    <label class="form-label">Mode</label>
+                    <div class="segmented-control central-mode-toggle" id="central-api-mode-toggle">
+                      <button type="button" class="active" data-mode="classic" id="central-api-classic">Classic</button>
+                      <button type="button" data-mode="central" id="central-api-central">Central</button>
+                    </div>
+                  </div>
+
+                  <div id="central-classic-fields">
+                    <div class="form-group">
+                      <label class="form-label" for="central-classic-url">URL</label>
+                      <input id="central-classic-url" class="form-input" type="text"
+                             placeholder="https://classic-central.example.com" autocomplete="off" spellcheck="false">
+                    </div>
+
+                    <div class="form-group">
+                      <label class="form-label" for="central-classic-username">Username</label>
+                      <input id="central-classic-username" class="form-input" type="text" autocomplete="off" spellcheck="false">
+                    </div>
+
+                    <div class="form-group">
+                      <label class="form-label" for="central-classic-password">Password</label>
+                      <input id="central-classic-password" class="form-input" type="password"
+                             placeholder="Leave blank to keep current" autocomplete="new-password" data-secret-field="true">
+                      <span class="form-hint" id="central-classic-password-status"></span>
+                    </div>
+                  </div>
+
+                  <div id="central-new-fields" class="hidden">
+                    <p class="form-hint" style="margin:0 0 12px">
+                      Central uses HPE GreenLake client credentials. Go to <strong>Manage Workspace → Personal API clients</strong>
+                      and create a credential scoped to your Central instance.
+                    </p>
+
+                    <div class="form-group">
+                      <label class="form-label" for="central-central-url">URL</label>
+                      <input id="central-central-url" class="form-input" type="text"
+                             placeholder="https://apigw-prod2.central.arubanetworks.com" autocomplete="off" spellcheck="false">
+                    </div>
+
+                    <div class="form-group">
+                      <label class="form-label" for="central-client-id">Client ID</label>
+                      <input id="central-client-id" class="form-input" type="text" autocomplete="off" spellcheck="false">
+                    </div>
+
+                    <div class="form-group">
+                      <label class="form-label" for="central-client-secret">Client Secret</label>
+                      <input id="central-client-secret" class="form-input" type="password"
+                             placeholder="Leave blank to keep current" autocomplete="new-password" data-secret-field="true">
+                      <span class="form-hint" id="central-client-secret-status"></span>
+                    </div>
+
+                    <div class="form-group">
+                      <label class="form-label" for="central-customer-id">Customer ID <span class="token-optional-badge">optional</span></label>
+                      <input id="central-customer-id" class="form-input" type="text" autocomplete="off" spellcheck="false">
+                      <span class="form-hint">Only needed when your Central API client requires a customer identifier.</span>
+                    </div>
+                  </div>
+
+                  <div class="form-actions central-config-actions">
+                    <button id="central-test-btn" class="btn btn-primary" type="button">Test Connection</button>
+                    <button id="central-save-btn" class="btn btn-primary" type="button">Save</button>
+                    <button id="central-clear-btn" class="btn btn-danger" type="button">Clear Config</button>
+                  </div>
+
+                  <div id="central-config-msg" class="settings-message hidden" role="alert"></div>
+                </div>
+              </div>
+
+          <div class="setup-card setup-section-gap">
+                <div class="setup-card-header">
+                  <h2>Site Mappings</h2>
+                  <p>Match your simulation.conf wsite values to Aruba Central site names. Click <strong>Load Sites</strong> to populate dropdowns from both sources.</p>
+                </div>
+
+                <div class="setup-form">
+                  <div class="form-actions" style="margin-bottom:0.75rem;">
+                    <button id="load-sites-btn" class="btn btn-primary" type="button">🔄 Load Sites</button>
+                    <span id="sites-load-status" class="form-hint" style="margin-left:0.75rem;"></span>
+                  </div>
+
+                  <table class="mapping-table">
+                    <thead>
+                      <tr>
+                        <th>simulation.conf wsite</th>
+                        <th>Aruba Central Site</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="site-mappings-body"></tbody>
+                  </table>
+
+                  <div class="form-actions">
+                    <button id="add-mapping-btn" class="btn btn-primary" type="button">+ Add Row</button>
+                  </div>
+
+                  <div id="central-mappings-msg" class="settings-message hidden" role="alert"></div>
+                </div>
+              </div>
+
+          <div class="setup-card setup-section-gap">
+                <div class="setup-card-header">
+                  <h2>Monitored Checks</h2>
+                  <p>Select which Aruba Central alerts and AI Insights to monitor. OK = present during polling. ERROR = missing.</p>
+                </div>
+
+                <div class="setup-form">
+                  <div id="selected-checks-preview" class="form-hint">No checks selected yet.</div>
+                  <div class="form-actions">
+                    <button id="central-load-checks-btn" class="btn btn-primary" type="button">Load Available Checks</button>
+                  </div>
+
+                  <div id="available-checks-container"></div>
+                  <div id="central-checks-msg" class="settings-message hidden" role="alert"></div>
+                </div>
+              </div>
+
+          <div class="setup-card setup-section-gap">
+                <div class="setup-card-header">
+                  <h2>Hardware Alerts</h2>
+                  <p>Select which Aruba Central alert types to monitor as hardware health checks (e.g. AP Down, Switch Down).</p>
+                </div>
+                <div class="setup-form">
+                  <div id="hw-checks-preview" class="form-hint">No hardware checks selected yet.</div>
+                  <div class="form-actions">
+                    <button id="hw-load-alerts-btn" class="btn btn-primary" type="button">Load Available Alert Types</button>
+                  </div>
+                  <div id="hw-checks-container"></div>
+                  <div id="hw-checks-msg" class="settings-message hidden" role="alert"></div>
+                </div>
+              </div>
+        </div>
+
+
       </main>
 
       <!-- ── Config tab ── -->
@@ -2676,7 +2830,6 @@
           <button class="setup-subtab" data-subtab="setup-hub" role="tab">Hub</button>
           <button class="setup-subtab" data-subtab="setup-proxmox" role="tab">Proxmox</button>
           <button class="setup-subtab" data-subtab="setup-security" role="tab">Security</button>
-          <button class="setup-subtab" data-subtab="setup-central" role="tab">Central API</button>
           <button class="setup-subtab" data-subtab="setup-notifications" role="tab">Notifications</button>
           <button class="setup-subtab" data-subtab="setup-troubleshoot" role="tab">Troubleshooting</button>
           <button class="setup-subtab" data-subtab="setup-sim-config" role="tab">Sim Config</button>
@@ -3251,147 +3404,6 @@
               <div id="spoke-auth-settings-msg" class="settings-message hidden" role="alert"></div>
             </div>
           </div>
-        </div>
-
-        <div id="setup-central" class="setup-subpanel hidden">
-          <div class="setup-card setup-section-gap">
-                <div class="setup-card-header">
-                  <h2>Central API</h2>
-                  <p>Configure the active Central API connection mode for this spoke.</p>
-                </div>
-
-                <div class="setup-form">
-                  <div class="form-group">
-                    <label class="form-label">Mode</label>
-                    <div class="segmented-control central-mode-toggle" id="central-api-mode-toggle">
-                      <button type="button" class="active" data-mode="classic" id="central-api-classic">Classic</button>
-                      <button type="button" data-mode="central" id="central-api-central">Central</button>
-                    </div>
-                  </div>
-
-                  <div id="central-classic-fields">
-                    <div class="form-group">
-                      <label class="form-label" for="central-classic-url">URL</label>
-                      <input id="central-classic-url" class="form-input" type="text"
-                             placeholder="https://classic-central.example.com" autocomplete="off" spellcheck="false">
-                    </div>
-
-                    <div class="form-group">
-                      <label class="form-label" for="central-classic-username">Username</label>
-                      <input id="central-classic-username" class="form-input" type="text" autocomplete="off" spellcheck="false">
-                    </div>
-
-                    <div class="form-group">
-                      <label class="form-label" for="central-classic-password">Password</label>
-                      <input id="central-classic-password" class="form-input" type="password"
-                             placeholder="Leave blank to keep current" autocomplete="new-password" data-secret-field="true">
-                      <span class="form-hint" id="central-classic-password-status"></span>
-                    </div>
-                  </div>
-
-                  <div id="central-new-fields" class="hidden">
-                    <p class="form-hint" style="margin:0 0 12px">
-                      Central uses HPE GreenLake client credentials. Go to <strong>Manage Workspace → Personal API clients</strong>
-                      and create a credential scoped to your Central instance.
-                    </p>
-
-                    <div class="form-group">
-                      <label class="form-label" for="central-central-url">URL</label>
-                      <input id="central-central-url" class="form-input" type="text"
-                             placeholder="https://apigw-prod2.central.arubanetworks.com" autocomplete="off" spellcheck="false">
-                    </div>
-
-                    <div class="form-group">
-                      <label class="form-label" for="central-client-id">Client ID</label>
-                      <input id="central-client-id" class="form-input" type="text" autocomplete="off" spellcheck="false">
-                    </div>
-
-                    <div class="form-group">
-                      <label class="form-label" for="central-client-secret">Client Secret</label>
-                      <input id="central-client-secret" class="form-input" type="password"
-                             placeholder="Leave blank to keep current" autocomplete="new-password" data-secret-field="true">
-                      <span class="form-hint" id="central-client-secret-status"></span>
-                    </div>
-
-                    <div class="form-group">
-                      <label class="form-label" for="central-customer-id">Customer ID <span class="token-optional-badge">optional</span></label>
-                      <input id="central-customer-id" class="form-input" type="text" autocomplete="off" spellcheck="false">
-                      <span class="form-hint">Only needed when your Central API client requires a customer identifier.</span>
-                    </div>
-                  </div>
-
-                  <div class="form-actions central-config-actions">
-                    <button id="central-test-btn" class="btn btn-primary" type="button">Test Connection</button>
-                    <button id="central-save-btn" class="btn btn-primary" type="button">Save</button>
-                    <button id="central-clear-btn" class="btn btn-danger" type="button">Clear Config</button>
-                  </div>
-
-                  <div id="central-config-msg" class="settings-message hidden" role="alert"></div>
-                </div>
-              </div>
-
-          <div class="setup-card setup-section-gap">
-                <div class="setup-card-header">
-                  <h2>Site Mappings</h2>
-                  <p>Match your simulation.conf wsite values to Aruba Central site names. Click <strong>Load Sites</strong> to populate dropdowns from both sources.</p>
-                </div>
-
-                <div class="setup-form">
-                  <div class="form-actions" style="margin-bottom:0.75rem;">
-                    <button id="load-sites-btn" class="btn btn-primary" type="button">🔄 Load Sites</button>
-                    <span id="sites-load-status" class="form-hint" style="margin-left:0.75rem;"></span>
-                  </div>
-
-                  <table class="mapping-table">
-                    <thead>
-                      <tr>
-                        <th>simulation.conf wsite</th>
-                        <th>Aruba Central Site</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody id="site-mappings-body"></tbody>
-                  </table>
-
-                  <div class="form-actions">
-                    <button id="add-mapping-btn" class="btn btn-primary" type="button">+ Add Row</button>
-                  </div>
-
-                  <div id="central-mappings-msg" class="settings-message hidden" role="alert"></div>
-                </div>
-              </div>
-
-          <div class="setup-card setup-section-gap">
-                <div class="setup-card-header">
-                  <h2>Monitored Checks</h2>
-                  <p>Select which Aruba Central alerts and AI Insights to monitor. OK = present during polling. ERROR = missing.</p>
-                </div>
-
-                <div class="setup-form">
-                  <div id="selected-checks-preview" class="form-hint">No checks selected yet.</div>
-                  <div class="form-actions">
-                    <button id="central-load-checks-btn" class="btn btn-primary" type="button">Load Available Checks</button>
-                  </div>
-
-                  <div id="available-checks-container"></div>
-                  <div id="central-checks-msg" class="settings-message hidden" role="alert"></div>
-                </div>
-              </div>
-
-          <div class="setup-card setup-section-gap">
-                <div class="setup-card-header">
-                  <h2>Hardware Alerts</h2>
-                  <p>Select which Aruba Central alert types to monitor as hardware health checks (e.g. AP Down, Switch Down).</p>
-                </div>
-                <div class="setup-form">
-                  <div id="hw-checks-preview" class="form-hint">No hardware checks selected yet.</div>
-                  <div class="form-actions">
-                    <button id="hw-load-alerts-btn" class="btn btn-primary" type="button">Load Available Alert Types</button>
-                  </div>
-                  <div id="hw-checks-container"></div>
-                  <div id="hw-checks-msg" class="settings-message hidden" role="alert"></div>
-                </div>
-              </div>
         </div>
 
         <div id="setup-notifications" class="setup-subpanel hidden">

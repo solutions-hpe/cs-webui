@@ -6702,6 +6702,203 @@ function renderBucketEditors() {
   });
 }
 
+// ── User Overrides Editor ─────────────────────────────────────────────────────
+
+const USER_OVERRIDE_FLAGS = ['kill_switch', 'dns_fail', 'ssidpw_fail', 'auth_fail', 'dhcp_fail', 'port_flap', 'assoc_fail', 'iperf', 'download', 'www_traffic', 'ping_test'];
+
+let spokeUserOverridesState = { sections: {}, sectionOrder: [], fetchedAt: null, loading: false, error: null };
+let _spokeUserOverridesSearch = '';
+
+function _parseIni(text) {
+  const sections = {};
+  const sectionOrder = [];
+  let current = null;
+  for (const line of String(text || '').split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith(';')) continue;
+    const m = trimmed.match(/^\[([^\]]+)\]$/);
+    if (m) {
+      current = m[1];
+      if (!Object.prototype.hasOwnProperty.call(sections, current)) {
+        sections[current] = {};
+        sectionOrder.push(current);
+      }
+      continue;
+    }
+    if (current) {
+      const eq = trimmed.indexOf('=');
+      if (eq > 0) sections[current][trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim();
+    }
+  }
+  return { sections, sectionOrder };
+}
+
+function _serializeIni(sections, sectionOrder) {
+  return sectionOrder
+    .map((section) => {
+      const entries = Object.entries(sections[section] || {});
+      if (!entries.length) return null;
+      return `[${section}]\n${entries.map(([k, v]) => `${k} = ${v}`).join('\n')}`;
+    })
+    .filter(Boolean)
+    .join('\n\n') + '\n';
+}
+
+async function loadSpokeUserOverrides(force = false) {
+  const container = document.getElementById('spoke-user-overrides-editor');
+  if (!container) return;
+  if (!force && spokeUserOverridesState.fetchedAt !== null) {
+    renderSpokeUserOverridesEditor();
+    return;
+  }
+  spokeUserOverridesState = { ...spokeUserOverridesState, loading: true, error: null };
+  renderSpokeUserOverridesEditor();
+  try {
+    const res = await requestJson('/api/config/user-overrides-conf');
+    const { sections, sectionOrder } = _parseIni(res.content || '');
+    spokeUserOverridesState = { sections, sectionOrder, fetchedAt: res.fetched_at || new Date().toISOString(), loading: false, error: null };
+  } catch (e) {
+    spokeUserOverridesState = { ...spokeUserOverridesState, loading: false, error: e.message };
+  }
+  renderSpokeUserOverridesEditor();
+}
+
+function _buildUserOverrideCard(username, values) {
+  const flagFields = USER_OVERRIDE_FLAGS.map((flag) => {
+    const raw = String(values[flag] ?? '').toLowerCase();
+    const checked = raw === 'on' ? ' checked' : '';
+    return `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap;font-size:0.875rem;">
+      <input type="checkbox" class="uo-flag-cb" data-username="${escHtml(username)}" data-flag="${escHtml(flag)}"${checked}>
+      <span>${escHtml(flag)}</span>
+    </label>`;
+  }).join('');
+
+  const extraKeys = Object.keys(values).filter((k) => !USER_OVERRIDE_FLAGS.includes(k));
+  const extraFields = extraKeys.map((key) => `
+    <div class="form-group" style="min-width:180px;">
+      <label class="form-label" style="font-size:0.8rem;">${escHtml(key)}</label>
+      <input type="text" class="form-input uo-text-input" data-username="${escHtml(username)}" data-flag="${escHtml(key)}" value="${escHtml(values[key] || '')}" style="font-size:0.85rem;">
+    </div>`).join('');
+
+  return `
+    <div class="setup-card setup-section-gap" data-uo-username="${escHtml(username)}" style="margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+        <div style="font-weight:600;">👤 ${escHtml(username)}</div>
+        <button type="button" class="btn btn-secondary btn-small uo-remove-btn" data-username="${escHtml(username)}">✕ Remove</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px 16px;margin-bottom:${extraKeys.length ? '10px' : '0'};">
+        ${flagFields}
+      </div>
+      ${extraKeys.length ? `<div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-top:8px;">${extraFields}</div>` : ''}
+    </div>
+  `;
+}
+
+function renderSpokeUserOverridesEditor() {
+  const container = document.getElementById('spoke-user-overrides-editor');
+  if (!container) return;
+  const { sections, sectionOrder, fetchedAt, loading, error } = spokeUserOverridesState;
+  const fetched = fetchedAt ? (typeof fmtDate === 'function' ? fmtDate(fetchedAt) : fetchedAt) : '—';
+  const hasGithub = currentSettings.github_token_configured;
+  const saveLabel = hasGithub ? 'Save to GitHub' : 'Save locally';
+
+  const headerHtml = `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+      <div>
+        <div style="font-weight:600;">configs/user-overrides.conf</div>
+        <div class="muted" style="font-size:0.85rem;">Per-user simulation overrides · Last fetched: ${escHtml(fetched)}</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <button id="uo-add-btn" class="btn btn-secondary btn-small" type="button">＋ Add User</button>
+        <button id="uo-refresh-btn" class="btn btn-secondary btn-small" type="button">Refresh</button>
+        <button id="uo-save-btn" class="btn btn-primary btn-small" type="button">${escHtml(saveLabel)}</button>
+      </div>
+    </div>
+    <div id="uo-msg" class="form-msg" style="margin-bottom:10px;"></div>
+  `;
+
+  if (loading) {
+    container.innerHTML = `${headerHtml}<div class="empty-state">Loading user-overrides.conf…</div>`;
+  } else if (error) {
+    container.innerHTML = `${headerHtml}<div class="empty-state" style="color:var(--danger)">${escHtml(error)}</div>`;
+  } else {
+    const visible = _spokeUserOverridesSearch
+      ? sectionOrder.filter((u) => u.toLowerCase().includes(_spokeUserOverridesSearch.toLowerCase()))
+      : sectionOrder;
+    const searchBar = sectionOrder.length > 5 ? `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <input id="uo-search" class="form-input" type="search" placeholder="Filter by hostname…"
+          value="${escHtml(_spokeUserOverridesSearch)}" style="max-width:320px;">
+        <span class="muted" style="font-size:0.85rem;white-space:nowrap;">${visible.length} of ${sectionOrder.length}</span>
+      </div>` : '';
+    const cardsHtml = visible.map((u) => _buildUserOverrideCard(u, sections[u] || {})).join('');
+    const emptyHtml = !sectionOrder.length
+      ? '<div class="muted" style="padding:12px 0">No overrides configured. Click <strong>＋ Add User</strong> or use the ↗ Override button in Simulation Clients.</div>'
+      : '';
+    container.innerHTML = `${headerHtml}${searchBar}<div id="uo-form">${cardsHtml}${emptyHtml}</div>`;
+  }
+
+  // Wire buttons
+  document.getElementById('uo-refresh-btn')?.addEventListener('click', () => loadSpokeUserOverrides(true).catch(() => {}));
+  document.getElementById('uo-add-btn')?.addEventListener('click', () => {
+    const username = window.prompt('Enter username (hostname prefix or exact hostname):');
+    if (!username || !username.trim()) return;
+    const u = username.trim();
+    if (!spokeUserOverridesState.sections[u]) {
+      spokeUserOverridesState.sections[u] = {};
+      spokeUserOverridesState.sectionOrder.push(u);
+      renderSpokeUserOverridesEditor();
+    }
+  });
+  document.getElementById('uo-save-btn')?.addEventListener('click', () => saveSpokeUserOverrides());
+  document.getElementById('uo-search')?.addEventListener('input', (e) => {
+    _spokeUserOverridesSearch = e.target.value;
+    renderSpokeUserOverridesEditor();
+  });
+  container.querySelectorAll('.uo-remove-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const u = btn.dataset.username;
+      delete spokeUserOverridesState.sections[u];
+      spokeUserOverridesState.sectionOrder = spokeUserOverridesState.sectionOrder.filter((s) => s !== u);
+      renderSpokeUserOverridesEditor();
+    });
+  });
+  // Sync checkbox changes into state immediately so Save captures them
+  container.querySelectorAll('.uo-flag-cb').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      const { username, flag } = cb.dataset;
+      if (!spokeUserOverridesState.sections[username]) spokeUserOverridesState.sections[username] = {};
+      spokeUserOverridesState.sections[username][flag] = cb.checked ? 'on' : 'off';
+    });
+  });
+  container.querySelectorAll('.uo-text-input').forEach((input) => {
+    input.addEventListener('change', () => {
+      const { username, flag } = input.dataset;
+      if (!spokeUserOverridesState.sections[username]) spokeUserOverridesState.sections[username] = {};
+      if (input.value.trim()) spokeUserOverridesState.sections[username][flag] = input.value.trim();
+      else delete spokeUserOverridesState.sections[username][flag];
+    });
+  });
+}
+
+async function saveSpokeUserOverrides() {
+  const msgEl = document.getElementById('uo-msg');
+  if (msgEl) { msgEl.textContent = 'Saving…'; msgEl.style.color = 'var(--hpe-green, #01A982)'; }
+  try {
+    const content = _serializeIni(spokeUserOverridesState.sections, spokeUserOverridesState.sectionOrder);
+    const res = await requestJson('/api/config/user-overrides-conf', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
+    });
+    const msg = res?.pushed ? 'Saved and pushed to GitHub.' : 'Saved locally.';
+    if (msgEl) { msgEl.textContent = msg; msgEl.style.color = 'var(--hpe-green, #01A982)'; }
+    setTimeout(() => { if (msgEl) msgEl.textContent = ''; }, 4000);
+  } catch (e) {
+    if (msgEl) { msgEl.textContent = `Error: ${e.message}`; msgEl.style.color = 'var(--danger, #c00)'; }
+  }
+}
+
 async function loadConfigEditor(force = false) {
   if (!force && configLoaded) return configData;
   try {
@@ -6711,6 +6908,7 @@ async function loadConfigEditor(force = false) {
     renderSimulationConfigForm();
     renderAddressesForm();
     renderBucketEditors();
+    loadSpokeUserOverrides().catch(() => {});
     return configData;
   } catch (error) {
     configLoaded = false;
